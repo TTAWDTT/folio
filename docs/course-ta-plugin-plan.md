@@ -1,6 +1,6 @@
-# Course TA plugin plan
+# Folio plugin plan
 
-Group B builds an IntelliJ IDEA plugin that answers from course files and adds three smart actions. The team demos that plugin in the IDE. The program covers F0 and F1 and does not build F2. PR order is PR-1, PR-2, PR-3, PR-4, PR-5, then PR-6.
+Group B builds Folio, an IntelliJ IDEA plugin that answers from course files and adds three smart actions. The team demos that plugin in the IDE. The program covers F0 and F1 and does not build F2. PR order is PR-1, PR-2, PR-3, PR-4, PR-5, then PR-6.
 
 Read the Chinese copy at [course-ta-plugin-plan.zh.md](course-ta-plugin-plan.zh.md). The checker still reads this English file.
 
@@ -60,7 +60,7 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
 Each live lane runs on its own cloud VM at the PR head. This IDE has no `control-ui` or `control-cli` driver. Drive the headless predicate with `./gradlew test`. Drive the window by launching the sandbox with `./gradlew runIde` and capturing the named screenshot from that sandbox. Appendix C records the missing driver.
 
 - [ ] `git fetch origin <head-branch> && git checkout <head SHA>`.
-- [ ] Install JDK 25. Run `./gradlew test` and wait until the task prints `BUILD SUCCESSFUL` or a failing test name. For a window lane, run `./gradlew runIde` and wait until the log prints `Course TA tool window created`.
+- [ ] Install JDK 25. Run `./gradlew test` and wait until the task prints `BUILD SUCCESSFUL` or a failing test name. For a window lane, run `./gradlew runIde` and wait until the log prints `Folio tool window created`.
 - [ ] Deliver input through the Gradle tasks above. Read-only diagnostics are the test XML under `build/reports/tests` and the sandbox log. Do not type into the IDE from an unlogged click.
 - [ ] Save every screenshot to `/tmp/swarm-<pr-id>/worker-<n>/<slug>.png` and return the paths with the report.
 
@@ -84,12 +84,12 @@ Each live lane runs on its own cloud VM at the PR head. This IDE has no `control
 - [ ] Depend on `intellijIdea("2026.2.4")` and `bundledPlugin("com.intellij.java")`.
 - [ ] Set `sinceBuild` to `262` and `untilBuild` to `262.*` with no product-code prefix.
 - [ ] Resolve a Gradle 9 wrapper from the Gradle release page at the start of this PR. Do not invent the patch number in advance.
-- [ ] Register `CourseTaToolWindowFactory` on `com.intellij.toolWindow` with id `Course TA`.
+- [ ] Register `CourseTaToolWindowFactory` on `com.intellij.toolWindow` with id `Folio`.
 - [ ] Store the base URL and the model name in `TaSettings` as a `PersistentStateComponent`. Store the API key only through `PasswordSafe` off the EDT.
 
 **You see.**
 
-- [ ] The sandbox shows a `Course TA` tool window whose body says no course files are indexed.
+- [ ] The sandbox shows a `Folio` tool window whose body says no course files are indexed.
 - [ ] Settings show an empty base URL, an empty model name, and a key field that does not echo the stored key.
 
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
@@ -98,8 +98,8 @@ Each live lane runs on its own cloud VM at the PR head. This IDE has no `control
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `grok-4.7-xhigh-fast` at the PR head, per the boot recipe.
 
-- [ ] Lane 1. Regression lane against trunk. Run the empty workspace at trunk and the sandbox at head. If trunk lacks the feature, record that and gate the `Course TA` window plus the idle panel the user waits for. Save `pr1-trunk-absent.png`. Pass when the head shows `Course TA` and trunk has no such window.
-- [ ] Lane 2. Open the tool window from the tool-window stripe. Save `pr1-open-window.png`. Pass when the title is `Course TA` and the body says no course files are indexed.
+- [ ] Lane 1. Regression lane against trunk. Run the empty workspace at trunk and the sandbox at head. If trunk lacks the feature, record that and gate the `Folio` window plus the idle panel the user waits for. Save `pr1-trunk-absent.png`. Pass when the head shows `Folio` and trunk has no such window.
+- [ ] Lane 2. Open the tool window from the tool-window stripe. Save `pr1-open-window.png`. Pass when the title is `Folio` and the body says no course files are indexed.
 - [ ] Lane 3. Open settings. Save `pr1-settings-empty.png`. Pass when the base URL field, the model field, and the key field are visible and empty.
 - [ ] Lane 4. Enter a base URL and a model name, restart the sandbox, and reopen settings. Save `pr1-settings-persist.png`. Pass when both values survived and the key field is still empty.
 - [ ] Lane 5. Store a key, restart, and open the exported settings XML beside the settings page. Save `pr1-key-not-in-xml.png`. Pass when the XML has no key text and the page shows that a key is stored.
@@ -111,7 +111,7 @@ Each live lane runs on its own cloud VM at the PR head. This IDE has no `control
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
-- [ ] Metric. Seconds from the `runIde` process start until the log prints `Course TA tool window created`, and the idle panel the user waits for. Trunk has no plugin, so record that trunk has no such log line.
+- [ ] Metric. Seconds from the `runIde` process start until the log prints `Folio tool window created`, and the idle panel the user waits for. Trunk has no plugin, so record that trunk has no such log line.
 - [ ] Probe. Start trunk first, then head, then trunk again. Read the factory log line on head. Record the absence on trunk.
 - [ ] Baseline. Record the trunk absence first.
 - [ ] Rule. Fail the head when that log line is absent, or when it appears more than 90 seconds after process start. Do not divide head by trunk. The 90 second ceiling is an unmeasured budget for a cold sandbox, not a timing this plan observed.
@@ -333,7 +333,7 @@ Each live lane runs on its own cloud VM at the PR head. This IDE has no `control
 - [ ] Return `ActionUpdateThread.BGT` from `getActionUpdateThread` on `CommitMessageAction`. Do not run `git diff` inside `update`.
 - [ ] On a background thread, treat an empty `GitRepositoryManager.getRepositories()` as no repository. Treat an empty `GitChangeUtils.getStagedChanges` on every root as nothing staged. In both cases, show that fact and do not call `ChatClient`.
 - [ ] When a root has staged changes, run `GitLineHandler` for `GitCommand.DIFF` with `--cached` and `-M`. Concatenate stdout. Do not call `GitCommand.COMMIT`. Paint the three candidates on the EDT.
-- [ ] Ask the model for three conventional-commit candidates. Show all three. Copy puts one candidate on the clipboard. A button in the `Course TA` window runs the same action as the registration in `Vcs.MessageActionGroup`.
+- [ ] Ask the model for three conventional-commit candidates. Show all three. Copy puts one candidate on the clipboard. A button in the `Folio` window runs the same action as the registration in `Vcs.MessageActionGroup`.
 
 **You see.**
 

@@ -1,6 +1,6 @@
-# 课程助教插件计划
+# Folio
 
-B 组要做的是一个 IntelliJ IDEA 插件。它根据课件回答问题，并加上三个智能动作。队伍在 IDE 里演示这个插件。范围是 F0 和 F1。不做 F2。PR 顺序是 PR-1、PR-2、PR-3、PR-4、PR-5，然后 PR-6。
+Folio 是 B 组要做的 IntelliJ IDEA 插件。它根据课件回答问题，并加上三个智能动作。队伍在 IDE 里演示这个插件。范围是 F0 和 F1。不做 F2。PR 顺序是 PR-1、PR-2、PR-3、PR-4、PR-5，然后 PR-6。
 
 英文执行稿是 [course-ta-plugin-plan.md](course-ta-plugin-plan.md)。检查脚本只认那份英文标题。这份是阅读稿。
 
@@ -65,7 +65,7 @@ Re-read the execution playbook from trunk. Audit the operation against it and fi
 每条现场通道在 PR 头的一台云虚拟机上跑。这个 IDE 没有 `control-ui` 或 `control-cli` 驱动。无界面断言用 `./gradlew test`。窗口用 `./gradlew runIde` 启动沙箱，再按名字截图。缺驱动的事记在附录 C。
 
 - [ ] `git fetch origin <head-branch> && git checkout <head SHA>`。
-- [ ] 安装 JDK 25。跑 `./gradlew test`，等到任务打印 `BUILD SUCCESSFUL` 或某个失败测试的名字。窗口通道跑 `./gradlew runIde`，等到日志打印 `Course TA tool window created`。
+- [ ] 安装 JDK 25。跑 `./gradlew test`，等到任务打印 `BUILD SUCCESSFUL` 或某个失败测试的名字。窗口通道跑 `./gradlew runIde`，等到日志打印 `Folio tool window created`。
 - [ ] 输入只通过上面的 Gradle 任务送入。只读诊断是 `build/reports/tests` 下的测试 XML 和沙箱日志。不要用没有记录的点击去操作 IDE。
 - [ ] 每张截图存到 `/tmp/swarm-<pr-id>/worker-<n>/<slug>.png`，并随报告返回路径。
 
@@ -89,12 +89,12 @@ Re-read the execution playbook from trunk. Audit the operation against it and fi
 - [ ] 依赖 `intellijIdea("2026.2.4")` 和 `bundledPlugin("com.intellij.java")`。
 - [ ] `sinceBuild` 设为 `262`。`untilBuild` 设为 `262.*`。两边都不要加产品代码前缀。
 - [ ] 本 PR 开始时从 Gradle 发布页解析一个 Gradle 9 的 wrapper。不要提前编补丁号。
-- [ ] 把 `CourseTaToolWindowFactory` 注册到 `com.intellij.toolWindow`，id 为 `Course TA`。
+- [ ] 把 `CourseTaToolWindowFactory` 注册到 `com.intellij.toolWindow`，id 为 `Folio`。
 - [ ] 基址和模型名放进 `TaSettings`，类型是 `PersistentStateComponent`。API key 只通过 `PasswordSafe` 保存，并且离开 EDT。
 
 **你会看到。**
 
-- [ ] 沙箱里出现 `Course TA` 工具窗口。正文写着还没有索引课件。
+- [ ] 沙箱里出现 `Folio` 工具窗口。正文写着还没有索引课件。
 - [ ] 设置里基址和模型名为空。密钥框不回显已保存的密钥。
 
 **单元验证。** 只靠测试不算验证。一个 PR 要在单元、现场、性能三栏都勾上，才算验证过。
@@ -103,8 +103,8 @@ Re-read the execution playbook from trunk. Audit the operation against it and fi
 
 **现场验证。** 只靠测试不算验证。一个 PR 要在单元、现场、性能三栏都勾上，才算验证过。十条通道在 PR 头上使用 `grok-4.7-xhigh-fast`，按上面的启动步骤跑。
 
-- [ ] 通道 1。对照主干的回归通道。主干跑空工作区，头跑沙箱。若主干没有这个功能，记下这一点，并检查 `Course TA` 窗口和用户等待的空闲面板。保存 `pr1-trunk-absent.png`。头上出现 `Course TA`，主干没有这个窗口，才算通过。
-- [ ] 通道 2。从工具窗口条打开窗口。保存 `pr1-open-window.png`。标题是 `Course TA`，正文写着还没有索引课件，才算通过。
+- [ ] 通道 1。对照主干的回归通道。主干跑空工作区，头跑沙箱。若主干没有这个功能，记下这一点，并检查 `Folio` 窗口和用户等待的空闲面板。保存 `pr1-trunk-absent.png`。头上出现 `Folio`，主干没有这个窗口，才算通过。
+- [ ] 通道 2。从工具窗口条打开窗口。保存 `pr1-open-window.png`。标题是 `Folio`，正文写着还没有索引课件，才算通过。
 - [ ] 通道 3。打开设置。保存 `pr1-settings-empty.png`。基址、模型名、密钥三栏都可见且为空，才算通过。
 - [ ] 通道 4。填入基址和模型名，重启沙箱，再打开设置。保存 `pr1-settings-persist.png`。两个值还在，密钥栏仍为空，才算通过。
 - [ ] 通道 5。存入密钥，重启，把导出的设置 XML 和设置页放在一起看。保存 `pr1-key-not-in-xml.png`。XML 里没有密钥文本，页面显示密钥已保存，才算通过。
@@ -116,7 +116,7 @@ Re-read the execution playbook from trunk. Audit the operation against it and fi
 
 **性能验证。** 只靠测试不算验证。一个 PR 要在单元、现场、性能三栏都勾上，才算验证过。
 
-- [ ] 指标。从 `runIde` 进程启动到日志打印 `Course TA tool window created` 的秒数，以及用户等待的空闲面板。主干没有插件，所以记下主干没有这行日志。
+- [ ] 指标。从 `runIde` 进程启动到日志打印 `Folio tool window created` 的秒数，以及用户等待的空闲面板。主干没有插件，所以记下主干没有这行日志。
 - [ ] 探测。先启动主干，再启动头，再启动主干。在头上读工厂日志。在主干上记录缺失。
 - [ ] 基线。先记录主干的缺失。
 - [ ] 规则。头上没有这行日志，或这行日志出现在进程启动 90 秒之后，则失败。不要用头除以主干。90 秒是冷启动沙箱的未测量上限，不是这份计划已经测到的时间。
@@ -338,7 +338,7 @@ Re-read the execution playbook from trunk. Audit the operation against it and fi
 - [ ] `CommitMessageAction` 的 `getActionUpdateThread` 返回 `ActionUpdateThread.BGT`。不要在 `update` 里跑 `git diff`。
 - [ ] 在后台线程上，把空的 `GitRepositoryManager.getRepositories()` 当成没有仓库。把每个根上的空 `GitChangeUtils.getStagedChanges` 当成没有暂存内容。两种情况都只显示这个事实，不调用 `ChatClient`。
 - [ ] 某个根有暂存变更时，用 `GitLineHandler` 跑 `GitCommand.DIFF`，参数是 `--cached` 和 `-M`。拼接标准输出。不调用 `GitCommand.COMMIT`。三条候选在 EDT 上绘制。
-- [ ] 让模型给出三条 conventional commit 候选。三条都显示。复制把其中一条放进剪贴板。`Course TA` 窗口里的按钮和注册到 `Vcs.MessageActionGroup` 的动作是同一个。
+- [ ] 让模型给出三条 conventional commit 候选。三条都显示。复制把其中一条放进剪贴板。`Folio` 窗口里的按钮和注册到 `Vcs.MessageActionGroup` 的动作是同一个。
 
 **你会看到。**
 
