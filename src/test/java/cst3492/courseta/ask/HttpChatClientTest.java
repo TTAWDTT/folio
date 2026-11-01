@@ -7,8 +7,10 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -30,6 +32,17 @@ class HttpChatClientTest {
     void malformedResponseIsAnError() {
         IOException ex = assertThrows(IOException.class, () -> HttpChatClient.readContent("{"));
         assertTrue(ex.getMessage().contains("not a chat completion"));
+    }
+
+    @Test
+    void objectOrArrayContentIsAClearError() {
+        String object = "{\"choices\":[{\"message\":{\"content\":{\"type\":\"text\",\"text\":\"hi\"}}}]}";
+        String array = "{\"choices\":[{\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"hi\"}]}}]}";
+        for (String json : List.of(object, array)) {
+            IOException ex = assertThrows(IOException.class, () -> HttpChatClient.readContent(json));
+            assertTrue(ex.getMessage().contains("not text"));
+            assertFalse(ex.getCause() instanceof UnsupportedOperationException);
+        }
     }
 
     @Test

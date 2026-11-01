@@ -40,6 +40,10 @@ public final class CourseChunks {
             int end = Math.min(body.length(), start + MAX_CHARS);
             if (end < body.length()) {
                 end = breakBefore(body, start, end);
+                end = exclusiveEnd(body, end);
+                if (end <= start) {
+                    end = Math.min(body.length(), start + Character.charCount(body.codePointAt(start)));
+                }
             }
             String piece = body.substring(start, end).strip();
             if (!piece.isEmpty()) {
@@ -53,9 +57,32 @@ public final class CourseChunks {
             if (next <= start) {
                 next = Math.min(body.length(), end);
             }
+            next = alignStart(body, next);
+            if (next <= start) {
+                next = Math.min(body.length(), start + Character.charCount(body.codePointAt(start)));
+            }
             start = next;
         }
         return pieces;
+    }
+
+    /** Exclusive end that does not cut between a high surrogate and its low surrogate. */
+    static int exclusiveEnd(String text, int end) {
+        if (end > 0 && end < text.length()
+                && Character.isHighSurrogate(text.charAt(end - 1))
+                && Character.isLowSurrogate(text.charAt(end))) {
+            return end - 1;
+        }
+        return end;
+    }
+
+    private static int alignStart(String text, int start) {
+        if (start > 0 && start < text.length()
+                && Character.isLowSurrogate(text.charAt(start))
+                && Character.isHighSurrogate(text.charAt(start - 1))) {
+            return start - 1;
+        }
+        return start;
     }
 
     private static int breakBefore(String body, int start, int end) {

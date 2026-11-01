@@ -57,6 +57,32 @@ class CourseFileParserTest {
     }
 
     @Test
+    void hardSplitDoesNotCutASurrogatePair() {
+        String rare = "\uD840\uDC00";
+        String body = "测".repeat(699) + rare + "测".repeat(800);
+        assertEquals(699, CourseChunks.exclusiveEnd(body, CourseChunks.MAX_CHARS));
+        List<CourseChunk> chunks = CourseChunks.split("lecture.pdf", ScopeKind.PAGE, 2, body);
+        assertTrue(chunks.size() > 1);
+        assertTrue(chunks.stream().anyMatch(chunk -> chunk.text().contains(rare)));
+        for (CourseChunk chunk : chunks) {
+            assertWellFormedUtf16(chunk.text());
+            assertEquals(2, chunk.scopeNumber());
+        }
+    }
+
+    private static void assertWellFormedUtf16(String text) {
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (Character.isHighSurrogate(c)) {
+                assertTrue(i + 1 < text.length() && Character.isLowSurrogate(text.charAt(i + 1)));
+                i++;
+            } else {
+                assertFalse(Character.isLowSurrogate(c));
+            }
+        }
+    }
+
+    @Test
     void slideNotesStayOnThatSlideAndMasterIsIgnored() throws Exception {
         String xml = """
                 <html><body>

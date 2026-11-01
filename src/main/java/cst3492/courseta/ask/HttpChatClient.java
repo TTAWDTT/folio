@@ -69,8 +69,12 @@ public final class HttpChatClient implements ChatClient {
             if (message == null || !message.has("content") || message.get("content").isJsonNull()) {
                 throw new IOException("Chat response has no message content.");
             }
-            return message.get("content").getAsString();
-        } catch (JsonSyntaxException | IllegalStateException | ClassCastException ex) {
+            JsonElement content = message.get("content");
+            if (!content.isJsonPrimitive() || !content.getAsJsonPrimitive().isString()) {
+                throw new IOException("Chat response content was not text.");
+            }
+            return content.getAsString();
+        } catch (JsonSyntaxException | IllegalStateException | ClassCastException | UnsupportedOperationException ex) {
             throw new IOException("Chat response was not a chat completion.", ex);
         }
     }

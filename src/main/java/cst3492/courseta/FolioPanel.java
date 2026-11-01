@@ -109,6 +109,19 @@ public final class FolioPanel extends JPanel {
         return storedKey || typedCharacters > 0;
     }
 
+    /**
+     * Secret to write on save. {@code null} leaves the stored key unchanged, so an empty
+     * field does not wipe a key that is already stored. An empty string clears it, which
+     * only happens when the user asks to clear the key.
+     */
+    static String keyToStore(String typed, boolean clearRequested) {
+        if (clearRequested) {
+            return "";
+        }
+        String value = typed == null ? "" : typed.strip();
+        return value.isEmpty() ? null : value;
+    }
+
     public void ask(String text, String selection) {
         question.setText(text == null ? "" : text);
         runAsk(selection);
@@ -220,8 +233,11 @@ public final class FolioPanel extends JPanel {
         span.gridy = 3;
         JButton save = new JButton("Save settings");
         save.addActionListener(event -> saveSettings());
-        JPanel saveRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        JButton clearKey = new JButton("Clear API key");
+        clearKey.addActionListener(event -> clearApiKey());
+        JPanel saveRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
         saveRow.add(save);
+        saveRow.add(clearKey);
         panel.add(saveRow, span);
         span.gridy = 4;
         panel.add(status, span);
@@ -256,13 +272,27 @@ public final class FolioPanel extends JPanel {
         TaSettings.State state = settings.getState();
         state.baseUrl = baseUrl.getText().strip();
         state.modelName = model.getText().strip();
-        char[] key = apiKey.getPassword();
-        storedKey = key.length > 0;
+        String decision = keyToStore(new String(apiKey.getPassword()), false);
+        if (decision == null) {
+            refreshKeyActions();
+            setStatus(storedKey
+                    ? "Settings saved. The stored API key was kept."
+                    : "Settings saved. Add an API key to enable Ask, test generation, and commit drafts.");
+            return;
+        }
+        storedKey = true;
+        apiKey.setText("");
         refreshKeyActions();
-        ApplicationManager.getApplication().executeOnPooledThread(() -> Secrets.write(new String(key)));
-        setStatus(key.length == 0
-                ? "Settings saved. Add an API key to enable Ask, test generation, and commit drafts."
-                : "Settings saved. A key is stored.");
+        ApplicationManager.getApplication().executeOnPooledThread(() -> Secrets.write(decision));
+        setStatus("Settings saved. A key is stored.");
+    }
+
+    private void clearApiKey() {
+        apiKey.setText("");
+        storedKey = false;
+        refreshKeyActions();
+        ApplicationManager.getApplication().executeOnPooledThread(() -> Secrets.write(keyToStore("", true)));
+        setStatus("API key cleared.");
     }
 
     private void loadStored() {

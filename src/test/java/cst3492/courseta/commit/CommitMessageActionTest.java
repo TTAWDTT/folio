@@ -97,6 +97,32 @@ class CommitMessageActionTest {
     }
 
     @Test
+    void truncationDoesNotSplitASurrogatePair() {
+        String emoji = "\uD83D\uDE00";
+        int seam = CommitDraft.MAX_DIFF_CHARS - 80;
+        String diff = "a".repeat(seam - 1) + emoji + "b".repeat(2_000);
+        assertEquals(seam - 1, CommitDraft.exclusiveEnd(diff, seam));
+        String bounded = CommitDraft.bound(diff);
+        String head = bounded.substring(0, bounded.indexOf("\n\n[diff truncated"));
+        assertWellFormedUtf16(head);
+        assertTrue(head.endsWith("a") || head.endsWith(emoji));
+        assertTrue(bounded.contains("truncated"));
+        assertTrue(bounded.length() <= CommitDraft.MAX_DIFF_CHARS);
+    }
+
+    private static void assertWellFormedUtf16(String text) {
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (Character.isHighSurrogate(c)) {
+                assertTrue(i + 1 < text.length() && Character.isLowSurrogate(text.charAt(i + 1)), text);
+                i++;
+            } else {
+                assertFalse(Character.isLowSurrogate(c), text);
+            }
+        }
+    }
+
+    @Test
     void commitBoxReceivesTheMessageAndClipboardStaysAFallback() {
         AtomicReference<String> seen = new AtomicReference<>();
         CommitMessageI control = seen::set;
