@@ -54,6 +54,82 @@ class CourseIndexTest {
         assertTrue(terms.contains("override"));
         assertTrue(terms.contains("doget"));
         assertTrue(Tokens.terms("一对多怎么映射").contains("一对"));
+        assertTrue(Tokens.terms("一对多怎么映射").contains("对多"));
+        assertTrue(Tokens.terms("一对多怎么映射").contains("映射"));
+        List<String> weather = Tokens.terms("今天天气怎么样，我们可以去哪里玩？");
+        assertTrue(weather.contains("天气"));
+        assertFalse(weather.contains("我们"));
+        assertFalse(weather.contains("们可"));
+        assertFalse(weather.contains("可以"));
+        assertFalse(weather.contains("怎么"));
+        assertFalse(weather.contains("什么"));
+        assertFalse(Tokens.terms("如何配置").contains("如何"));
+    }
+
+    @Test
+    void technicalTermsSurviveAndTheWeatherQuestionStillDropsFunctionPairs() {
+        assertTrue(Tokens.terms("并发").contains("并发"));
+        assertTrue(Tokens.terms("向量").contains("向量"));
+        assertTrue(Tokens.terms("性能").contains("性能"));
+        assertTrue(Tokens.terms("因子").contains("因子"));
+        assertTrue(Tokens.terms("要素").contains("要素"));
+        assertTrue(Tokens.terms("被动").contains("被动"));
+        assertTrue(Tokens.terms("给定").contains("给定"));
+        assertTrue(Tokens.terms("能耗").contains("能耗"));
+        List<String> immutable = Tokens.terms("不可变");
+        assertTrue(immutable.contains("不可"));
+        assertTrue(immutable.contains("可变"));
+        List<String> weather = Tokens.terms("今天天气怎么样，我们可以去哪里玩？");
+        assertTrue(weather.contains("天气"));
+        assertFalse(weather.contains("我们"));
+        assertFalse(weather.contains("们可"));
+        assertFalse(weather.contains("可以"));
+        assertFalse(weather.contains("怎么"));
+    }
+
+    @Test
+    void unrelatedQuestionThatOnlySharesACommonWordReturnsNothing() {
+        CourseIndex index = new CourseIndex();
+        for (int i = 0; i < 20; i++) {
+            index.upsert(chunk("slides.pdf", i + 1, "lecture notes " + i + " example 例子 servlet"));
+        }
+        assertTrue(index.top("best pizza recipe example", 4).isEmpty());
+        assertTrue(index.top("周末去哪里吃饭比较好，有没有例子", 4).isEmpty());
+    }
+
+    @Test
+    void unrelatedChineseQuestionMissesChunksThatOnlyShareFunctionWords() {
+        CourseIndex index = talked();
+        assertTrue(index.top("今天天气怎么样，我们可以去哪里玩？", 4).isEmpty());
+        List<CourseChunk> hit = index.top("一对多怎么映射", 3);
+        assertEquals(1, hit.size());
+        assertEquals("lecture-jpa.pdf#PAGE#2", hit.get(0).id());
+    }
+
+    @Test
+    void termInMostChunksStillRetrievesThoseChunks() {
+        CourseIndex index = new CourseIndex();
+        for (int i = 0; i < 17; i++) {
+            index.upsert(chunk("common.pdf", i + 1, "servlet notes " + i));
+        }
+        for (int i = 0; i < 3; i++) {
+            index.upsert(chunk("other.pdf", i + 1, "unrelatedbeta page " + i));
+        }
+        List<CourseChunk> hit = index.top("servlet", 20);
+        assertEquals(17, hit.size());
+        assertTrue(hit.stream().allMatch(chunk -> chunk.sourceDocument().equals("common.pdf")));
+    }
+
+    @Test
+    void rareTermDoesNotAlsoReturnChunksThatShareOnlyACommonTerm() {
+        CourseIndex index = new CourseIndex();
+        index.upsert(chunk("rare.pdf", 1, "uniquealpha servlet"));
+        for (int i = 0; i < 15; i++) {
+            index.upsert(chunk("common.pdf", i + 1, "servlet notes " + i));
+        }
+        List<CourseChunk> hit = index.top("uniquealpha servlet", 20);
+        assertEquals(1, hit.size());
+        assertEquals("rare.pdf#PAGE#1", hit.get(0).id());
     }
 
     @Test
@@ -112,6 +188,14 @@ class CourseIndexTest {
         List<CourseChunk> mapped = index.top("How is OneToMany used for a one-to-many association?", 3);
         assertFalse(mapped.isEmpty());
         assertEquals("lecture-jpa.pdf#PAGE#2", mapped.get(0).id());
+    }
+
+    private static CourseIndex talked() {
+        CourseIndex index = new CourseIndex();
+        index.upsert(chunk("lecture-jpa.pdf", 2, "我们可以使用实体类来表示一对多关系。"));
+        index.upsert(chunk("lecture-jpa.pdf", 5, "你可以如何配置 persistence unit。"));
+        index.upsert(chunk("lecture-servlet.pdf", 1, "什么是 servlet，它们可以处理请求。"));
+        return index;
     }
 
     private static CourseIndex course() {

@@ -21,6 +21,14 @@ public final class Tokens {
             "those", "through", "to", "too", "under", "until", "up", "use", "used", "uses", "using", "very", "via", "was",
             "we", "were", "what", "when", "where", "which", "while", "who", "whom", "whose", "why", "will", "with",
             "within", "without", "would", "you", "your");
+    /**
+     * Closed-class characters. A bigram is dropped only when both of its characters are in this set,
+     * so 我们 / 们可 / 可以 disappear together. Characters that begin technical words (并, 向, 不, 能, …)
+     * are not in the set, and a mixed pair such as 并发 is kept.
+     */
+    private static final String CJK_FUNCTION =
+            "的了是在这那个和与或而但也都很还又把从为以会想去来到吗呢吧啊呀嘛么怎什哪谁何如若则所且及其之于"
+                    + "我你他她它们就可没让";
 
     private Tokens() {
     }
@@ -36,7 +44,7 @@ public final class Tokens {
         }
         int[] points = text.codePoints().toArray();
         for (int i = 0; i + 1 < points.length; i++) {
-            if (isCjk(points[i]) && isCjk(points[i + 1])) {
+            if (isCjk(points[i]) && isCjk(points[i + 1]) && !bothFunction(points[i], points[i + 1])) {
                 out.add(new String(points, i, 2));
             }
         }
@@ -77,6 +85,10 @@ public final class Tokens {
             return word;
         }
         return word.substring(0, word.length() - 1);
+    }
+
+    private static boolean bothFunction(int left, int right) {
+        return CJK_FUNCTION.indexOf(left) >= 0 && CJK_FUNCTION.indexOf(right) >= 0;
     }
 
     private static boolean isCjk(int codePoint) {

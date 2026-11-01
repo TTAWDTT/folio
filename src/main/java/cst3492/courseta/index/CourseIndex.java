@@ -18,8 +18,11 @@ import java.util.Set;
 public final class CourseIndex {
     private static final double K1 = 1.2;
     private static final double B = 0.75;
-    // One distinctive term in a single-chunk index scores about 0.29. Overlap below this is not a hit.
-    private static final double MIN_SCORE = 0.2;
+    // A term in 17 of 20 chunks scores about 0.18. A term in every chunk scores about 0.02.
+    // 0.10 drops the second case and still keeps the first. 0.2 was too high for the first.
+    private static final double MIN_SCORE = 0.10;
+    // Also drop hits that are only a small fraction of this query's best score.
+    private static final double RELATIVE_KEEP = 0.25;
 
     private final Map<String, CourseChunk> byId = new LinkedHashMap<>();
     private final Map<String, Map<String, Integer>> termFreq = new HashMap<>();
@@ -81,19 +84,25 @@ public final class CourseIndex {
             }
         }
         List<Scored> scored = new ArrayList<>();
+        double best = 0;
         for (Map.Entry<String, Double> entry : scores.entrySet()) {
             if (entry.getValue() < MIN_SCORE) {
                 continue;
             }
             CourseChunk chunk = byId.get(entry.getKey());
             if (chunk != null) {
+                best = Math.max(best, entry.getValue());
                 scored.add(new Scored(entry.getValue(), chunk));
             }
         }
+        if (scored.isEmpty()) {
+            return List.of();
+        }
+        double cutoff = best * RELATIVE_KEEP;
         scored.sort(Comparator.comparingDouble(Scored::score).reversed().thenComparing(s -> s.chunk().id()));
         List<CourseChunk> out = new ArrayList<>();
         for (Scored item : scored) {
-            if (out.size() == limit) {
+            if (item.score() < cutoff || out.size() == limit) {
                 break;
             }
             out.add(item.chunk());

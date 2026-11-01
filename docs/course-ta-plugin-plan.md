@@ -118,8 +118,8 @@ Each live lane runs on its own cloud VM at the PR head. This IDE has no `control
 
 **Review gate.** The operator reviews before merge.
 
-- [ ] Copy lane 2 screenshots into `/cursor/stores/self/docs/media/pr-1-review-window.png`.
-- [ ] Record a 30 to 60 second video of opening the tool window and the settings page on a lane VM. Save it as `/cursor/stores/self/docs/media/pr-1-review.mp4`.
+- [ ] Copy lane 2 screenshots. Save them as pr-1-review-window.png.
+- [ ] Record a 30 to 60 second video of opening the tool window and the settings page on a lane VM. Save it as pr-1-review.mp4.
 - [ ] Post the screenshots and the video in chat. Stop at merge-ready. Wait for the operator's review.
 
 **Merge.**
@@ -182,8 +182,8 @@ Each live lane runs on its own cloud VM at the PR head. This IDE has no `control
 
 **Review gate.** The operator reviews before merge.
 
-- [ ] Copy lane 2 screenshots into `/cursor/stores/self/docs/media/pr-2-review-rows.png`.
-- [ ] Record a 30 to 60 second video of indexing the fixture and running the Chinese query on a lane VM. Save it as `/cursor/stores/self/docs/media/pr-2-review.mp4`.
+- [ ] Copy lane 2 screenshots. Save them as pr-2-review-rows.png.
+- [ ] Record a 30 to 60 second video of indexing the fixture and running the Chinese query on a lane VM. Save it as pr-2-review.mp4.
 - [ ] Post the screenshots and the video in chat. Stop at merge-ready. Wait for the operator's review.
 
 **Merge.**
@@ -245,8 +245,8 @@ Each live lane runs on its own cloud VM at the PR head. This IDE has no `control
 
 **Review gate.** The operator reviews before merge.
 
-- [ ] Copy lane 2 screenshots into `/cursor/stores/self/docs/media/pr-3-review-citation.png`.
-- [ ] Record a 30 to 60 second video of a right-click ask and a no-hit ask on a lane VM. Save it as `/cursor/stores/self/docs/media/pr-3-review.mp4`.
+- [ ] Copy lane 2 screenshots. Save them as pr-3-review-citation.png.
+- [ ] Record a 30 to 60 second video of a right-click ask and a no-hit ask on a lane VM. Save it as pr-3-review.mp4.
 - [ ] Post the screenshots and the video in chat. Stop at merge-ready. Wait for the operator's review.
 
 **Merge.**
@@ -305,8 +305,8 @@ Each live lane runs on its own cloud VM at the PR head. This IDE has no `control
 
 **Review gate.** The operator reviews before merge.
 
-- [ ] Copy lane 4 screenshots into `/cursor/stores/self/docs/media/pr-4-review-preview.png`.
-- [ ] Record a 30 to 60 second video of a scenario, a preview, and Insert on a lane VM. Save it as `/cursor/stores/self/docs/media/pr-4-review.mp4`.
+- [ ] Copy lane 4 screenshots. Save them as pr-4-review-preview.png.
+- [ ] Record a 30 to 60 second video of a scenario, a preview, and Insert on a lane VM. Save it as pr-4-review.mp4.
 - [ ] Post the screenshots and the video in chat. Stop at merge-ready. Wait for the operator's review.
 
 **Merge.**
@@ -366,8 +366,8 @@ Each live lane runs on its own cloud VM at the PR head. This IDE has no `control
 
 **Review gate.** The operator reviews before merge.
 
-- [ ] Copy lane 2 screenshots into `/cursor/stores/self/docs/media/pr-5-review-messages.png`.
-- [ ] Record a 30 to 60 second video of a staged edit, three candidates, and a still-staged file on a lane VM. Save it as `/cursor/stores/self/docs/media/pr-5-review.mp4`.
+- [ ] Copy lane 2 screenshots. Save them as pr-5-review-messages.png.
+- [ ] Record a 30 to 60 second video of a staged edit, three candidates, and a still-staged file on a lane VM. Save it as pr-5-review.mp4.
 - [ ] Post the screenshots and the video in chat. Stop at merge-ready. Wait for the operator's review.
 
 **Merge.**
@@ -426,8 +426,8 @@ Each live lane runs on its own cloud VM at the PR head. This IDE has no `control
 
 **Review gate.** The operator reviews before merge.
 
-- [ ] Copy lane 2 screenshots into `/cursor/stores/self/docs/media/pr-6-review-questions.png`.
-- [ ] Record a 30 to 60 second video of a selection, three questions, and an unchanged editor on a lane VM. Save it as `/cursor/stores/self/docs/media/pr-6-review.mp4`.
+- [ ] Copy lane 2 screenshots. Save them as pr-6-review-questions.png.
+- [ ] Record a 30 to 60 second video of a selection, three questions, and an unchanged editor on a lane VM. Save it as pr-6-review.mp4.
 - [ ] Post the screenshots and the video in chat. Stop at merge-ready. Wait for the operator's review.
 
 **Merge.**

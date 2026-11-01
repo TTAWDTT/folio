@@ -64,6 +64,29 @@ class AskerTest {
     }
 
     @Test
+    void unrelatedChineseQuestionFallsBackToGeneralKnowledge() throws Exception {
+        ChatClient chat = (base, key, model, system, user) -> "一般说明";
+        CourseIndex index = new CourseIndex();
+        index.upsert(new CourseChunk("lecture-jpa.pdf#PAGE#2", "lecture-jpa.pdf", ScopeKind.PAGE, 2,
+                "我们可以使用实体类来表示一对多关系。"));
+        index.upsert(new CourseChunk("lecture-jpa.pdf#PAGE#5", "lecture-jpa.pdf", ScopeKind.PAGE, 5,
+                "你可以如何配置 persistence unit。"));
+        index.upsert(new CourseChunk("lecture-servlet.pdf#PAGE#1", "lecture-servlet.pdf", ScopeKind.PAGE, 1,
+                "什么是 servlet，它们可以处理请求。"));
+        Answer weather = Asker.ask(index, chat, "https://api.deepseek.com", "key", "deepseek-flash",
+                "今天天气怎么样，我们可以去哪里玩？", null);
+        assertEquals(Answer.Kind.GENERAL, weather.kind());
+        assertTrue(weather.text().startsWith(Answer.GENERAL_SENTENCE));
+        assertTrue(weather.citations().isEmpty());
+
+        Answer mapped = Asker.ask(index, chat, "https://api.deepseek.com", "key", "deepseek-flash",
+                "一对多怎么映射", null);
+        assertEquals(Answer.Kind.CITED, mapped.kind());
+        assertEquals(1, mapped.citations().size());
+        assertEquals("lecture-jpa.pdf#PAGE#2", mapped.citations().get(0).id());
+    }
+
+    @Test
     void relevantQuestionRetrievesAndCitesThePage() throws Exception {
         AtomicReference<String> userPrompt = new AtomicReference<>();
         ChatClient chat = (base, key, model, system, user) -> {
