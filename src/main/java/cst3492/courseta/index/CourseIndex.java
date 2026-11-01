@@ -10,13 +10,21 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 public final class CourseIndex {
+    private static final double K1 = 1.2;
+    private static final double B = 0.75;
+    // One distinctive term in a single-chunk index scores about 0.29. Overlap below this is not a hit.
+    private static final double MIN_SCORE = 0.2;
+
     private final Map<String, CourseChunk> byId = new LinkedHashMap<>();
-    private final Map<String, List<String>> tokenToIds = new HashMap<>();
+    private final Map<String, Map<String, Integer>> termFreq = new HashMap<>();
+    private final Map<String, Integer> docLength = new HashMap<>();
+    private int totalTerms;
 
     public int size() {
         return byId.size();
@@ -41,21 +49,22 @@ public final class CourseIndex {
     }
 
     public List<CourseChunk> top(String query, int limit) {
-        Set<String> queryTokens = Tokens.unique(query);
+        if (byId.isEmpty() || limit == 0) {
+            return List.of();
+        }
+        Set<String> queryTerms = new LinkedHashSet<>(Tokens.terms(query));
+        if (queryTerms.isEmpty() || totalTerms == 0) {
+            return List.of();
+        }
+        double avgdl = (double) totalTerms / byId.size();
         List<Scored> scored = new ArrayList<>();
         for (CourseChunk chunk : byId.values()) {
-            int score = 0;
-            for (String token : queryTokens) {
-                List<String> ids = tokenToIds.get(token);
-                if (ids != null && ids.contains(chunk.id())) {
-                    score++;
-                }
-            }
-            if (score > 0) {
+            double score = score(chunk.id(), queryTerms, avgdl);
+            if (score >= MIN_SCORE) {
                 scored.add(new Scored(score, chunk));
             }
         }
-        scored.sort(Comparator.comparingInt(Scored::score).reversed().thenComparing(s -> s.chunk().id()));
+        scored.sort(Comparator.comparingDouble(Scored::score).reversed().thenComparing(s -> s.chunk().id()));
         List<CourseChunk> out = new ArrayList<>();
         for (Scored item : scored) {
             if (out.size() == limit) {
@@ -64,6 +73,30 @@ public final class CourseIndex {
             out.add(item.chunk());
         }
         return out;
+    }
+
+    private double score(String chunkId, Set<String> queryTerms, double avgdl) {
+        int length = docLength.getOrDefault(chunkId, 0);
+        if (length == 0) {
+            return 0;
+        }
+        double total = 0;
+        int docs = byId.size();
+        for (String term : queryTerms) {
+            Map<String, Integer> posting = termFreq.get(term);
+            if (posting == null) {
+                continue;
+            }
+            Integer freq = posting.get(chunkId);
+            if (freq == null || freq == 0) {
+                continue;
+            }
+            int df = posting.size();
+            double idf = Math.log(1.0 + (docs - df + 0.5) / (df + 0.5));
+            double denom = freq + K1 * (1.0 - B + B * length / avgdl);
+            total += idf * (freq * (K1 + 1.0)) / denom;
+        }
+        return total;
     }
 
     public void save(Path file) throws IOException {
@@ -110,14 +143,23 @@ public final class CourseIndex {
     }
 
     private void rebuildTokens() {
-        tokenToIds.clear();
+        termFreq.clear();
+        docLength.clear();
+        totalTerms = 0;
         for (CourseChunk chunk : byId.values()) {
-            for (String token : Tokens.unique(chunk.text())) {
-                tokenToIds.computeIfAbsent(token, key -> new ArrayList<>()).add(chunk.id());
+            List<String> terms = Tokens.terms(chunk.text());
+            docLength.put(chunk.id(), terms.size());
+            totalTerms += terms.size();
+            Map<String, Integer> counts = new HashMap<>();
+            for (String term : terms) {
+                counts.merge(term, 1, Integer::sum);
+            }
+            for (Map.Entry<String, Integer> entry : counts.entrySet()) {
+                termFreq.computeIfAbsent(entry.getKey(), key -> new HashMap<>()).put(chunk.id(), entry.getValue());
             }
         }
     }
 
-    private record Scored(int score, CourseChunk chunk) {
+    private record Scored(double score, CourseChunk chunk) {
     }
 }

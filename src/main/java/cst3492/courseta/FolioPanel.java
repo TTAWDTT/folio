@@ -20,6 +20,7 @@ import cst3492.courseta.drill.Drill;
 import cst3492.courseta.index.CourseChunk;
 import cst3492.courseta.index.CourseFileParser;
 import cst3492.courseta.index.CourseIndex;
+import cst3492.courseta.junitgen.Scenario;
 import cst3492.courseta.junitgen.TestDraft;
 
 import javax.swing.JButton;
@@ -70,6 +71,18 @@ public final class FolioPanel extends JPanel {
     public void ask(String text, String selection) {
         question.setText(text == null ? "" : text);
         runAsk(selection);
+    }
+
+    public String scenarioText() {
+        return scenario.getText();
+    }
+
+    public void setScenarioText(String text) {
+        scenario.setText(text == null ? "" : text);
+    }
+
+    public void showNote(String text) {
+        transcript.setText(text == null ? "" : text);
     }
 
     public void generateFromSelection(String source, VirtualFile directory, String fileName) {
@@ -135,9 +148,8 @@ public final class FolioPanel extends JPanel {
     private JPanel actions() {
         JPanel panel = new JPanel(new BorderLayout());
         JPanel fields = new JPanel(new BorderLayout());
-        fields.add(new JLabel("Question"), BorderLayout.NORTH);
-        fields.add(new JScrollPane(question), BorderLayout.CENTER);
-        fields.add(new JScrollPane(scenario), BorderLayout.SOUTH);
+        fields.add(labeled("Question", question), BorderLayout.CENTER);
+        fields.add(labeled("Scenario", scenario), BorderLayout.SOUTH);
         panel.add(fields, BorderLayout.CENTER);
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT));
         JButton ask = new JButton("Ask");
@@ -249,7 +261,7 @@ public final class FolioPanel extends JPanel {
         run(() -> {
             String generated = TestDraft.generate(new HttpChatClient(), baseUrl.getText().strip(), readKey(), model.getText().strip(), wanted, source);
             if (generated.isBlank()) {
-                return "Describe a scenario before generating a test.";
+                return Scenario.MISSING;
             }
             SwingUtilities.invokeAndWait(() -> transcript.setText(generated));
             return generated;
@@ -322,6 +334,13 @@ public final class FolioPanel extends JPanel {
             store = Path.of(PathManager.getConfigPath(), "folio");
             Files.createDirectories(store);
         }
+    }
+
+    private static JPanel labeled(String title, JTextArea area) {
+        JPanel box = new JPanel(new BorderLayout());
+        box.add(new JLabel(title), BorderLayout.NORTH);
+        box.add(new JScrollPane(area), BorderLayout.CENTER);
+        return box;
     }
 
     private static void copy(String text) {
