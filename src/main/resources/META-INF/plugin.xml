@@ -1,0 +1,28 @@
+<idea-plugin>
+    <id>cst3492.folio</id>
+    <name>Folio</name>
+    <vendor>CST3492</vendor>
+    <description>Answers from course files inside IntelliJ and cites the page or slide.</description>
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.java</depends>
+    <depends>com.intellij.modules.vcs</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <toolWindow id="Folio" anchor="right" factoryClass="cst3492.courseta.FolioToolWindowFactory"/>
+    </extensions>
+
+    <actions>
+        <action id="Folio.Ask" class="cst3492.courseta.ask.AskAction" text="Ask Folio">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </action>
+        <action id="Folio.GenerateTest" class="cst3492.courseta.junitgen.GenerateTestAction" text="Generate JUnit From Scenario">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </action>
+        <action id="Folio.CommitMessage" class="cst3492.courseta.commit.CommitMessageAction" text="Draft Folio Commit Messages">
+            <add-to-group group-id="Vcs.MessageActionGroup" anchor="last"/>
+        </action>
+        <action id="Folio.Drill" class="cst3492.courseta.drill.CourseDrillAction" text="Folio Course Drill">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </action>
+    </actions>
+</idea-plugin>

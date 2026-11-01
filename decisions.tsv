@@ -1,0 +1,6 @@
+ts	phase	decision	why	evidence	result
+2026-11-01T07:50:01Z	start	started the Folio build on this branch	the operator asked for a public GitHub repo and a finished plugin without stopping	branch zhen/folio-plugin-3475	open
+2026-11-01T07:50:01Z	repo	did not create a public GitHub repository	gh is not logged in, and Origin create rejects public visibility. The token also refused an internal create	gh auth status, origin repo create	blocked
+2026-11-01T07:50:15Z	toolchain	compiled with Temurin 25.0.5 and Gradle 9.8.2	the plan pins JDK 25 and the Gradle current feed listed 9.8.2	JAVA_HOME jdk-25.0.5+8	tests green
+2026-11-01T07:50:15Z	diff	read staged changes with git diff --cached	that is the command the plan names, and a temp repo test can run it	CommitMessageActionTest	tests green
+2026-11-01T07:50:15Z	verify	ran 21 unit tests and buildPlugin	the tests observe retrieval, citation, git diff, and the empty-input gates	build/test-results/test	tests green
