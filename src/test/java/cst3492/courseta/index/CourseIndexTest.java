@@ -2,6 +2,8 @@ package cst3492.courseta.index;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -88,13 +90,57 @@ class CourseIndexTest {
     }
 
     @Test
-    void unrelatedQuestionThatOnlySharesACommonWordReturnsNothing() {
+    void halfTheContentTermsAreRequiredAndBridgeBigramsDoNotCount() {
+        assertFalse(CourseIndex.enoughCoverage(1, 4));
+        assertTrue(CourseIndex.enoughCoverage(2, 4));
+        assertTrue(CourseIndex.enoughCoverage(1, 2));
+        assertTrue(CourseIndex.enoughCoverage(1, 1));
+        assertTrue(CourseIndex.enoughCoverage(2, 3));
+        assertEquals(4, Tokens.coverageTerms("best pizza recipe example").size());
+        List<String> mapped = Tokens.coverageTerms("一对多怎么映射");
+        assertTrue(mapped.contains("一对"));
+        assertTrue(mapped.contains("对多"));
+        assertTrue(mapped.contains("映射"));
+        assertFalse(mapped.contains("怎么"));
+        assertFalse(mapped.contains("多怎"));
+        assertEquals(List.of("不可", "可变"), Tokens.coverageTerms("不可变"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {1, 5, 10, 17, 20})
+    void unrelatedQuestionSharingOneWordMissesAtEveryFrequency(int shared) {
         CourseIndex index = new CourseIndex();
         for (int i = 0; i < 20; i++) {
-            index.upsert(chunk("slides.pdf", i + 1, "lecture notes " + i + " example 例子 servlet"));
+            String text = i < shared
+                    ? "chapter " + i + " example 例子 notes"
+                    : "chapter " + i + " servlet mapping";
+            index.upsert(chunk("slides.pdf", i + 1, text));
         }
-        assertTrue(index.top("best pizza recipe example", 4).isEmpty());
-        assertTrue(index.top("周末去哪里吃饭比较好，有没有例子", 4).isEmpty());
+        assertTrue(index.top("best pizza recipe example", 4).isEmpty(), "shared=" + shared);
+        assertTrue(index.top("周末去哪里吃饭比较好，有没有例子", 4).isEmpty(), "shared=" + shared);
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {1, 5, 10, 17, 20})
+    void singleCourseTermRetrievesEveryChunkThatContainsIt(int present) {
+        CourseIndex index = new CourseIndex();
+        for (int i = 0; i < 20; i++) {
+            String text = i < present ? "inheritance hierarchy " + i : "pottery glaze " + i;
+            index.upsert(chunk("course.pdf", i + 1, text));
+        }
+        List<CourseChunk> hit = index.top("inheritance", 20);
+        assertEquals(present, hit.size(), "present=" + present);
+        assertTrue(hit.stream().allMatch(chunk -> chunk.text().contains("inheritance")));
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {10, 50, 200})
+    void courseTermPresentInEveryChunkStillHits(int count) {
+        CourseIndex index = new CourseIndex();
+        for (int i = 0; i < count; i++) {
+            index.upsert(chunk("course.pdf", i + 1, "inheritance notes " + i));
+        }
+        assertEquals(count, index.top("inheritance", count).size());
     }
 
     @Test
@@ -121,12 +167,15 @@ class CourseIndexTest {
     }
 
     @Test
-    void rareTermDoesNotAlsoReturnChunksThatShareOnlyACommonTerm() {
+    void relativeCutoffDropsChunksThatCoverOnlyHalfTheQuery() {
         CourseIndex index = new CourseIndex();
         index.upsert(chunk("rare.pdf", 1, "uniquealpha servlet"));
         for (int i = 0; i < 15; i++) {
             index.upsert(chunk("common.pdf", i + 1, "servlet notes " + i));
         }
+        // Both terms are content terms, so a servlet-only chunk covers half the query and
+        // would be returned if the relative cutoff were 0. Its score is far below 25% of
+        // the chunk that also contains uniquealpha.
         List<CourseChunk> hit = index.top("uniquealpha servlet", 20);
         assertEquals(1, hit.size());
         assertEquals("rare.pdf#PAGE#1", hit.get(0).id());

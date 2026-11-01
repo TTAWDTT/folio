@@ -15,8 +15,8 @@ public final class Tokens {
             "be", "been", "before", "being", "below", "between", "both", "but", "by", "can", "could", "describe", "did",
             "do", "does", "doing", "done", "down", "during", "each", "else", "explain", "few", "for", "from", "further",
             "had", "has", "have", "having", "he", "her", "here", "his", "how", "i", "if", "in", "into", "is", "it", "its",
-            "itself", "just", "me", "might", "more", "most", "must", "my", "need", "needs", "no", "nor", "not", "of", "off",
-            "on", "once", "only", "or", "other", "our", "out", "over", "own", "please", "same", "shall", "she", "should",
+            "itself", "just", "many", "me", "might", "more", "most", "must", "my", "need", "needs", "no", "nor", "not", "of", "off",
+            "on", "once", "one", "only", "or", "other", "our", "out", "over", "own", "please", "same", "shall", "she", "should",
             "so", "some", "such", "tell", "than", "that", "the", "their", "them", "then", "there", "these", "they", "this",
             "those", "through", "to", "too", "under", "until", "up", "use", "used", "uses", "using", "very", "via", "was",
             "we", "were", "what", "when", "where", "which", "while", "who", "whom", "whose", "why", "will", "with",
@@ -49,6 +49,22 @@ public final class Tokens {
             }
         }
         return out;
+    }
+
+    /**
+     * Terms used to decide whether a chunk is about the question. Grammatical bigrams such as
+     * 多怎 are left out so they do not dilute 一对 / 对多. A term made only of those bigrams,
+     * such as 不可变, falls back to the full term list.
+     */
+    public static List<String> coverageTerms(String text) {
+        LinkedHashSet<String> all = new LinkedHashSet<>(terms(text));
+        LinkedHashSet<String> solid = new LinkedHashSet<>();
+        for (String term : all) {
+            if (isSolidTerm(term)) {
+                solid.add(term);
+            }
+        }
+        return new ArrayList<>(solid.isEmpty() ? all : solid);
     }
 
     public static Set<String> unique(String text) {
@@ -85,6 +101,14 @@ public final class Tokens {
             return word;
         }
         return word.substring(0, word.length() - 1);
+    }
+
+    private static boolean isSolidTerm(String term) {
+        int[] points = term.codePoints().toArray();
+        if (points.length != 2 || !isCjk(points[0]) || !isCjk(points[1])) {
+            return true;
+        }
+        return CJK_FUNCTION.indexOf(points[0]) < 0 && CJK_FUNCTION.indexOf(points[1]) < 0;
     }
 
     private static boolean bothFunction(int left, int right) {
