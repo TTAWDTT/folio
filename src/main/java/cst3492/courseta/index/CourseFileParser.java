@@ -47,7 +47,7 @@ public final class CourseFileParser {
                     continue;
                 }
                 int number = i + 1;
-                chunks.add(chunk(source, ScopeKind.SLIDE, number, text));
+                chunks.addAll(CourseChunks.split(source, ScopeKind.SLIDE, number, text));
             }
         }
         return chunks;
@@ -118,17 +118,13 @@ public final class CourseFileParser {
             }
             if ("page".equals(raw.kind())) {
                 page++;
-                chunks.add(chunk(sourceDocument, ScopeKind.PAGE, page, text));
+                chunks.addAll(CourseChunks.split(sourceDocument, ScopeKind.PAGE, page, text));
             } else if ("slide-content".equals(raw.kind())) {
                 slide++;
-                chunks.add(chunk(sourceDocument, ScopeKind.SLIDE, slide, text));
+                chunks.addAll(CourseChunks.split(sourceDocument, ScopeKind.SLIDE, slide, text));
             }
         }
         return chunks;
-    }
-
-    private static CourseChunk chunk(String source, ScopeKind kind, int number, String text) {
-        return new CourseChunk(CourseChunk.idFor(source, kind, number), source, kind, number, text.strip());
     }
 
     private static String textOf(Element element) {

@@ -27,6 +27,7 @@ dependencies {
     implementation("org.apache.tika:tika-parser-pdf-module:4.2.0")
     implementation("org.apache.tika:tika-parser-microsoft-module:4.2.0")
     implementation("org.apache.poi:poi-ooxml-full:5.5.1")
+    implementation("com.google.code.gson:gson:2.15.0")
     testImplementation("org.apache.pdfbox:pdfbox:3.0.8")
     testImplementation("org.junit.jupiter:junit-jupiter:5.12.2")
     testImplementation("junit:junit:4.13.2")
@@ -54,12 +55,4 @@ tasks.withType<JavaCompile>().configureEach {
 
 tasks.test {
     useJUnitPlatform()
-}
-
-tasks.named("runIde") {
-    if (project.hasProperty("folioVerify")) {
-        val ide = this as org.gradle.api.tasks.JavaExec
-        ide.jvmArgs("-Dfolio.verify.window=true", "-Didea.trust.all.projects=true")
-        ide.args(rootDir.absolutePath)
-    }
 }

@@ -65,6 +65,43 @@ class CourseIndexTest {
     }
 
     @Test
+    void secondDocumentDoesNotDropTheFirst() {
+        CourseIndex index = new CourseIndex();
+        index.upsert(chunk("a.pdf", 1, "servlet doGet handler"));
+        index.upsert(chunk("b.pdf", 1, "pottery wheel glaze"));
+        assertEquals("a.pdf#PAGE#1", index.top("servlet doGet", 1).get(0).id());
+        index.removeSource("b.pdf");
+        assertEquals(1, index.size());
+        assertEquals("a.pdf#PAGE#1", index.top("servlet doGet", 1).get(0).id());
+        assertTrue(index.top("pottery wheel", 1).isEmpty());
+    }
+
+    @Test
+    void subPageChunkKeepsThePageCitationAndUnrelatedQuestionsMiss() {
+        StringBuilder body = new StringBuilder();
+        for (int i = 0; i < 180; i++) {
+            body.append("filler").append(i).append(' ');
+        }
+        body.append("BETAWIDGET is the servlet doGet handler. ");
+        for (int i = 0; i < 40; i++) {
+            body.append("tail").append(i).append(' ');
+        }
+        List<CourseChunk> parts = CourseChunks.split("lecture-servlet.pdf", ScopeKind.PAGE, 4, body.toString());
+        assertTrue(parts.size() > 1);
+        CourseIndex index = new CourseIndex();
+        for (CourseChunk part : parts) {
+            index.upsert(part);
+        }
+        index.upsert(chunk("lecture-jpa.pdf", 2, "实体类使用 @Entity 标注。一对多关系使用 @OneToMany。"));
+        List<CourseChunk> hit = index.top("BETAWIDGET servlet doGet", 3);
+        assertFalse(hit.isEmpty());
+        assertEquals("lecture-servlet.pdf", hit.get(0).sourceDocument());
+        assertEquals(4, hit.get(0).scopeNumber());
+        assertEquals(ScopeKind.PAGE, hit.get(0).scopeKind());
+        assertTrue(index.top("What is the capital of France?", 4).isEmpty());
+    }
+
+    @Test
     void relevantQuestionRetrievesTheMatchingPage() {
         CourseIndex index = course();
         List<CourseChunk> hit = index.top("How does a servlet override doGet?", 3);

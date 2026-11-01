@@ -3,9 +3,14 @@ package cst3492.courseta.ask;
 import cst3492.courseta.index.CourseChunk;
 import cst3492.courseta.index.CourseIndex;
 
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 
 public final class Asker {
+    public static final String MISSING_KEY =
+            "No API key is configured. Add an API key in the Folio tool window and save settings.";
+
     private Asker() {
     }
 
@@ -14,7 +19,7 @@ public final class Asker {
         String lookup = selection == null || selection.isBlank() ? question : question + "\n" + selection;
         List<CourseChunk> hits = index.top(lookup, 4);
         if (apiKey == null || apiKey.isBlank()) {
-            String missing = "No API key is stored.";
+            String missing = MISSING_KEY;
             if (hits.isEmpty()) {
                 return new Answer(Answer.Kind.GENERAL, Answer.GENERAL_SENTENCE + "\n" + missing, List.of(), false);
             }
@@ -34,6 +39,16 @@ public final class Asker {
     public static String citationLine(CourseChunk chunk) {
         String unit = chunk.scopeKind().name().equals("SLIDE") ? "slide" : "page";
         return chunk.sourceDocument() + " " + unit + " " + chunk.scopeNumber();
+    }
+
+    public static List<String> citationLines(List<CourseChunk> hits) {
+        LinkedHashSet<String> lines = new LinkedHashSet<>();
+        if (hits != null) {
+            for (CourseChunk hit : hits) {
+                lines.add(citationLine(hit));
+            }
+        }
+        return new ArrayList<>(lines);
     }
 
     private static String buildUser(String question, String selection, List<CourseChunk> hits) {

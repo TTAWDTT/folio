@@ -17,6 +17,7 @@ import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CourseFileParserTest {
@@ -32,8 +33,53 @@ class CourseFileParserTest {
         List<CourseChunk> chunks = CourseFileParser.chunksFromXml("fixture.pdf", xml);
         assertEquals(2, chunks.size());
         assertEquals(1, chunks.get(0).scopeNumber());
+        assertEquals("fixture.pdf#PAGE#1", chunks.get(0).id());
         assertEquals(3, chunks.get(1).scopeNumber());
         assertEquals(ScopeKind.PAGE, chunks.get(1).scopeKind());
+    }
+
+    @Test
+    void longPageSplitsIntoOverlappingChunksThatKeepThePageNumber() throws Exception {
+        StringBuilder body = new StringBuilder();
+        for (int i = 0; i < 250; i++) {
+            body.append("tok").append(i).append(' ');
+        }
+        String xml = "<html><body><div class=\"page\">" + body + "</div></body></html>";
+        List<CourseChunk> chunks = CourseFileParser.chunksFromXml("lecture.pdf", xml);
+        assertTrue(chunks.size() > 1);
+        assertEquals(chunks.size(), chunks.stream().map(CourseChunk::id).distinct().count());
+        assertTrue(chunks.stream().allMatch(chunk -> chunk.scopeNumber() == 1 && chunk.sourceDocument().equals("lecture.pdf")));
+        assertEquals(ScopeKind.PAGE, chunks.get(0).scopeKind());
+        String tail = chunks.get(0).text();
+        String shared = tail.substring(Math.max(0, tail.length() - 40)).strip();
+        assertFalse(shared.isBlank());
+        assertTrue(chunks.get(1).text().contains(shared), shared);
+    }
+
+    @Test
+    void hardSplitDoesNotCutASurrogatePair() {
+        String rare = "\uD840\uDC00";
+        String body = "测".repeat(699) + rare + "测".repeat(800);
+        assertEquals(699, CourseChunks.exclusiveEnd(body, CourseChunks.MAX_CHARS));
+        List<CourseChunk> chunks = CourseChunks.split("lecture.pdf", ScopeKind.PAGE, 2, body);
+        assertTrue(chunks.size() > 1);
+        assertTrue(chunks.stream().anyMatch(chunk -> chunk.text().contains(rare)));
+        for (CourseChunk chunk : chunks) {
+            assertWellFormedUtf16(chunk.text());
+            assertEquals(2, chunk.scopeNumber());
+        }
+    }
+
+    private static void assertWellFormedUtf16(String text) {
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (Character.isHighSurrogate(c)) {
+                assertTrue(i + 1 < text.length() && Character.isLowSurrogate(text.charAt(i + 1)));
+                i++;
+            } else {
+                assertFalse(Character.isLowSurrogate(c));
+            }
+        }
     }
 
     @Test

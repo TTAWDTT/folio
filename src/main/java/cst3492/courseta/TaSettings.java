@@ -9,9 +9,12 @@ import org.jetbrains.annotations.NotNull;
 @State(name = "FolioSettings", storages = @Storage("folio.xml"))
 @Service(Service.Level.APP)
 public final class TaSettings implements PersistentStateComponent<TaSettings.State> {
+    public static final String DEFAULT_BASE_URL = "https://api.deepseek.com";
+    public static final String DEFAULT_MODEL = "deepseek-flash";
+
     public static final class State {
-        public String baseUrl = "https://api.deepseek.com";
-        public String modelName = "deepseek-flash";
+        public String baseUrl = DEFAULT_BASE_URL;
+        public String modelName = DEFAULT_MODEL;
     }
 
     private State state = new State();

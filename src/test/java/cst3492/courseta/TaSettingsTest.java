@@ -18,5 +18,7 @@ class TaSettingsTest {
             assertFalse(field.getName().toLowerCase().contains("password"), field.getName());
         }
         assertEquals("deepseek-flash", state.modelName);
+        assertEquals(TaSettings.DEFAULT_MODEL, new TaSettings.State().modelName);
+        assertEquals(TaSettings.DEFAULT_BASE_URL, new TaSettings.State().baseUrl);
     }
 }
