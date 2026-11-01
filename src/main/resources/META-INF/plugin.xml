@@ -9,6 +9,7 @@
 
     <extensions defaultExtensionNs="com.intellij">
         <toolWindow id="Folio" anchor="right" factoryClass="cst3492.courseta.FolioToolWindowFactory"/>
+        <postStartupActivity implementation="cst3492.courseta.FolioVerifyActivity"/>
     </extensions>
 
     <actions>

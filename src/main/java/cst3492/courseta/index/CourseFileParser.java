@@ -1,5 +1,10 @@
 package cst3492.courseta.index;
 
+import org.apache.poi.xslf.usermodel.XMLSlideShow;
+import org.apache.poi.xslf.usermodel.XSLFNotes;
+import org.apache.poi.xslf.usermodel.XSLFShape;
+import org.apache.poi.xslf.usermodel.XSLFSlide;
+import org.apache.poi.xslf.usermodel.XSLFTextShape;
 import org.apache.tika.io.TikaInputStream;
 import org.apache.tika.metadata.Metadata;
 import org.apache.tika.parser.AutoDetectParser;
@@ -23,8 +28,53 @@ import java.util.List;
 
 public final class CourseFileParser {
     public List<CourseChunk> parse(Path file, ClassLoader loader) throws Exception {
+        String name = file.getFileName().toString().toLowerCase();
+        if (name.endsWith(".pptx")) {
+            return chunksFromPptx(file);
+        }
         String xml = toXml(file, loader);
         return chunksFromXml(file.getFileName().toString(), xml);
+    }
+
+    static List<CourseChunk> chunksFromPptx(Path file) throws Exception {
+        String source = file.getFileName().toString();
+        List<CourseChunk> chunks = new ArrayList<>();
+        try (InputStream input = Files.newInputStream(file); XMLSlideShow show = new XMLSlideShow(input)) {
+            List<XSLFSlide> slides = show.getSlides();
+            for (int i = 0; i < slides.size(); i++) {
+                String text = slideText(slides.get(i));
+                if (text.isBlank()) {
+                    continue;
+                }
+                int number = i + 1;
+                chunks.add(chunk(source, ScopeKind.SLIDE, number, text));
+            }
+        }
+        return chunks;
+    }
+
+    private static String slideText(XSLFSlide slide) {
+        StringBuilder builder = new StringBuilder();
+        appendShapes(builder, slide.getShapes());
+        XSLFNotes notes = slide.getNotes();
+        if (notes != null) {
+            appendShapes(builder, notes.getShapes());
+        }
+        return builder.toString().strip();
+    }
+
+    private static void appendShapes(StringBuilder builder, List<XSLFShape> shapes) {
+        for (XSLFShape shape : shapes) {
+            if (shape instanceof XSLFTextShape textShape) {
+                String text = textShape.getText();
+                if (text != null && !text.isBlank()) {
+                    if (!builder.isEmpty()) {
+                        builder.append('\n');
+                    }
+                    builder.append(text.strip());
+                }
+            }
+        }
     }
 
     static List<CourseChunk> chunksFromXml(String sourceDocument, String xml) throws Exception {

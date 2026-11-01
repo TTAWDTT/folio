@@ -4,3 +4,5 @@ ts	phase	decision	why	evidence	result
 2026-11-01T07:50:15Z	toolchain	compiled with Temurin 25.0.5 and Gradle 9.8.2	the plan pins JDK 25 and the Gradle current feed listed 9.8.2	JAVA_HOME jdk-25.0.5+8	tests green
 2026-11-01T07:50:15Z	diff	read staged changes with git diff --cached	that is the command the plan names, and a temp repo test can run it	CommitMessageActionTest	tests green
 2026-11-01T07:50:15Z	verify	ran 21 unit tests and buildPlugin	the tests observe retrieval, citation, git diff, and the empty-input gates	build/test-results/test	tests green
+2026-11-01T08:24:44Z	pptx	parse PPTX in the order PowerPoint shows the slides	Tika's div order did not follow a reordered slide list, so Folio reads the deck with POI	CourseFileParserTest.pptxScopeFollowsTheOrderShownInTheDeck	tests green
+2026-11-01T08:24:44Z	github	still cannot create the public repository from this machine	gh auth status says not logged in and ~/.config/gh does not exist	gh auth status	blocked

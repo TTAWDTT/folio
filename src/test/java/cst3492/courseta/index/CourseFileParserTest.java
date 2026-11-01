@@ -1,5 +1,8 @@
 package cst3492.courseta.index;
 
+import org.apache.poi.xslf.usermodel.XMLSlideShow;
+import org.apache.poi.xslf.usermodel.XSLFSlide;
+import org.apache.poi.xslf.usermodel.XSLFTextBox;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
@@ -8,6 +11,8 @@ import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.awt.Rectangle;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -62,6 +67,37 @@ class CourseFileParserTest {
         assertTrue(chunks.get(0).text().toLowerCase().contains("alpha"));
         assertTrue(chunks.get(1).text().toLowerCase().contains("beta"));
         assertEquals(ScopeKind.PAGE, chunks.get(0).scopeKind());
+    }
+
+    @Test
+    void pptxScopeFollowsTheOrderShownInTheDeck(@TempDir Path dir) throws Exception {
+        Path pptx = dir.resolve("lecture.pptx");
+        try (XMLSlideShow show = new XMLSlideShow()) {
+            addSlide(show, "FIRST");
+            addSlide(show, "SECOND");
+            XSLFSlide third = addSlide(show, "THIRD");
+            show.setSlideOrder(third, 0);
+            try (var output = Files.newOutputStream(pptx)) {
+                show.write(output);
+            }
+        }
+        List<CourseChunk> chunks = new CourseFileParser().parse(pptx, CourseFileParser.class.getClassLoader());
+        assertEquals(3, chunks.size());
+        assertEquals(1, chunks.get(0).scopeNumber());
+        assertTrue(chunks.get(0).text().contains("THIRD"));
+        assertEquals(2, chunks.get(1).scopeNumber());
+        assertTrue(chunks.get(1).text().contains("FIRST"));
+        assertEquals(3, chunks.get(2).scopeNumber());
+        assertTrue(chunks.get(2).text().contains("SECOND"));
+        assertEquals(ScopeKind.SLIDE, chunks.get(0).scopeKind());
+    }
+
+    private static XSLFSlide addSlide(XMLSlideShow show, String text) {
+        XSLFSlide slide = show.createSlide();
+        XSLFTextBox box = slide.createTextBox();
+        box.setAnchor(new Rectangle(40, 40, 400, 80));
+        box.setText(text);
+        return slide;
     }
 
     private static void writePage(PDDocument document, String text) throws Exception {
