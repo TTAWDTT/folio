@@ -5,6 +5,7 @@ import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
 import com.intellij.openapi.editor.Editor;
+import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.wm.ToolWindow;
 import com.intellij.openapi.wm.ToolWindowManager;
@@ -13,6 +14,7 @@ import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiMethod;
 import com.intellij.psi.util.PsiTreeUtil;
+import cst3492.courseta.FolioPanel;
 import cst3492.courseta.FolioPanels;
 import org.jetbrains.annotations.NotNull;
 
@@ -24,22 +26,47 @@ public final class GenerateTestAction extends AnAction {
 
     @Override
     public void actionPerformed(@NotNull AnActionEvent event) {
-        if (event.getProject() == null) {
+        Project project = event.getProject();
+        if (project == null) {
+            return;
+        }
+        ToolWindow window = ToolWindowManager.getInstance(project).getToolWindow("Folio");
+        if (window == null) {
             return;
         }
         String source = sourceOf(event);
         VirtualFile directory = directoryOf(event);
         String fileName = testFileName(event);
-        ToolWindow window = ToolWindowManager.getInstance(event.getProject()).getToolWindow("Folio");
-        if (window == null) {
+        FolioPanel existing = FolioPanels.get(project);
+        ScenarioDialog dialog = new ScenarioDialog(project, prefill(existing == null ? null : existing.scenarioText()));
+        boolean accepted = dialog.showAndGet();
+        String scenario = scenarioAfterPrompt(accepted, accepted ? dialog.scenarioText() : null);
+        if (scenario == null) {
+            if (accepted && existing != null) {
+                existing.setScenarioText("");
+                existing.showNote(Scenario.MISSING);
+            }
             return;
         }
         window.activate(() -> {
-            var panel = FolioPanels.get(event.getProject());
-            if (panel != null) {
-                panel.generateFromSelection(source, directory, fileName);
+            FolioPanel panel = FolioPanels.get(project);
+            if (panel == null) {
+                return;
             }
+            panel.setScenarioText(scenario);
+            panel.generateFromSelection(source, directory, fileName);
         }, true);
+    }
+
+    static String prefill(String panelText) {
+        return panelText == null ? "" : panelText;
+    }
+
+    static String scenarioAfterPrompt(boolean okPressed, String text) {
+        if (!okPressed) {
+            return null;
+        }
+        return Scenario.accepted(text);
     }
 
     public static String sourceOf(AnActionEvent event) {
