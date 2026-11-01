@@ -2,6 +2,8 @@
 
 Group B builds an IntelliJ IDEA plugin that answers from course files and adds three smart actions. The team demos that plugin in the IDE. The program covers F0 and F1 and does not build F2. PR order is PR-1, PR-2, PR-3, PR-4, PR-5, then PR-6.
 
+Read the Chinese copy at [course-ta-plugin-plan.zh.md](course-ta-plugin-plan.zh.md). The checker still reads this English file.
+
 ## How to read this
 
 One box is one unit of work. Every box names the evidence that checks it. A nested box is a sub-step of the box above it. Check a box only when its evidence exists, a file, a log line, a screenshot, a test run, or a SHA. The body is a how-to. The appendices explain and record.
