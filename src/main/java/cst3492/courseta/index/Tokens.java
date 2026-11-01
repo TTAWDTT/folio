@@ -1,6 +1,7 @@
 package cst3492.courseta.index;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -34,7 +35,14 @@ public final class Tokens {
      * "one-to-one" still matches, but they do not dilute "explain polymorphism" or OneToMany.
      */
     private static final Set<String> COVERAGE_SKIP = Set.of(
-            "confused", "give", "simple", "one", "many");
+            "confused", "give", "simple", "one", "many", "kindly", "briefly", "describe");
+    /**
+     * Courtesy words removed from a Chinese coverage span. They are not removed from the
+     * index, so 请求 and 性能 stay searchable. Longer phrases are matched first.
+     */
+    private static final int[][] COVERAGE_FILLER = fillerPoints(
+            "能不能", "请问", "详细", "麻烦", "了解", "深入", "一下", "问题", "回事", "到底",
+            "请", "讲", "地", "给");
 
     private Tokens() {
     }
@@ -60,8 +68,8 @@ public final class Tokens {
     /**
      * Coverage units for a question. English words are one unit each, minus courtesy and
      * filler words. Chinese is one unit per run of content Han characters, covered when any
-     * bigram inside that run matches, so 请详细讲讲什么是多态 is two units and not five bigrams.
-     * A question with no such unit, such as 不可变, falls back to its indexed terms.
+     * bigram inside that run matches. Courtesy runs such as 请详细讲讲 are not units.
+     * A question with no such unit, such as 不可变 or 请求, falls back to its indexed terms.
      */
     public static List<List<String>> coverageGroups(String text) {
         LinkedHashSet<String> all = new LinkedHashSet<>(terms(text));
@@ -150,16 +158,70 @@ public final class Tokens {
                 run.add(points[i]);
                 continue;
             }
-            if (run.size() >= 2) {
+            for (List<Integer> part : stripFillers(run)) {
+                if (part.size() < 2) {
+                    continue;
+                }
                 List<String> bigrams = new ArrayList<>();
-                for (int j = 0; j + 1 < run.size(); j++) {
-                    bigrams.add(new String(new int[] {run.get(j), run.get(j + 1)}, 0, 2));
+                for (int j = 0; j + 1 < part.size(); j++) {
+                    bigrams.add(new String(new int[] {part.get(j), part.get(j + 1)}, 0, 2));
                 }
                 groups.add(bigrams);
             }
             run.clear();
         }
         return groups;
+    }
+
+    private static List<List<Integer>> stripFillers(List<Integer> run) {
+        List<List<Integer>> parts = new ArrayList<>();
+        List<Integer> current = new ArrayList<>();
+        int i = 0;
+        while (i < run.size()) {
+            int skip = fillerLength(run, i);
+            if (skip > 0) {
+                if (current.size() >= 2) {
+                    parts.add(current);
+                }
+                current = new ArrayList<>();
+                i += skip;
+            } else {
+                current.add(run.get(i));
+                i++;
+            }
+        }
+        if (current.size() >= 2) {
+            parts.add(current);
+        }
+        return parts;
+    }
+
+    private static int fillerLength(List<Integer> run, int at) {
+        for (int[] filler : COVERAGE_FILLER) {
+            if (at + filler.length > run.size()) {
+                continue;
+            }
+            boolean match = true;
+            for (int k = 0; k < filler.length; k++) {
+                if (run.get(at + k) != filler[k]) {
+                    match = false;
+                    break;
+                }
+            }
+            if (match) {
+                return filler.length;
+            }
+        }
+        return 0;
+    }
+
+    private static int[][] fillerPoints(String... words) {
+        int[][] points = new int[words.length][];
+        for (int i = 0; i < words.length; i++) {
+            points[i] = words[i].codePoints().toArray();
+        }
+        Arrays.sort(points, (left, right) -> Integer.compare(right.length, left.length));
+        return points;
     }
 
     private static boolean isHanContent(int codePoint) {

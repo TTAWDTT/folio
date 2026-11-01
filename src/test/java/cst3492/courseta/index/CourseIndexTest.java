@@ -104,7 +104,10 @@ class CourseIndexTest {
         assertFalse(mapped.contains("怎么"));
         assertFalse(mapped.contains("多怎"));
         assertEquals(List.of("不可", "可变"), Tokens.coverageTerms("不可变"));
-        assertEquals(2, Tokens.coverageGroups("请详细讲讲什么是多态").size());
+        assertEquals(1, Tokens.coverageGroups("请详细讲讲什么是多态").size());
+        assertTrue(Tokens.terms("请求").contains("请求"));
+        assertTrue(Tokens.terms("性能").contains("性能"));
+        assertTrue(Tokens.coverageTerms("请求").contains("请求"));
         assertEquals(3, Tokens.coverageGroups("老师，测试用例应该怎么设计比较好呢").size());
         assertEquals(2, Tokens.coverageGroups("I'm confused, please explain polymorphism and give me a simple example").size());
     }
@@ -126,6 +129,35 @@ class CourseIndexTest {
         List<CourseChunk> english = index.top("I'm confused, please explain polymorphism and give me a simple example", 4);
         assertFalse(english.isEmpty());
         assertEquals("oop.pdf#PAGE#2", english.get(0).id());
+    }
+
+    @Test
+    void longerPoliteQuestionsStillReachTheCourseTerm() {
+        CourseIndex index = new CourseIndex();
+        index.upsert(chunk("oop.pdf", 2, "多态是指同一消息发给不同对象时可以有不同行为。Polymorphism lets a superclass reference call the subclass method."));
+        index.upsert(chunk("test.pdf", 4, "测试用例设计需要包含输入、步骤和期望结果。"));
+
+        List<CourseChunk> polymorphism = index.top("能不能请你详细地给我讲讲多态到底是怎么回事", 4);
+        assertFalse(polymorphism.isEmpty());
+        assertEquals("oop.pdf#PAGE#2", polymorphism.get(0).id());
+
+        List<CourseChunk> cases = index.top("我想请问一下关于测试用例设计的问题", 4);
+        assertFalse(cases.isEmpty());
+        assertEquals("test.pdf#PAGE#4", cases.get(0).id());
+
+        List<CourseChunk> english = index.top("kindly describe polymorphism briefly", 4);
+        assertFalse(english.isEmpty());
+        assertEquals("oop.pdf#PAGE#2", english.get(0).id());
+    }
+
+    @Test
+    void unrelatedWordPlusCourseTermMayPassHalfCoverage() {
+        // Two units, and the course term is one of them. Half coverage keeps the hit on purpose.
+        CourseIndex index = new CourseIndex();
+        index.upsert(chunk("oop.pdf", 2, "多态是指同一消息发给不同对象时可以有不同行为。"));
+        List<CourseChunk> hit = index.top("今天天气 多态", 4);
+        assertFalse(hit.isEmpty());
+        assertEquals("oop.pdf#PAGE#2", hit.get(0).id());
     }
 
     @Test
