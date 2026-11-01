@@ -15,8 +15,8 @@ public final class Tokens {
             "be", "been", "before", "being", "below", "between", "both", "but", "by", "can", "could", "describe", "did",
             "do", "does", "doing", "done", "down", "during", "each", "else", "explain", "few", "for", "from", "further",
             "had", "has", "have", "having", "he", "her", "here", "his", "how", "i", "if", "in", "into", "is", "it", "its",
-            "itself", "just", "many", "me", "might", "more", "most", "must", "my", "need", "needs", "no", "nor", "not", "of", "off",
-            "on", "once", "one", "only", "or", "other", "our", "out", "over", "own", "please", "same", "shall", "she", "should",
+            "itself", "just", "me", "might", "more", "most", "must", "my", "need", "needs", "no", "nor", "not", "of", "off",
+            "on", "once", "only", "or", "other", "our", "out", "over", "own", "please", "same", "shall", "she", "should",
             "so", "some", "such", "tell", "than", "that", "the", "their", "them", "then", "there", "these", "they", "this",
             "those", "through", "to", "too", "under", "until", "up", "use", "used", "uses", "using", "very", "via", "was",
             "we", "were", "what", "when", "where", "which", "while", "who", "whom", "whose", "why", "will", "with",
@@ -29,6 +29,12 @@ public final class Tokens {
     private static final String CJK_FUNCTION =
             "的了是在这那个和与或而但也都很还又把从为以会想去来到吗呢吧啊呀嘛么怎什哪谁何如若则所且及其之于"
                     + "我你他她它们就可没让";
+    /**
+     * Left out of the coverage count only. They stay in the index, so a query that is just
+     * "one-to-one" still matches, but they do not dilute "explain polymorphism" or OneToMany.
+     */
+    private static final Set<String> COVERAGE_SKIP = Set.of(
+            "confused", "give", "simple", "one", "many");
 
     private Tokens() {
     }
@@ -52,19 +58,34 @@ public final class Tokens {
     }
 
     /**
-     * Terms used to decide whether a chunk is about the question. Grammatical bigrams such as
-     * 多怎 are left out so they do not dilute 一对 / 对多. A term made only of those bigrams,
-     * such as 不可变, falls back to the full term list.
+     * Coverage units for a question. English words are one unit each, minus courtesy and
+     * filler words. Chinese is one unit per run of content Han characters, covered when any
+     * bigram inside that run matches, so 请详细讲讲什么是多态 is two units and not five bigrams.
+     * A question with no such unit, such as 不可变, falls back to its indexed terms.
      */
-    public static List<String> coverageTerms(String text) {
+    public static List<List<String>> coverageGroups(String text) {
         LinkedHashSet<String> all = new LinkedHashSet<>(terms(text));
-        LinkedHashSet<String> solid = new LinkedHashSet<>();
+        List<List<String>> groups = new ArrayList<>();
         for (String term : all) {
-            if (isSolidTerm(term)) {
-                solid.add(term);
+            if (isLatinTerm(term) && !COVERAGE_SKIP.contains(term)) {
+                groups.add(List.of(term));
             }
         }
-        return new ArrayList<>(solid.isEmpty() ? all : solid);
+        groups.addAll(hanGroups(text));
+        if (groups.isEmpty()) {
+            for (String term : all) {
+                groups.add(List.of(term));
+            }
+        }
+        return groups;
+    }
+
+    public static List<String> coverageTerms(String text) {
+        List<String> flat = new ArrayList<>();
+        for (List<String> group : coverageGroups(text)) {
+            flat.addAll(group);
+        }
+        return flat;
     }
 
     public static Set<String> unique(String text) {
@@ -103,12 +124,47 @@ public final class Tokens {
         return word.substring(0, word.length() - 1);
     }
 
-    private static boolean isSolidTerm(String term) {
+    private static boolean isLatinTerm(String term) {
         int[] points = term.codePoints().toArray();
-        if (points.length != 2 || !isCjk(points[0]) || !isCjk(points[1])) {
-            return true;
+        if (points.length == 0) {
+            return false;
         }
-        return CJK_FUNCTION.indexOf(points[0]) < 0 && CJK_FUNCTION.indexOf(points[1]) < 0;
+        for (int point : points) {
+            if (isCjk(point)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static List<List<String>> hanGroups(String text) {
+        if (text == null || text.isEmpty()) {
+            return List.of();
+        }
+        int[] points = text.codePoints().toArray();
+        List<List<String>> groups = new ArrayList<>();
+        List<Integer> run = new ArrayList<>();
+        for (int i = 0; i <= points.length; i++) {
+            boolean content = i < points.length && isHanContent(points[i]);
+            if (content) {
+                run.add(points[i]);
+                continue;
+            }
+            if (run.size() >= 2) {
+                List<String> bigrams = new ArrayList<>();
+                for (int j = 0; j + 1 < run.size(); j++) {
+                    bigrams.add(new String(new int[] {run.get(j), run.get(j + 1)}, 0, 2));
+                }
+                groups.add(bigrams);
+            }
+            run.clear();
+        }
+        return groups;
+    }
+
+    private static boolean isHanContent(int codePoint) {
+        return Character.UnicodeScript.of(codePoint) == Character.UnicodeScript.HAN
+                && CJK_FUNCTION.indexOf(codePoint) < 0;
     }
 
     private static boolean bothFunction(int left, int right) {

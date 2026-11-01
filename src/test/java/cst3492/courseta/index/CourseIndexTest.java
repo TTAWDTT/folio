@@ -104,6 +104,37 @@ class CourseIndexTest {
         assertFalse(mapped.contains("怎么"));
         assertFalse(mapped.contains("多怎"));
         assertEquals(List.of("不可", "可变"), Tokens.coverageTerms("不可变"));
+        assertEquals(2, Tokens.coverageGroups("请详细讲讲什么是多态").size());
+        assertEquals(3, Tokens.coverageGroups("老师，测试用例应该怎么设计比较好呢").size());
+        assertEquals(2, Tokens.coverageGroups("I'm confused, please explain polymorphism and give me a simple example").size());
+    }
+
+    @Test
+    void naturalQuestionsStillReachTheCourseTerm() {
+        CourseIndex index = new CourseIndex();
+        index.upsert(chunk("oop.pdf", 2, "多态是指同一消息发给不同对象时可以有不同行为。Polymorphism lets a superclass reference call the subclass method."));
+        index.upsert(chunk("test.pdf", 4, "测试用例设计需要包含输入、步骤和期望结果。"));
+
+        List<CourseChunk> polymorphism = index.top("请详细讲讲什么是多态", 4);
+        assertFalse(polymorphism.isEmpty());
+        assertEquals("oop.pdf#PAGE#2", polymorphism.get(0).id());
+
+        List<CourseChunk> cases = index.top("老师，测试用例应该怎么设计比较好呢", 4);
+        assertFalse(cases.isEmpty());
+        assertEquals("test.pdf#PAGE#4", cases.get(0).id());
+
+        List<CourseChunk> english = index.top("I'm confused, please explain polymorphism and give me a simple example", 4);
+        assertFalse(english.isEmpty());
+        assertEquals("oop.pdf#PAGE#2", english.get(0).id());
+    }
+
+    @Test
+    void oneToOneStaysSearchable() {
+        CourseIndex index = new CourseIndex();
+        index.upsert(chunk("jpa.pdf", 3, "A one-to-one association uses @OneToOne."));
+        List<CourseChunk> hit = index.top("one-to-one", 3);
+        assertEquals(1, hit.size());
+        assertEquals("jpa.pdf#PAGE#3", hit.get(0).id());
     }
 
     @ParameterizedTest
