@@ -14,6 +14,8 @@ import com.intellij.psi.PsiManager;
 import cst3492.courseta.ask.Answer;
 import cst3492.courseta.ask.Asker;
 import cst3492.courseta.ask.HttpChatClient;
+import com.intellij.openapi.vcs.CommitMessageI;
+import cst3492.courseta.commit.CommitBox;
 import cst3492.courseta.commit.CommitDraft;
 import cst3492.courseta.commit.GitDiffs;
 import cst3492.courseta.drill.Drill;
@@ -32,8 +34,14 @@ import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import java.awt.BorderLayout;
+import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.awt.Insets;
 import java.awt.Toolkit;
 import java.awt.datatransfer.StringSelection;
 import java.nio.file.Files;
@@ -43,13 +51,17 @@ import java.util.List;
 
 public final class FolioPanel extends JPanel {
     private final Project project;
-    private final JTextField baseUrl = new JTextField("https://api.deepseek.com", 28);
-    private final JTextField model = new JTextField("deepseek-flash", 16);
+    private final JTextField baseUrl = new JTextField(TaSettings.DEFAULT_BASE_URL, 16);
+    private final JTextField model = new JTextField(TaSettings.DEFAULT_MODEL, 16);
     private final JPasswordField apiKey = new JPasswordField(16);
-    private final JTextArea question = new JTextArea(3, 40);
-    private final JTextArea scenario = new JTextArea(3, 40);
-    private final JTextArea transcript = new JTextArea(16, 48);
-    private final JLabel status = new JLabel("No course files are indexed.");
+    private final JTextArea question = new JTextArea(3, 20);
+    private final JTextArea scenario = new JTextArea(3, 20);
+    private final JTextArea transcript = new JTextArea(16, 20);
+    private final JLabel status = new JLabel();
+    private final JButton askButton = new JButton("Ask");
+    private final JButton commitButton = new JButton("Draft commit messages");
+    private final JButton previewButton = new JButton("Preview test");
+    private boolean storedKey;
     private CourseIndex index = new CourseIndex();
     private Path store;
     private VirtualFile insertDirectory;
@@ -60,12 +72,41 @@ public final class FolioPanel extends JPanel {
         super(new BorderLayout(8, 8));
         this.project = project;
         transcript.setEditable(false);
+        transcript.setLineWrap(true);
+        transcript.setWrapStyleWord(true);
         question.setLineWrap(true);
+        question.setWrapStyleWord(true);
         scenario.setLineWrap(true);
+        scenario.setWrapStyleWord(true);
+        shrinkable(baseUrl);
+        shrinkable(model);
+        shrinkable(apiKey);
+        setStatus("No course files are indexed.");
         add(settings(), BorderLayout.NORTH);
         add(new JScrollPane(transcript), BorderLayout.CENTER);
         add(actions(), BorderLayout.SOUTH);
+        apiKey.getDocument().addDocumentListener(new DocumentListener() {
+            @Override
+            public void insertUpdate(DocumentEvent event) {
+                refreshKeyActions();
+            }
+
+            @Override
+            public void removeUpdate(DocumentEvent event) {
+                refreshKeyActions();
+            }
+
+            @Override
+            public void changedUpdate(DocumentEvent event) {
+                refreshKeyActions();
+            }
+        });
+        refreshKeyActions();
         loadStored();
+    }
+
+    static boolean llmActionsEnabled(boolean storedKey, int typedCharacters) {
+        return storedKey || typedCharacters > 0;
     }
 
     public void ask(String text, String selection) {
@@ -102,6 +143,10 @@ public final class FolioPanel extends JPanel {
     }
 
     public void draftCommit() {
+        draftCommit(null);
+    }
+
+    public void draftCommit(CommitMessageI control) {
         run(() -> {
             String base = project.getBasePath();
             if (base == null) {
@@ -115,33 +160,71 @@ public final class FolioPanel extends JPanel {
             if (diff.isBlank()) {
                 return "Nothing is staged.";
             }
-            List<String> messages = CommitDraft.draft(true, diff, new HttpChatClient(), baseUrl.getText().strip(), readKey(), model.getText().strip());
+            if (readKey().isBlank()) {
+                return Asker.MISSING_KEY;
+            }
+            String bounded = CommitDraft.bound(diff);
+            List<String> messages = CommitDraft.draft(true, bounded, new HttpChatClient(), baseUrl.getText().strip(), readKey(), model.getText().strip());
             if (messages.isEmpty()) {
-                return "No API key is stored.";
+                return "The model returned no commit message.";
+            }
+            boolean filled = false;
+            if (control != null) {
+                boolean[] holder = new boolean[1];
+                SwingUtilities.invokeAndWait(() -> holder[0] = CommitBox.fill(control, messages.get(0)));
+                filled = holder[0];
             }
             StringBuilder view = new StringBuilder();
-            view.append(diff).append("\n");
+            view.append(bounded).append("\n");
             for (int i = 0; i < messages.size(); i++) {
                 view.append("\n").append(i + 1).append(". ").append(messages.get(i));
             }
             copy(messages.get(0));
-            view.append("\n\nCopied message 1.");
+            view.append(filled
+                    ? "\n\nPlaced message 1 in the commit box and copied it."
+                    : "\n\nCopied message 1.");
             return view.toString();
         });
     }
 
     private JPanel settings() {
-        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        panel.add(new JLabel("Base URL"));
-        panel.add(baseUrl);
-        panel.add(new JLabel("Model"));
-        panel.add(model);
-        panel.add(new JLabel("API key"));
-        panel.add(apiKey);
+        JPanel panel = new JPanel(new GridBagLayout());
+        GridBagConstraints label = new GridBagConstraints();
+        label.gridx = 0;
+        label.anchor = GridBagConstraints.LINE_START;
+        label.insets = new Insets(2, 0, 2, 8);
+        GridBagConstraints field = new GridBagConstraints();
+        field.gridx = 1;
+        field.weightx = 1;
+        field.fill = GridBagConstraints.HORIZONTAL;
+        field.insets = new Insets(2, 0, 2, 0);
+        label.gridy = 0;
+        field.gridy = 0;
+        panel.add(new JLabel("Base URL"), label);
+        panel.add(baseUrl, field);
+        label.gridy = 1;
+        field.gridy = 1;
+        panel.add(new JLabel("Model"), label);
+        panel.add(model, field);
+        label.gridy = 2;
+        field.gridy = 2;
+        panel.add(new JLabel("API key"), label);
+        panel.add(apiKey, field);
+        GridBagConstraints span = new GridBagConstraints();
+        span.gridx = 0;
+        span.gridwidth = 2;
+        span.weightx = 1;
+        span.fill = GridBagConstraints.HORIZONTAL;
+        span.anchor = GridBagConstraints.LINE_START;
+        span.insets = new Insets(4, 0, 2, 0);
+        span.gridy = 3;
         JButton save = new JButton("Save settings");
         save.addActionListener(event -> saveSettings());
-        panel.add(save);
-        panel.add(status);
+        JPanel saveRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        saveRow.add(save);
+        panel.add(saveRow, span);
+        span.gridy = 4;
+        panel.add(status, span);
         return panel;
     }
 
@@ -152,20 +235,17 @@ public final class FolioPanel extends JPanel {
         fields.add(labeled("Scenario", scenario), BorderLayout.SOUTH);
         panel.add(fields, BorderLayout.CENTER);
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        JButton ask = new JButton("Ask");
-        ask.addActionListener(event -> runAsk(null));
+        askButton.addActionListener(event -> runAsk(null));
         JButton indexFiles = new JButton("Index files");
         indexFiles.addActionListener(event -> chooseFiles());
-        JButton commit = new JButton("Draft commit messages");
-        commit.addActionListener(event -> draftCommit());
-        JButton generate = new JButton("Preview test");
-        generate.addActionListener(event -> runGenerate(lastSource.isBlank() ? scenario.getText() : lastSource));
+        commitButton.addActionListener(event -> draftCommit());
+        previewButton.addActionListener(event -> runGenerate(lastSource.isBlank() ? scenario.getText() : lastSource));
         JButton write = new JButton("Write test file");
         write.addActionListener(event -> writePreview());
-        buttons.add(ask);
+        buttons.add(askButton);
         buttons.add(indexFiles);
-        buttons.add(commit);
-        buttons.add(generate);
+        buttons.add(commitButton);
+        buttons.add(previewButton);
         buttons.add(write);
         panel.add(buttons, BorderLayout.SOUTH);
         return panel;
@@ -177,8 +257,12 @@ public final class FolioPanel extends JPanel {
         state.baseUrl = baseUrl.getText().strip();
         state.modelName = model.getText().strip();
         char[] key = apiKey.getPassword();
+        storedKey = key.length > 0;
+        refreshKeyActions();
         ApplicationManager.getApplication().executeOnPooledThread(() -> Secrets.write(new String(key)));
-        status.setText(key.length == 0 ? "Settings saved. Ask stays disabled until an API key is stored." : "Settings saved. A key is stored.");
+        setStatus(key.length == 0
+                ? "Settings saved. Add an API key to enable Ask, test generation, and commit drafts."
+                : "Settings saved. A key is stored.");
     }
 
     private void loadStored() {
@@ -193,11 +277,14 @@ public final class FolioPanel extends JPanel {
                     index = loaded;
                     baseUrl.setText(state.baseUrl);
                     model.setText(state.modelName);
-                    status.setText(loaded.size() == 0 ? "No course files are indexed." : loaded.size() + " chunks indexed.");
-                    if (!key.isBlank()) {
+                    storedKey = !key.isBlank();
+                    String text = loaded.size() == 0 ? "No course files are indexed." : loaded.size() + " chunks indexed.";
+                    if (storedKey) {
                         apiKey.setText("");
-                        status.setText(status.getText() + " A key is stored.");
+                        text = text + " A key is stored.";
                     }
+                    setStatus(text);
+                    refreshKeyActions();
                 });
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> transcript.setText(ex.getMessage()));
@@ -234,7 +321,7 @@ public final class FolioPanel extends JPanel {
             }
         }
         index.save(store.resolve("index.tsv"));
-        SwingUtilities.invokeLater(() -> status.setText(index.size() + " chunks indexed."));
+        SwingUtilities.invokeLater(() -> setStatus(index.size() + " chunks indexed."));
         return report.isEmpty() ? "No course chunk matched." : report.toString();
     }
 
@@ -246,8 +333,8 @@ public final class FolioPanel extends JPanel {
             if (hits.isEmpty()) {
                 early.append(Answer.GENERAL_SENTENCE);
             } else {
-                for (CourseChunk hit : hits) {
-                    early.append(Asker.citationLine(hit)).append("\n");
+                for (String line : Asker.citationLines(hits)) {
+                    early.append(line).append("\n");
                 }
             }
             SwingUtilities.invokeAndWait(() -> transcript.setText(early.toString()));
@@ -259,7 +346,14 @@ public final class FolioPanel extends JPanel {
     private void runGenerate(String source) {
         String wanted = scenario.getText();
         run(() -> {
-            String generated = TestDraft.generate(new HttpChatClient(), baseUrl.getText().strip(), readKey(), model.getText().strip(), wanted, source);
+            if (!Scenario.canGenerate(wanted)) {
+                return Scenario.MISSING;
+            }
+            String key = readKey();
+            if (key.isBlank()) {
+                return Asker.MISSING_KEY;
+            }
+            String generated = TestDraft.generate(new HttpChatClient(), baseUrl.getText().strip(), key, model.getText().strip(), wanted, source);
             if (generated.isBlank()) {
                 return Scenario.MISSING;
             }
@@ -278,7 +372,7 @@ public final class FolioPanel extends JPanel {
             return;
         }
         insertPreview(insertName, insertDirectory);
-        status.setText("Wrote " + insertName);
+        setStatus("Wrote " + insertName);
     }
 
     public void insertPreview(String fileName, VirtualFile directory) {
@@ -313,8 +407,8 @@ public final class FolioPanel extends JPanel {
         if (answer.citations().isEmpty()) {
             builder.append(Answer.GENERAL_SENTENCE).append("\n");
         } else {
-            for (CourseChunk citation : answer.citations()) {
-                builder.append(Asker.citationLine(citation)).append("\n");
+            for (String line : Asker.citationLines(answer.citations())) {
+                builder.append(line).append("\n");
             }
         }
         builder.append(answer.text());
@@ -334,6 +428,27 @@ public final class FolioPanel extends JPanel {
             store = Path.of(PathManager.getConfigPath(), "folio");
             Files.createDirectories(store);
         }
+    }
+
+    private void refreshKeyActions() {
+        boolean enabled = llmActionsEnabled(storedKey, apiKey.getPassword().length);
+        String tip = enabled ? null : Asker.MISSING_KEY;
+        askButton.setEnabled(enabled);
+        commitButton.setEnabled(enabled);
+        previewButton.setEnabled(enabled);
+        askButton.setToolTipText(tip);
+        commitButton.setToolTipText(tip);
+        previewButton.setToolTipText(tip);
+    }
+
+    private void setStatus(String text) {
+        String safe = text == null ? "" : text.replace("&", "&amp;").replace("<", "&lt;");
+        status.setText("<html>" + safe + "</html>");
+    }
+
+    private static void shrinkable(JTextField field) {
+        int height = Math.max(24, field.getPreferredSize().height);
+        field.setMinimumSize(new Dimension(80, height));
     }
 
     private static JPanel labeled(String title, JTextArea area) {

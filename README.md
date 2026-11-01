@@ -16,6 +16,8 @@ export JAVA_HOME=/path/to/jdk-25
 ./gradlew runIde
 ```
 
-Open the Folio tool window. Save a DeepSeek base URL (`https://api.deepseek.com`), a model name (`deepseek-flash` or `deepseek-v4-pro`), and an API key. Index the lecture files, then ask a question. The citation is shown before the model reply.
+Open the Folio tool window. Save a DeepSeek base URL (`https://api.deepseek.com`), a model name, and an API key. Index the lecture files, then ask a question. The citation is shown before the model reply.
+
+The default model is `deepseek-flash`. Checked on 1 November 2026, the chat completions API for `https://api.deepseek.com` documents exactly two model ids: `deepseek-flash` and `deepseek-v4-pro` ([Create Chat Completion](https://api-docs.deepseek.com/api/create-chat-completion), [Models & Pricing](https://api-docs.deepseek.com/quick_start/pricing)). The default stays `deepseek-flash`. In the tool window, Ask, Preview test, and Draft commit messages stay disabled until a key is typed or already stored. A right-click action that still runs with no key tells you to add one and save settings.
 
 The API key is stored with the IDE password safe. It is not written into `folio.xml`.

@@ -30,25 +30,28 @@ public final class CourseIndex {
         return byId.size();
     }
 
-    public void removeSource(String sourceDocument) {
-        List<String> drop = new ArrayList<>();
+    public synchronized void removeSource(String sourceDocument) {
+        List<CourseChunk> drop = new ArrayList<>();
         for (CourseChunk chunk : byId.values()) {
             if (chunk.sourceDocument().equals(sourceDocument)) {
-                drop.add(chunk.id());
+                drop.add(chunk);
             }
         }
-        for (String id : drop) {
-            byId.remove(id);
+        for (CourseChunk chunk : drop) {
+            byId.remove(chunk.id());
+            subtract(chunk);
         }
-        rebuildTokens();
     }
 
-    public void upsert(CourseChunk chunk) {
-        byId.put(chunk.id(), chunk);
-        rebuildTokens();
+    public synchronized void upsert(CourseChunk chunk) {
+        CourseChunk previous = byId.put(chunk.id(), chunk);
+        if (previous != null) {
+            subtract(previous);
+        }
+        add(chunk);
     }
 
-    public List<CourseChunk> top(String query, int limit) {
+    public synchronized List<CourseChunk> top(String query, int limit) {
         if (byId.isEmpty() || limit == 0) {
             return List.of();
         }
@@ -57,11 +60,34 @@ public final class CourseIndex {
             return List.of();
         }
         double avgdl = (double) totalTerms / byId.size();
+        int docs = byId.size();
+        Map<String, Double> scores = new HashMap<>();
+        for (String term : queryTerms) {
+            Map<String, Integer> posting = termFreq.get(term);
+            if (posting == null || posting.isEmpty()) {
+                continue;
+            }
+            int df = posting.size();
+            double idf = Math.log(1.0 + (docs - df + 0.5) / (df + 0.5));
+            for (Map.Entry<String, Integer> entry : posting.entrySet()) {
+                int freq = entry.getValue();
+                int length = docLength.getOrDefault(entry.getKey(), 0);
+                if (freq == 0 || length == 0) {
+                    continue;
+                }
+                double denom = freq + K1 * (1.0 - B + B * length / avgdl);
+                double contribution = idf * (freq * (K1 + 1.0)) / denom;
+                scores.merge(entry.getKey(), contribution, Double::sum);
+            }
+        }
         List<Scored> scored = new ArrayList<>();
-        for (CourseChunk chunk : byId.values()) {
-            double score = score(chunk.id(), queryTerms, avgdl);
-            if (score >= MIN_SCORE) {
-                scored.add(new Scored(score, chunk));
+        for (Map.Entry<String, Double> entry : scores.entrySet()) {
+            if (entry.getValue() < MIN_SCORE) {
+                continue;
+            }
+            CourseChunk chunk = byId.get(entry.getKey());
+            if (chunk != null) {
+                scored.add(new Scored(entry.getValue(), chunk));
             }
         }
         scored.sort(Comparator.comparingDouble(Scored::score).reversed().thenComparing(s -> s.chunk().id()));
@@ -75,31 +101,7 @@ public final class CourseIndex {
         return out;
     }
 
-    private double score(String chunkId, Set<String> queryTerms, double avgdl) {
-        int length = docLength.getOrDefault(chunkId, 0);
-        if (length == 0) {
-            return 0;
-        }
-        double total = 0;
-        int docs = byId.size();
-        for (String term : queryTerms) {
-            Map<String, Integer> posting = termFreq.get(term);
-            if (posting == null) {
-                continue;
-            }
-            Integer freq = posting.get(chunkId);
-            if (freq == null || freq == 0) {
-                continue;
-            }
-            int df = posting.size();
-            double idf = Math.log(1.0 + (docs - df + 0.5) / (df + 0.5));
-            double denom = freq + K1 * (1.0 - B + B * length / avgdl);
-            total += idf * (freq * (K1 + 1.0)) / denom;
-        }
-        return total;
-    }
-
-    public void save(Path file) throws IOException {
+    public synchronized void save(Path file) throws IOException {
         Files.createDirectories(file.getParent());
         List<String> lines = new ArrayList<>();
         for (CourseChunk chunk : byId.values()) {
@@ -142,22 +144,46 @@ public final class CourseIndex {
         return index;
     }
 
+    private void add(CourseChunk chunk) {
+        List<String> terms = Tokens.terms(chunk.text());
+        docLength.put(chunk.id(), terms.size());
+        totalTerms += terms.size();
+        for (Map.Entry<String, Integer> entry : counts(terms).entrySet()) {
+            termFreq.computeIfAbsent(entry.getKey(), key -> new HashMap<>()).put(chunk.id(), entry.getValue());
+        }
+    }
+
+    private void subtract(CourseChunk chunk) {
+        int length = docLength.getOrDefault(chunk.id(), 0);
+        docLength.remove(chunk.id());
+        totalTerms = Math.max(0, totalTerms - length);
+        for (String term : counts(Tokens.terms(chunk.text())).keySet()) {
+            Map<String, Integer> posting = termFreq.get(term);
+            if (posting == null) {
+                continue;
+            }
+            posting.remove(chunk.id());
+            if (posting.isEmpty()) {
+                termFreq.remove(term);
+            }
+        }
+    }
+
     private void rebuildTokens() {
         termFreq.clear();
         docLength.clear();
         totalTerms = 0;
         for (CourseChunk chunk : byId.values()) {
-            List<String> terms = Tokens.terms(chunk.text());
-            docLength.put(chunk.id(), terms.size());
-            totalTerms += terms.size();
-            Map<String, Integer> counts = new HashMap<>();
-            for (String term : terms) {
-                counts.merge(term, 1, Integer::sum);
-            }
-            for (Map.Entry<String, Integer> entry : counts.entrySet()) {
-                termFreq.computeIfAbsent(entry.getKey(), key -> new HashMap<>()).put(chunk.id(), entry.getValue());
-            }
+            add(chunk);
         }
+    }
+
+    private static Map<String, Integer> counts(List<String> terms) {
+        Map<String, Integer> counts = new HashMap<>();
+        for (String term : terms) {
+            counts.merge(term, 1, Integer::sum);
+        }
+        return counts;
     }
 
     private record Scored(double score, CourseChunk chunk) {

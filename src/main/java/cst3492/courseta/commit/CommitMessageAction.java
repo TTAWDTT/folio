@@ -3,6 +3,8 @@ package cst3492.courseta.commit;
 import com.intellij.openapi.actionSystem.ActionUpdateThread;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
+import com.intellij.openapi.vcs.CommitMessageI;
+import com.intellij.openapi.vcs.VcsDataKeys;
 import com.intellij.openapi.wm.ToolWindow;
 import com.intellij.openapi.wm.ToolWindowManager;
 import cst3492.courseta.FolioPanels;
@@ -28,10 +30,11 @@ public final class CommitMessageAction extends AnAction {
         if (window == null) {
             return;
         }
+        CommitMessageI control = event.getData(VcsDataKeys.COMMIT_MESSAGE_CONTROL);
         window.activate(() -> {
             var panel = FolioPanels.get(event.getProject());
             if (panel != null) {
-                panel.draftCommit();
+                panel.draftCommit(control);
             }
         }, true);
     }

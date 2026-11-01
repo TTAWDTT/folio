@@ -6,7 +6,27 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class CommitDraft {
+    public static final int MAX_DIFF_CHARS = 12_000;
+
     private CommitDraft() {
+    }
+
+    public static String bound(String diff) {
+        if (diff == null || diff.isEmpty()) {
+            return diff == null ? "" : diff;
+        }
+        if (diff.length() <= MAX_DIFF_CHARS) {
+            return diff;
+        }
+        int keep = Math.max(1, MAX_DIFF_CHARS - 80);
+        while (keep > 0) {
+            String note = "\n\n[diff truncated: showing the first " + keep + " of " + diff.length() + " characters]";
+            if (keep + note.length() <= MAX_DIFF_CHARS) {
+                return diff.substring(0, keep) + note;
+            }
+            keep--;
+        }
+        return diff.substring(0, MAX_DIFF_CHARS);
     }
 
     public static List<String> draft(boolean hasRepository, String stagedDiff, ChatClient chat,
@@ -16,7 +36,7 @@ public final class CommitDraft {
         }
         String raw = chat.complete(baseUrl, apiKey, model,
                 "Write exactly three conventional commit messages separated by a line that contains only ---.",
-                stagedDiff);
+                bound(stagedDiff));
         return split(raw);
     }
 

@@ -5,6 +5,7 @@ import cst3492.courseta.index.CourseIndex;
 import cst3492.courseta.index.ScopeKind;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -81,6 +82,13 @@ class AskerTest {
         assertEquals("lecture-servlet.pdf page 1", Asker.citationLine(cited));
         assertTrue(userPrompt.get().contains("lecture-servlet.pdf page 1"));
         assertFalse(userPrompt.get().contains("lecture-jpa.pdf"));
+    }
+
+    @Test
+    void repeatedPageCitationsCollapseToOneLine() {
+        CourseChunk first = new CourseChunk("lecture.pdf#PAGE#4#1", "lecture.pdf", ScopeKind.PAGE, 4, "alpha servlet part");
+        CourseChunk second = new CourseChunk("lecture.pdf#PAGE#4#2", "lecture.pdf", ScopeKind.PAGE, 4, "beta servlet part");
+        assertEquals(List.of("lecture.pdf page 4"), Asker.citationLines(List.of(first, second)));
     }
 
     private static CourseIndex course() {
