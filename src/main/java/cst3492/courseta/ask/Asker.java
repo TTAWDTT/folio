@@ -59,7 +59,9 @@ public final class Asker {
      * Afterwards the numbers written into candidate positions are exactly {@code 1..cards},
      * and each one is that card. A single {@code [n]} left outside code collides when {@code n}
      * names a retrieved chunk ({@code 1..retrieved}) and this pass did not write it.
-     * On a collision the original text is returned with every retrieved chunk, in retrieval order.
+     * On a collision every retrieved chunk is returned in retrieval order. In-range markers
+     * stay as written. A prose marker outside that range is still removed; code, calls, and
+     * expression lists are not.
      */
     public static CitationMap mapCitations(List<CourseChunk> hits, String modelText) {
         List<CourseChunk> retrieved = hits == null ? List.of() : hits;
@@ -116,12 +118,59 @@ public final class Asker {
         appendSlice(out, raw.substring(cursor), removed);
         String text = out.toString();
         if (!citationsMatchCards(text, ordered, written, retrieved.size())) {
-            return new CitationMap(raw, List.copyOf(retrieved));
+            return new CitationMap(withoutUnretrievedProse(raw, code, retrieved.size()), List.copyOf(retrieved));
         }
         return new CitationMap(text, List.copyOf(ordered));
     }
 
     public record CitationMap(String text, List<CourseChunk> sources) {
+    }
+
+    /**
+     * Fallback text. Prose numbers outside {@code 1..retrievedCount} are removed with the same
+     * spacing rules as a normal drop. Numbers inside that range are copied as written.
+     * Code, call arguments, and expression lists are not markers here and are left alone.
+     */
+    private static String withoutUnretrievedProse(String raw, List<int[]> code, int retrievedCount) {
+        StringBuilder out = new StringBuilder();
+        int cursor = 0;
+        boolean removed = false;
+        Matcher matcher = MARKER.matcher(raw);
+        while (matcher.find()) {
+            if (!isProseCitation(raw, matcher.start(), code)) {
+                continue;
+            }
+            appendSlice(out, raw.substring(cursor, matcher.start()), removed);
+            List<String> kept = new ArrayList<>();
+            boolean dropped = false;
+            for (String part : matcher.group(1).split("\\s*,\\s*")) {
+                int number = markerNumber(part);
+                if (number < 1 || number > retrievedCount) {
+                    dropped = true;
+                    continue;
+                }
+                kept.add(part.strip());
+            }
+            if (kept.isEmpty()) {
+                removed = true;
+            } else if (!dropped) {
+                out.append(raw, matcher.start(), matcher.end());
+                removed = false;
+            } else {
+                out.append('[');
+                for (int i = 0; i < kept.size(); i++) {
+                    if (i > 0) {
+                        out.append(", ");
+                    }
+                    out.append(kept.get(i));
+                }
+                out.append(']');
+                removed = false;
+            }
+            cursor = matcher.end();
+        }
+        appendSlice(out, raw.substring(cursor), removed);
+        return out.toString();
     }
 
     public static String citedFile(String source) {
