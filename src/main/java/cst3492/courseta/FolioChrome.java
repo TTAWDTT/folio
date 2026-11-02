@@ -1,7 +1,6 @@
 package cst3492.courseta;
 
 import com.intellij.icons.AllIcons;
-import com.intellij.openapi.util.IconLoader;
 import com.intellij.ui.JBColor;
 import com.intellij.ui.RoundedLineBorder;
 import com.intellij.ui.components.JBLabel;
@@ -22,6 +21,9 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.Scrollable;
+import javax.swing.JToggleButton;
+import javax.swing.Timer;
+import javax.swing.UIManager;
 import javax.swing.SwingConstants;
 import javax.swing.text.View;
 import java.awt.BorderLayout;
@@ -43,8 +45,10 @@ import java.awt.RenderingHints;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
+import java.awt.event.HierarchyEvent;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.regex.Pattern;
 
 final class FolioChrome {
     enum Tone { NEUTRAL, INFO, SUCCESS, WARNING, ERROR }
@@ -55,10 +59,6 @@ final class FolioChrome {
     /** The IDE's default-button colour, so the accent follows the active theme. */
     static Color accent() {
         return JBUI.CurrentTheme.Focus.defaultButtonColor();
-    }
-
-    static Icon mark() {
-        return IconLoader.getIcon("/icons/folio.svg", FolioChrome.class);
     }
 
     static Font codeFont(int size) {
@@ -89,6 +89,9 @@ final class FolioChrome {
                 super.updateUI();
                 putClientProperty("JButton.buttonType", "borderless");
                 setMargin(JBUI.emptyInsets());
+                setOpaque(false);
+                setContentAreaFilled(false);
+                setBorderPainted(false);
             }
         };
         button.putClientProperty("JButton.buttonType", "borderless");
@@ -101,31 +104,6 @@ final class FolioChrome {
         button.setToolTipText("Copy");
         button.addActionListener(event -> copy.run());
         return button;
-    }
-
-    static JButton segment(String text, Icon icon) {
-        return new SegmentButton(text, icon);
-    }
-
-    static void paintSegment(JButton button, boolean selected) {
-        button.putClientProperty("folio.selected", selected);
-        if (button instanceof SegmentButton segment) {
-            segment.applyChrome();
-        } else {
-            button.setFont(selected ? JBFont.medium().asBold() : JBFont.medium());
-            button.setForeground(selected
-                    ? JBUI.CurrentTheme.Label.foreground()
-                    : JBUI.CurrentTheme.Label.disabledForeground());
-        }
-        if (button.getParent() != null) {
-            button.getParent().repaint();
-        }
-    }
-
-    static JBLabel title(String text) {
-        JBLabel label = new JBLabel(text);
-        label.setFont(JBFont.h2().asBold());
-        return label;
     }
 
     static JBLabel sectionTitle(String text) {
@@ -161,12 +139,12 @@ final class FolioChrome {
     }
 
     static JBPanel<?> card(Color fill) {
-        JBPanel<?> panel = new JBPanel<>(new BorderLayout(0, JBUI.scale(8)));
+        JBPanel<?> panel = new JBPanel<>(new BorderLayout(0, JBUI.scale(6)));
         panel.setOpaque(true);
         panel.setBackground(fill);
         panel.setBorder(JBUI.Borders.compound(
-                new RoundedLineBorder(JBColor.border(), JBUI.scale(12), JBUI.scale(1)),
-                JBUI.Borders.empty(10, 12)));
+                new RoundedLineBorder(JBColor.border(), JBUI.scale(6), JBUI.scale(1)),
+                JBUI.Borders.empty(6, 8)));
         return panel;
     }
 
@@ -263,9 +241,8 @@ final class FolioChrome {
         }
     }
 
-    /** User bubbles sit on the trailing edge. Assistant bubbles sit on the leading edge. */
-    static JComponent bubbleRow(JComponent bubble, boolean alignEnd) {
-        BubbleRow row = new BubbleRow(bubble, alignEnd);
+    static JComponent bubbleRow(JComponent bubble) {
+        BubbleRow row = new BubbleRow(bubble);
         row.add(bubble);
         return row;
     }
@@ -370,7 +347,7 @@ final class FolioChrome {
             int heightAt(Container parent, int width) {
                 Insets insets = parent.getInsets();
                 int inner = Math.max(1, width - insets.left - insets.right);
-                int gap = JBUI.scale(8);
+                int gap = JBUI.scale(6);
                 int height = 0;
                 for (Component child : parent.getComponents()) {
                     if (child == glue) {
@@ -388,7 +365,7 @@ final class FolioChrome {
                 int x = insets.left;
                 int width = Math.max(0, parent.getWidth() - insets.left - insets.right);
                 int y = insets.top;
-                int gap = JBUI.scale(8);
+                int gap = JBUI.scale(6);
                 for (Component child : parent.getComponents()) {
                     if (child == glue) {
                         continue;
@@ -404,7 +381,7 @@ final class FolioChrome {
         }
     }
 
-    static final class WrapText extends JBTextArea {
+    static class WrapText extends JBTextArea {
         WrapText(String text) {
             super(text == null ? "" : text);
             setEditable(false);
@@ -412,6 +389,7 @@ final class FolioChrome {
             setWrapStyleWord(true);
             setOpaque(false);
             setBorder(JBUI.Borders.empty());
+            setFont(JBFont.medium());
             setColumns(24);
         }
 
@@ -473,35 +451,111 @@ final class FolioChrome {
         }
     }
 
+    static final class CodeText extends WrapText {
+        CodeText(String text) {
+            super(text);
+            setFont(codeFont(JBFont.medium().getSize()));
+        }
+
+        @Override
+        public void updateUI() {
+            super.updateUI();
+            setFont(codeFont(JBFont.medium().getSize()));
+        }
+    }
+
     static final class AnswerCard extends JBPanel<AnswerCard> {
+        private enum State { RETRIEVING, GENERATING, STREAMING, FINAL }
+        private static final Pattern CODE = Pattern.compile("(?m)^```([^\\r\\n]*)\\R([\\s\\S]*?)^```[ \\t]*(?:\\R|$)");
         private final JPanel bannerSlot = new JPanel(new BorderLayout());
         private final JPanel sources = new JPanel(new GridBagLayout());
-        private final WrapText body = new WrapText("Looking through the course files…");
+        private final JPanel content = new JPanel(new BorderLayout());
+        private final JPanel referenceSlot = new JPanel(new BorderLayout(0, JBUI.scale(4)));
+        private final WrapText body = new WrapText("");
+        private final JBLabel activity = muted("Searching course files…");
+        private final JToggleButton references = new JToggleButton() {
+            @Override
+            public void updateUI() {
+                super.updateUI();
+                setOpaque(false);
+                setContentAreaFilled(false);
+                setBorderPainted(false);
+                setMargin(JBUI.emptyInsets());
+                setIcon(UIManager.getIcon(isSelected() ? "Tree.expandedIcon" : "Tree.collapsedIcon"));
+            }
+        };
         private final Consumer<CourseChunk> onSource;
+        private final Consumer<String> onCopy;
+        private final StringBuilder provisional = new StringBuilder();
+        private final Timer pulse;
+        private final Timer expansion;
+        private State state = State.RETRIEVING;
+        private String rawAnswer = "";
+        private int pulseFrame;
 
         AnswerCard(Consumer<CourseChunk> onSource, Consumer<String> onCopy) {
-            super(new BorderLayout(0, JBUI.scale(8)));
+            super(new BorderLayout(0, JBUI.scale(4)));
             this.onSource = onSource;
-            setOpaque(true);
-            setBackground(answerFill());
-            setBorder(JBUI.Borders.compound(
-                    new RoundedLineBorder(JBColor.border(), JBUI.scale(12), JBUI.scale(1)),
-                    JBUI.Borders.empty(10, 12)));
+            this.onCopy = onCopy;
+            setOpaque(false);
+            setBorder(JBUI.Borders.empty(4, 0, 6, 0));
             bannerSlot.setOpaque(false);
             sources.setOpaque(false);
+            sources.setVisible(false);
+            content.setOpaque(false);
+            referenceSlot.setOpaque(false);
+            references.putClientProperty("JButton.buttonType", "borderless");
+            references.setHorizontalAlignment(SwingConstants.LEADING);
+            references.setMargin(JBUI.emptyInsets());
+            references.setVisible(false);
+            expansion = new Timer(160, event -> {
+                references.setForeground(JBUI.CurrentTheme.Label.foreground());
+            });
+            expansion.setRepeats(false);
+            references.addActionListener(event -> {
+                sources.setVisible(references.isSelected());
+                references.setIcon(UIManager.getIcon(references.isSelected() ? "Tree.expandedIcon" : "Tree.collapsedIcon"));
+                references.setForeground(accent());
+                if (references.isSelected() && isShowing()) {
+                    expansion.restart();
+                } else {
+                    expansion.stop();
+                    references.setForeground(JBUI.CurrentTheme.Label.foreground());
+                }
+                refresh();
+            });
+            referenceSlot.add(references, BorderLayout.NORTH);
+            referenceSlot.add(sources, BorderLayout.CENTER);
             add(bannerSlot, BorderLayout.NORTH);
             JBPanel<?> answer = new JBPanel<>(new BorderLayout(0, JBUI.scale(4)));
             answer.setOpaque(false);
             JPanel head = new JPanel(new BorderLayout());
             head.setOpaque(false);
-            head.add(accentLabel("Folio", mark()), BorderLayout.WEST);
+            head.add(mutedHeading("Folio"), BorderLayout.WEST);
             if (onCopy != null) {
-                head.add(copyButton(() -> onCopy.accept(body.getText())), BorderLayout.EAST);
+                JButton copy = copyButton(() -> onCopy.accept(rawAnswer));
+                head.add(copy, BorderLayout.EAST);
             }
             answer.add(head, BorderLayout.NORTH);
-            answer.add(body, BorderLayout.CENTER);
+            content.add(body, BorderLayout.CENTER);
+            answer.add(content, BorderLayout.CENTER);
+            answer.add(activity, BorderLayout.SOUTH);
             add(answer, BorderLayout.CENTER);
-            add(sources, BorderLayout.SOUTH);
+            add(referenceSlot, BorderLayout.SOUTH);
+            pulse = new Timer(100, event -> {
+                pulseFrame++;
+                Color from = JBUI.CurrentTheme.Label.disabledForeground();
+                Color to = accent();
+                double amount = (Math.sin(pulseFrame * Math.PI / 6) + 1) / 2;
+                activity.setForeground(new Color((int) (from.getRed() * (1 - amount) + to.getRed() * amount),
+                        (int) (from.getGreen() * (1 - amount) + to.getGreen() * amount),
+                        (int) (from.getBlue() * (1 - amount) + to.getBlue() * amount)));
+            });
+            addHierarchyListener(event -> {
+                if ((event.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) != 0) {
+                    updateMotion();
+                }
+            });
         }
 
         @Override
@@ -509,15 +563,21 @@ final class FolioChrome {
             int width = getWidth();
             if (width > JBUI.scale(20)) {
                 Insets insets = getInsets();
-                body.setSize(Math.max(1, width - insets.left - insets.right), 1);
+                prepareWidth(content, Math.max(1, width - insets.left - insets.right));
             }
             return super.getPreferredSize();
         }
 
         void showAnswer(String text, Answer answer) {
+            stopMotion();
+            activity.setVisible(false);
+            rawAnswer = text == null ? "" : text;
             bannerSlot.removeAll();
             sources.removeAll();
-            String value = text == null ? "" : text;
+            references.setSelected(false);
+            references.setIcon(UIManager.getIcon("Tree.collapsedIcon"));
+            sources.setVisible(false);
+            String value = rawAnswer;
             List<CourseChunk> hits = answer == null || answer.citations() == null ? List.of() : answer.citations();
             if (answer != null) {
                 switch (answer.evidence()) {
@@ -534,20 +594,113 @@ final class FolioChrome {
                     case INLINE -> { }
                 }
             }
-            body.setBody(value);
-            body.setVisible(!value.isBlank());
+            content.removeAll();
+            content.add(formattedBody(value), BorderLayout.CENTER);
+            references.setVisible(!hits.isEmpty());
+            references.setText(hits.size() + (hits.size() == 1 ? " course reference" : " course references"));
+            references.getAccessibleContext().setAccessibleName(references.getText());
             if (!hits.isEmpty()) {
-                addSourceRow(mutedHeading(answer != null && answer.evidence() == Answer.Evidence.INLINE
-                        ? "Sources cited in the reply" : "Retrieved material"), 0, JBUI.insets(2, 0, 4, 0));
+                addSourceRow(mutedHeading(answer.evidence() == Answer.Evidence.INLINE
+                        ? "Sources cited in the reply" : "Retrieved material"), 0, JBUI.insets(0, 0, 2, 0));
                 for (int i = 0; i < hits.size(); i++) {
                     CourseChunk chunk = hits.get(i);
                     JComponent card = sourceCard(i + 1, chunk);
                     onClick(card, () -> onSource.accept(chunk));
                     boolean last = i == hits.size() - 1;
-                    addSourceRow(card, i + 1, JBUI.insets(0, 0, last ? 0 : 6, 0));
+                    addSourceRow(card, i + 1, JBUI.insets(0, 0, last ? 0 : 4, 0));
                 }
             }
             refresh();
+        }
+
+        void update(List<Asker.Update> updates) {
+            if (state == State.FINAL) {
+                return;
+            }
+            for (Asker.Update update : updates) {
+                if (update instanceof Asker.Update.Phase phase) {
+                    state = phase.stage() == Asker.Stage.RETRIEVING ? State.RETRIEVING : State.GENERATING;
+                } else if (update instanceof Asker.Update.Delta delta) {
+                    provisional.append(delta.text());
+                    state = State.STREAMING;
+                }
+            }
+            body.setBody(provisional.toString());
+            activity.setText(switch (state) {
+                case RETRIEVING -> "Searching course files…";
+                case GENERATING -> "Generating…";
+                case STREAMING -> "Receiving answer…";
+                case FINAL -> "";
+            });
+            refresh();
+        }
+
+        void stopMotion() {
+            state = State.FINAL;
+            pulse.stop();
+            expansion.stop();
+        }
+
+        private void updateMotion() {
+            if (isShowing() && state != State.FINAL) {
+                pulse.start();
+            } else {
+                pulse.stop();
+            }
+            if (!isShowing()) {
+                expansion.stop();
+            }
+        }
+
+        void offerTest(Runnable action) {
+            JButton generate = iconButton(AllIcons.Nodes.JunitTestMark);
+            generate.setText("Generate a test");
+            generate.setHorizontalAlignment(SwingConstants.LEADING);
+            generate.addActionListener(event -> action.run());
+            referenceSlot.add(generate, BorderLayout.SOUTH);
+            refresh();
+        }
+
+        @Override
+        public void addNotify() {
+            super.addNotify();
+            updateMotion();
+        }
+
+        @Override
+        public void removeNotify() {
+            pulse.stop();
+            expansion.stop();
+            super.removeNotify();
+        }
+
+        private JComponent formattedBody(String text) {
+            Column blocks = new Column();
+            blocks.setBorder(JBUI.Borders.empty());
+            var matcher = CODE.matcher(text);
+            int cursor = 0;
+            while (matcher.find()) {
+                if (matcher.start() > cursor) {
+                    blocks.addRow(new WrapText(text.substring(cursor, matcher.start()).stripTrailing()));
+                }
+                JPanel code = card(answerFill());
+                JPanel head = new JPanel(new BorderLayout());
+                head.setOpaque(false);
+                head.add(muted(matcher.group(1).strip()), BorderLayout.WEST);
+                String codeText = matcher.group(2);
+                if (onCopy != null) {
+                    head.add(copyButton(() -> onCopy.accept(codeText)), BorderLayout.EAST);
+                }
+                code.add(head, BorderLayout.NORTH);
+                WrapText source = new CodeText(codeText);
+                code.add(source, BorderLayout.CENTER);
+                blocks.addRow(code);
+                cursor = matcher.end();
+            }
+            if (cursor < text.length()) {
+                blocks.addRow(new WrapText(text.substring(cursor)));
+            }
+            return blocks;
         }
 
         private void addSourceRow(Component row, int gridy, Insets insets) {
@@ -585,7 +738,7 @@ final class FolioChrome {
         card.setBackground(userFill());
         card.setBorder(JBUI.Borders.compound(
                 new RoundedLineBorder(JBColor.border(), JBUI.scale(8), JBUI.scale(1)),
-                JBUI.Borders.empty(8, 10)));
+                JBUI.Borders.empty(4, 6)));
         card.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         String file = Asker.citedFile(chunk.sourceDocument());
         JBLabel title = new JBLabel("[" + number + "]  " + file);
@@ -640,8 +793,7 @@ final class FolioChrome {
         JBPanel<?> excerpt = new JBPanel<>(new BorderLayout(0, JBUI.scale(6)));
         excerpt.setOpaque(false);
         excerpt.add(muted(Asker.scopePhrase(chunk)), BorderLayout.NORTH);
-        WrapText text = new WrapText(chunk.text());
-        text.setFont(codeFont(text.getFont().getSize()));
+        WrapText text = new CodeText(chunk.text());
         JScrollPane scroll = fieldScroll(text);
         int textHeight = text.getPreferredSize().height + JBUI.scale(12);
         scroll.setPreferredSize(new Dimension(JBUI.scale(420), Math.min(JBUI.scale(180), Math.max(JBUI.scale(64), textHeight))));
@@ -670,10 +822,6 @@ final class FolioChrome {
             setBorder(JBUI.Borders.empty(4, 10));
             setIconTextGap(JBUI.scale(6));
             setText(fullText);
-        }
-
-        String fullText() {
-            return fullText;
         }
 
         /** Icon only, with the full label as the tooltip, when the header is too narrow for the words. */
@@ -746,481 +894,12 @@ final class FolioChrome {
         }
     }
 
-    /**
-     * Section button. The button UI installs a filled border on every theme change,
-     * so the flat segment style is applied again from {@link #updateUI()}.
-     */
-    static final class SegmentButton extends JButton {
-        private final String label;
-        private boolean iconOnly;
-        private boolean adjusting;
-
-        SegmentButton(String text, Icon icon) {
-            super(icon);
-            label = text == null ? "" : text;
-            setText(label);
-            setToolTipText(label);
-            applyChrome();
-        }
-
-        String label() {
-            return label;
-        }
-
-        /** Drops the word and keeps the tooltip when the bar is narrower than the labels. */
-        void setIconOnly(boolean iconOnly) {
-            if (this.iconOnly == iconOnly) {
-                return;
-            }
-            this.iconOnly = iconOnly;
-            adjusting = true;
-            setText(iconOnly ? "" : label);
-            adjusting = false;
-            setToolTipText(label);
-        }
-
-        @Override
-        public void revalidate() {
-            if (!adjusting) {
-                super.revalidate();
-            }
-        }
-
-        void applyChrome() {
-            setOpaque(false);
-            setContentAreaFilled(false);
-            setBorderPainted(false);
-            setFocusPainted(false);
-            setMargin(JBUI.insets(6, 10));
-            setIconTextGap(JBUI.scale(8));
-            setBorder(JBUI.Borders.empty());
-            boolean selected = Boolean.TRUE.equals(getClientProperty("folio.selected"));
-            setFont(selected ? JBFont.medium().asBold() : JBFont.medium());
-            setForeground(selected
-                    ? JBUI.CurrentTheme.Label.foreground()
-                    : JBUI.CurrentTheme.Label.disabledForeground());
-        }
-
-        @Override
-        public void updateUI() {
-            super.updateUI();
-            applyChrome();
-        }
-    }
-
-    /** Ask / Files / Test / Commit, drawn as one segmented control. */
-    static final class SegmentBar extends JBPanel<SegmentBar> {
-        // MainToolbar.background is #27282E in expUI Light, so light-theme labels disappear on it.
-        // This key is the gray track there (#EBECF0) and #2B2D30 in the dark themes.
-        private static final Color TRACK = JBColor.namedColor(
-                "Editor.ToolTip.selectionBackground", new JBColor(0xEBECF0, 0x2B2D30));
-        private static final Color PILL = JBColor.namedColor(
-                "SegmentedButton.selectedButtonColor", new JBColor(0xFFFFFF, 0x3C3F41));
-        private final JButton[] buttons;
-
-        SegmentBar(JButton[] buttons) {
-            super(new BorderLayout());
-            this.buttons = buttons;
-            setLayout(new SegmentLayout());
-            setOpaque(false);
-            setBorder(JBUI.Borders.empty(3));
-            for (JButton button : buttons) {
-                add(button);
-            }
-        }
-
-        /** Labels stay only when each one fits in an equal column. A short total still truncates the longest word. */
-        static boolean labelsFit(int innerWidth, int[] labelWidths, int gap) {
-            if (labelWidths.length == 0) {
-                return true;
-            }
-            int gaps = gap * Math.max(0, labelWidths.length - 1);
-            if (innerWidth <= gaps) {
-                return false;
-            }
-            int share = (innerWidth - gaps) / labelWidths.length;
-            for (int width : labelWidths) {
-                if (width > share) {
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        @Override
-        protected void paintComponent(Graphics graphics) {
-            Graphics2D g = (Graphics2D) graphics.create();
-            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            int arc = JBUI.scale(10);
-            g.setColor(TRACK);
-            g.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, arc, arc);
-            for (JButton button : buttons) {
-                if (!Boolean.TRUE.equals(button.getClientProperty("folio.selected"))) {
-                    continue;
-                }
-                Rectangle bounds = button.getBounds();
-                int pill = JBUI.scale(8);
-                g.setColor(PILL);
-                g.fillRoundRect(bounds.x, bounds.y, bounds.width, bounds.height, pill, pill);
-            }
-            g.dispose();
-            super.paintComponent(graphics);
-        }
-
-        private final class SegmentLayout implements LayoutManager {
-            private boolean layingOut;
-
-            @Override
-            public void addLayoutComponent(String name, Component component) {
-            }
-
-            @Override
-            public void removeLayoutComponent(Component component) {
-            }
-
-            @Override
-            public Dimension preferredLayoutSize(Container parent) {
-                return measured(false);
-            }
-
-            @Override
-            public Dimension minimumLayoutSize(Container parent) {
-                return measured(true);
-            }
-
-            private Dimension measured(boolean icons) {
-                int gap = JBUI.scale(2);
-                int width = gap * Math.max(0, buttons.length - 1);
-                int height = 0;
-                for (JButton button : buttons) {
-                    Dimension size = button.getPreferredSize();
-                    width += icons ? iconWidth(button) : labelWidth(button);
-                    height = Math.max(height, size.height);
-                }
-                Insets insets = getInsets();
-                return new Dimension(width + insets.left + insets.right, height + insets.top + insets.bottom);
-            }
-
-            @Override
-            public void layoutContainer(Container parent) {
-                if (layingOut) {
-                    return;
-                }
-                layingOut = true;
-                try {
-                    Insets insets = parent.getInsets();
-                    int gap = JBUI.scale(2);
-                    int inner = Math.max(0, parent.getWidth() - insets.left - insets.right);
-                    int count = buttons.length;
-                    int each = count == 0 ? inner : (inner - gap * Math.max(0, count - 1)) / Math.max(count, 1);
-                    int[] widths = new int[buttons.length];
-                    for (int i = 0; i < buttons.length; i++) {
-                        if (buttons[i] instanceof SegmentButton segment) {
-                            segment.setIconOnly(false);
-                        }
-                        widths[i] = buttons[i].getPreferredSize().width;
-                    }
-                    boolean icons = !labelsFit(inner, widths, gap);
-                    int x = insets.left;
-                    int y = insets.top;
-                    int height = Math.max(0, parent.getHeight() - insets.top - insets.bottom);
-                    for (JButton button : buttons) {
-                        if (button instanceof SegmentButton segment) {
-                            segment.setIconOnly(icons);
-                        }
-                        button.setBounds(x, y, Math.max(each, 0), height);
-                        x += Math.max(each, 0) + gap;
-                    }
-                } finally {
-                    layingOut = false;
-                }
-            }
-
-            /**
-             * Width the button UI needs in order to paint the full label.
-             * The margin is included when {@code getInsets()} does not already contain it.
-             */
-            private int labelWidth(JButton button) {
-                String text = button instanceof SegmentButton segment ? segment.label() : button.getText();
-                FontMetrics metrics = button.getFontMetrics(button.getFont());
-                Insets insets = button.getInsets();
-                Insets margin = button.getMargin();
-                int left = insets == null ? 0 : insets.left;
-                int right = insets == null ? 0 : insets.right;
-                if (margin != null) {
-                    if (left < margin.left) {
-                        left = margin.left;
-                    }
-                    if (right < margin.right) {
-                        right = margin.right;
-                    }
-                }
-                int icon = button.getIcon() == null ? 0 : button.getIcon().getIconWidth() + button.getIconTextGap();
-                return left + right + icon + metrics.stringWidth(text == null ? "" : text);
-            }
-
-            private int iconWidth(JButton button) {
-                Insets margin = button.getInsets();
-                int icon = button.getIcon() == null ? JBUI.scale(16) : button.getIcon().getIconWidth();
-                return margin.left + margin.right + icon;
-            }
-        }
-    }
-
-    /**
-     * Brand on the leading side, key chip and gear on the trailing side.
-     * When the chip does not fit, it becomes an icon. When that still does not fit, the actions wrap
-     * onto a second line so they cannot cover the subtitle.
-     */
-    static final class HeaderBar extends JBPanel<HeaderBar> {
-        private final JComponent brand;
-        private final ChipButton badge;
-        private final JComponent gear;
-
-        HeaderBar(JComponent brand, ChipButton badge, JComponent gear) {
-            super(new BorderLayout());
-            this.brand = brand;
-            this.badge = badge;
-            this.gear = gear;
-            setLayout(new HeaderLayout());
-            setOpaque(false);
-            add(brand);
-            add(badge);
-            add(gear);
-        }
-
-        private final class HeaderLayout implements LayoutManager {
-            private boolean layingOut;
-
-            @Override
-            public void addLayoutComponent(String name, Component component) {
-            }
-
-            @Override
-            public void removeLayoutComponent(Component component) {
-            }
-
-            @Override
-            public Dimension preferredLayoutSize(Container parent) {
-                int gap = JBUI.scale(8);
-                Dimension brandSize = brand.getPreferredSize();
-                int badgeWidth = chipWidth(false);
-                Dimension gearSize = gear.getPreferredSize();
-                Insets insets = parent.getInsets();
-                int width = brandSize.width + gap + badgeWidth + gap + gearSize.width + insets.left + insets.right;
-                int height = Math.max(brandSize.height, Math.max(badge.getPreferredSize().height, gearSize.height));
-                return new Dimension(width, height + insets.top + insets.bottom);
-            }
-
-            @Override
-            public Dimension minimumLayoutSize(Container parent) {
-                return new Dimension(JBUI.scale(160), JBUI.scale(64));
-            }
-
-            @Override
-            public void layoutContainer(Container parent) {
-                if (layingOut) {
-                    return;
-                }
-                layingOut = true;
-                try {
-                    Insets insets = parent.getInsets();
-                    int gap = JBUI.scale(8);
-                    int x = insets.left;
-                    int y = insets.top;
-                    int inner = Math.max(0, parent.getWidth() - insets.left - insets.right);
-                    int gearW = Math.max(gear.getPreferredSize().width, JBUI.scale(16));
-                    int gearH = Math.max(gear.getPreferredSize().height, JBUI.scale(16));
-                    int fullActions = chipWidth(false) + gap + gearW;
-                    int iconActions = chipWidth(true) + gap + gearW;
-                    int leading = leadingWidth();
-                    boolean oneRowFull = leading + gap + fullActions <= inner;
-                    boolean oneRowIcon = leading + gap + iconActions <= inner;
-                    if (oneRowFull) {
-                        placeRow(x, y, inner, gap, gearW, gearH, false);
-                    } else if (oneRowIcon) {
-                        placeRow(x, y, inner, gap, gearW, gearH, true);
-                    } else {
-                        badge.setCollapsed(fullActions > inner);
-                        int badgeW = badge.getPreferredSize().width;
-                        int badgeH = badge.getPreferredSize().height;
-                        int brandH = brandHeight(inner);
-                        brand.setBounds(x, y, inner, brandH);
-                        int by = y + brandH + JBUI.scale(6);
-                        int ax = x + Math.max(0, inner - badgeW - gap - gearW);
-                        badge.setBounds(ax, by, badgeW, badgeH);
-                        gear.setBounds(ax + badgeW + gap, by, gearW, gearH);
-                    }
-                } finally {
-                    layingOut = false;
-                }
-            }
-
-            private void placeRow(int x, int y, int inner, int gap, int gearW, int gearH, boolean collapsed) {
-                badge.setCollapsed(collapsed);
-                int badgeW = badge.getPreferredSize().width;
-                int badgeH = badge.getPreferredSize().height;
-                int brandW = Math.max(0, inner - gap - badgeW - gap - gearW);
-                int brandH = brandHeight(brandW);
-                int rowH = Math.max(brandH, Math.max(badgeH, gearH));
-                brand.setBounds(x, y, brandW, rowH);
-                int ax = x + inner - badgeW - gap - gearW;
-                badge.setBounds(ax, y + Math.max(0, (rowH - badgeH) / 2), badgeW, badgeH);
-                gear.setBounds(ax + badgeW + gap, y + Math.max(0, (rowH - gearH) / 2), gearW, gearH);
-            }
-
-            private int leadingWidth() {
-                TitleBlock titles = findTitles(brand);
-                if (titles == null) {
-                    return brand.getPreferredSize().width;
-                }
-                int line = titles.lineWidth();
-                if (titles != brand) {
-                    Container parent = titles.getParent();
-                    if (parent != null) {
-                        for (Component child : parent.getComponents()) {
-                            if (child != titles) {
-                                line += child.getPreferredSize().width;
-                            }
-                        }
-                    }
-                }
-                return line;
-            }
-
-            private int brandHeight(int brandW) {
-                TitleBlock titles = findTitles(brand);
-                if (titles == null) {
-                    brand.setSize(Math.max(brandW, 1), 1);
-                    return Math.max(brand.getPreferredSize().height, JBUI.scale(24));
-                }
-                int side = 0;
-                int sideHeight = 0;
-                Container parent = titles.getParent();
-                if (parent != null && parent != titles) {
-                    for (Component child : parent.getComponents()) {
-                        if (child == titles) {
-                            continue;
-                        }
-                        Dimension size = child.getPreferredSize();
-                        side += size.width;
-                        sideHeight = Math.max(sideHeight, size.height);
-                    }
-                }
-                int textWidth = Math.max(1, brandW - side);
-                return Math.max(titles.heightAt(textWidth), Math.max(sideHeight, JBUI.scale(24)));
-            }
-
-            private TitleBlock findTitles(Component component) {
-                if (component instanceof TitleBlock titles) {
-                    return titles;
-                }
-                if (component instanceof Container container) {
-                    for (Component child : container.getComponents()) {
-                        TitleBlock found = findTitles(child);
-                        if (found != null) {
-                            return found;
-                        }
-                    }
-                }
-                return null;
-            }
-
-            private int chipWidth(boolean collapsed) {
-                FontMetrics metrics = badge.getFontMetrics(badge.getFont());
-                Insets margin = badge.getInsets();
-                int icon = badge.getIcon() == null ? 0 : badge.getIcon().getIconWidth() + badge.getIconTextGap();
-                int text = collapsed ? 0 : metrics.stringWidth(badge.fullText());
-                return margin.left + margin.right + icon + text;
-            }
-        }
-    }
-
-    /** Title plus a subtitle that wraps to the width the header actually gives it. */
-    static final class TitleBlock extends JBPanel<TitleBlock> {
-        private final JComponent title;
-        private final JComponent subtitle;
-
-        TitleBlock(JComponent title, JComponent subtitle) {
-            super(new BorderLayout());
-            this.title = title;
-            this.subtitle = subtitle;
-            setLayout(new TitleLayout());
-            setOpaque(false);
-            add(title);
-            add(subtitle);
-        }
-
-        static TitleBlock of(String title, String subtitle) {
-            WrapText sub = new WrapText(subtitle);
-            sub.setFont(JBFont.small());
-            sub.setForeground(JBColor.namedColor("Component.infoForeground", JBColor.GRAY));
-            return new TitleBlock(FolioChrome.title(title), sub);
-        }
-
-        JComponent subtitle() {
-            return subtitle;
-        }
-
-        /** Unwrapped subtitle width, used to decide when the header must stack. */
-        int lineWidth() {
-            FontMetrics metrics = subtitle.getFontMetrics(subtitle.getFont());
-            String text = subtitle instanceof javax.swing.text.JTextComponent area ? area.getText() : "";
-            return metrics.stringWidth(text == null ? "" : text);
-        }
-
-        /** Height of the title and the subtitle once the subtitle has this width. */
-        int heightAt(int width) {
-            int titleHeight = title.getPreferredSize().height;
-            subtitle.setSize(Math.max(width, 1), 1);
-            int subtitleHeight = subtitle.getPreferredSize().height;
-            int line = subtitle.getFontMetrics(subtitle.getFont()).getHeight();
-            return titleHeight + Math.max(subtitleHeight, line);
-        }
-
-        private final class TitleLayout implements LayoutManager {
-            @Override
-            public void addLayoutComponent(String name, Component component) {
-            }
-
-            @Override
-            public void removeLayoutComponent(Component component) {
-            }
-
-            @Override
-            public Dimension preferredLayoutSize(Container parent) {
-                int width = Math.max(parent.getWidth(), title.getPreferredSize().width);
-                subtitle.setSize(Math.max(width, 1), 1);
-                int height = title.getPreferredSize().height + subtitle.getPreferredSize().height;
-                return new Dimension(width, height);
-            }
-
-            @Override
-            public Dimension minimumLayoutSize(Container parent) {
-                return new Dimension(JBUI.scale(48), title.getPreferredSize().height);
-            }
-
-            @Override
-            public void layoutContainer(Container parent) {
-                int width = Math.max(0, parent.getWidth());
-                int titleH = title.getPreferredSize().height;
-                title.setBounds(0, 0, width, titleH);
-                subtitle.setSize(Math.max(width, 1), 1);
-                int subH = Math.max(subtitle.getPreferredSize().height, parent.getHeight() - titleH);
-                subtitle.setBounds(0, titleH, width, Math.max(0, subH));
-            }
-        }
-    }
-
-    /** Offsets a bubble so the user and the assistant are not two full-width slabs. */
     static final class BubbleRow extends JBPanel<BubbleRow> {
         private final JComponent bubble;
-        private final boolean alignEnd;
 
-        BubbleRow(JComponent bubble, boolean alignEnd) {
+        BubbleRow(JComponent bubble) {
             super(new BorderLayout());
             this.bubble = bubble;
-            this.alignEnd = alignEnd;
             setLayout(new BubbleLayout());
             setOpaque(false);
         }
@@ -1259,13 +938,12 @@ final class FolioChrome {
                 int inner = Math.max(0, parent.getWidth() - insets.left - insets.right);
                 int width = bubbleWidth(inner);
                 int height = bubbleHeight(inner);
-                int x = insets.left + (alignEnd ? Math.max(0, inner - width) : Math.min(JBUI.scale(48), Math.max(0, inner - width)));
+                int x = insets.left;
                 bubble.setBounds(x, insets.top, width, height);
             }
 
             private int bubbleWidth(int inner) {
-                int gutter = JBUI.scale(48);
-                return Math.max(JBUI.scale(80), inner - gutter);
+                return Math.max(1, inner);
             }
 
             private int bubbleHeight(int inner) {
@@ -1278,7 +956,7 @@ final class FolioChrome {
 
     /** Multi-line composer field. Paints a placeholder until the user types. */
     static final class PromptArea extends JBTextArea {
-        private final String placeholder;
+        private String placeholder;
 
         PromptArea(String placeholder) {
             super("", 1, 20);
@@ -1287,6 +965,11 @@ final class FolioChrome {
             setWrapStyleWord(true);
             setOpaque(false);
             setBorder(JBUI.Borders.empty(2, 0));
+        }
+
+        void setPlaceholder(String placeholder) {
+            this.placeholder = placeholder;
+            repaint();
         }
 
         @Override
@@ -1314,7 +997,6 @@ final class FolioChrome {
         }
     }
 
-    /** Soft status strip. Colours come from the IDE banner theme. The message wraps to the strip width. */
     static final class StatusBanner extends JBPanel<StatusBanner> {
         private final JBLabel mark = new JBLabel();
         private final WrapText message = new WrapText("");
@@ -1322,7 +1004,7 @@ final class FolioChrome {
 
         StatusBanner() {
             super(new BorderLayout(JBUI.scale(8), 0));
-            setOpaque(true);
+            setOpaque(false);
             message.setFont(JBFont.small());
             mark.setVerticalAlignment(SwingConstants.TOP);
             add(mark, BorderLayout.WEST);
@@ -1333,6 +1015,7 @@ final class FolioChrome {
         void setMessage(String text, Tone tone) {
             this.tone = tone == null ? Tone.NEUTRAL : tone;
             message.setBody(text == null ? "" : text);
+            setToolTipText(text);
             apply();
             revalidate();
             repaint();
@@ -1347,42 +1030,18 @@ final class FolioChrome {
         }
 
         private void apply() {
-            Color background;
-            Color border;
-            Icon icon;
             Tone current = tone == null ? Tone.NEUTRAL : tone;
-            switch (current) {
-                case SUCCESS -> {
-                    background = JBUI.CurrentTheme.Banner.SUCCESS_BACKGROUND;
-                    border = JBUI.CurrentTheme.Banner.SUCCESS_BORDER_COLOR;
-                    icon = AllIcons.General.GreenCheckmark;
-                }
-                case WARNING -> {
-                    background = JBUI.CurrentTheme.Banner.WARNING_BACKGROUND;
-                    border = JBUI.CurrentTheme.Banner.WARNING_BORDER_COLOR;
-                    icon = AllIcons.General.Warning;
-                }
-                case ERROR -> {
-                    background = JBUI.CurrentTheme.Banner.ERROR_BACKGROUND;
-                    border = JBUI.CurrentTheme.Banner.ERROR_BORDER_COLOR;
-                    icon = AllIcons.General.Error;
-                }
-                case INFO -> {
-                    background = JBUI.CurrentTheme.Banner.INFO_BACKGROUND;
-                    border = JBUI.CurrentTheme.Banner.INFO_BORDER_COLOR;
-                    icon = AllIcons.General.Information;
-                }
-                default -> {
-                    background = UIUtil.getPanelBackground();
-                    border = JBColor.border();
-                    icon = null;
-                }
-            }
-            setBackground(background);
-            setBorder(JBUI.Borders.compound(
-                    new RoundedLineBorder(border, JBUI.scale(8), JBUI.scale(1)),
-                    JBUI.Borders.empty(6, 8)));
-            message.setForeground(JBUI.CurrentTheme.Banner.FOREGROUND);
+            Icon icon = switch (current) {
+                case SUCCESS -> AllIcons.General.GreenCheckmark;
+                case WARNING -> AllIcons.General.Warning;
+                case ERROR -> AllIcons.General.Error;
+                case INFO -> AllIcons.General.Information;
+                case NEUTRAL -> null;
+            };
+            setOpaque(false);
+            setBorder(JBUI.Borders.empty(2, 0));
+            message.setForeground(current == Tone.INFO || current == Tone.NEUTRAL
+                    ? JBUI.CurrentTheme.Label.disabledForeground() : JBUI.CurrentTheme.Label.foreground());
             mark.setIcon(icon);
         }
     }

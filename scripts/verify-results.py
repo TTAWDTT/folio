@@ -13,6 +13,8 @@ required = {
     "CredentialRedactionAcceptanceTest", "CourseLibraryTest", "CourseRetrievalFixtureTest",
     "GeneratedTestTest", "GitSnapshotTest", "FolioTasksTest", "ProviderAccessTest",
     "PanelWorkflowTest",
+    "StreamingAcceptanceTest", "SidebarDisclosureAcceptanceTest", "FolioTaskEventsTest",
+    "HttpChatStreamingTest", "FolioSidebarTest", "FolioSidebarRenderTest",
 }
 try:
     suites = {}

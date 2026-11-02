@@ -53,6 +53,10 @@ import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.JTabbedPane;
+import javax.swing.JPopupMenu;
+import javax.swing.JMenuItem;
+import javax.swing.JRadioButtonMenuItem;
+import javax.swing.ButtonGroup;
 import javax.swing.text.JTextComponent;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
@@ -61,6 +65,7 @@ import javax.swing.event.DocumentListener;
 import javax.swing.text.View;
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Component;
 import java.awt.CardLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
@@ -91,10 +96,20 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
 public final class FolioPanel extends JPanel implements Disposable {
-    private static final int TAB_ASK = 0;
-    private static final int TAB_FILES = 1;
-    private static final int TAB_TEST = 2;
-    private static final int TAB_COMMIT = 3;
+    private enum Mode {
+        ASK("Ask", "ask", AllIcons.Actions.Find), TESTS("Tests", "test", AllIcons.Nodes.JunitTestMark),
+        COMMIT("Commit", "commit", AllIcons.Actions.Commit), DRILL("Drill", "ask", AllIcons.FileTypes.Text);
+
+        private final String label;
+        private final String view;
+        private final javax.swing.Icon icon;
+
+        Mode(String label, String view, javax.swing.Icon icon) {
+            this.label = label;
+            this.view = view;
+            this.icon = icon;
+        }
+    }
 
     private final Project project;
     private final JBTextField baseUrl = new JBTextField(TaSettings.DEFAULT_BASE_URL, 16);
@@ -115,12 +130,15 @@ public final class FolioPanel extends JPanel implements Disposable {
     private final JButton indexButton = FolioChrome.primary("Index files", AllIcons.Actions.AddFile);
     private final JButton badge = new FolioChrome.ChipButton("No API key", AllIcons.General.Warning);
     private final JButton stopButton = FolioChrome.secondary("Stop", AllIcons.Actions.Suspend);
-    private final JButton clearChatButton = FolioChrome.secondary("Clear chat", AllIcons.Actions.GC);
+    private final JButton clearChatButton = FolioChrome.iconButton(AllIcons.Actions.GC);
     private final JButton gear = FolioChrome.gear(AllIcons.General.GearPlain);
     private final JBPanel<?> settingsCard = new JBPanel<>(new BorderLayout());
     private final CardLayout sections = new CardLayout();
     private final JPanel sectionDeck = new JPanel(sections);
-    private final JButton[] sectionButtons = new JButton[4];
+    private final JButton modeButton = FolioChrome.secondary("Ask ▾", AllIcons.Actions.Find);
+    private final JButton backButton = FolioChrome.secondary("Back", AllIcons.Actions.Back);
+    private Mode mode = Mode.ASK;
+    private boolean filesVisible;
     private final FolioChrome.Column chatColumn = new FolioChrome.Column();
     private final FolioChrome.Column fileColumn = new FolioChrome.Column();
     private final FolioChrome.Column commitColumn = new FolioChrome.Column();
@@ -152,7 +170,7 @@ public final class FolioPanel extends JPanel implements Disposable {
 
     private record TestContext(String source, VirtualFile directory) {}
     private record AskInput(CourseSearch index, ProviderConnection connection, String question,
-                            String selection, String conversation) {}
+                            String selection, String conversation, TestContext testContext) {}
     private record TestInput(String scenario, TestContext context, ProviderConnection connection) {}
     private sealed interface TestPreview {
         String raw();
@@ -185,14 +203,14 @@ public final class FolioPanel extends JPanel implements Disposable {
 
     FolioPanel(Project project, CourseLibrary library, ProviderAccess provider, Executor workers,
                Executor delivery, ChatClient client) {
-        super(new BorderLayout(0, JBUI.scale(8)));
+        super(new BorderLayout(0, JBUI.scale(4)));
         this.project = project;
         this.library = library;
         this.provider = provider;
         this.delivery = delivery;
         this.client = client;
         this.tasks = new FolioTasks(workers, delivery, this::alive, this::refreshActivity);
-        setBorder(JBUI.Borders.empty(12));
+        setBorder(JBUI.Borders.empty(6, 8));
         setOpaque(true);
         setBackground(com.intellij.util.ui.UIUtil.getPanelBackground());
         rawTranscript.setEditable(false);
@@ -212,7 +230,7 @@ public final class FolioPanel extends JPanel implements Disposable {
         question.setBorder(JBUI.Borders.empty(2, 0));
         question.setBackground(FolioChrome.answerFill());
         question.setRows(1);
-        installComposerKeys(question, () -> runAsk(null), this::canSend);
+        installComposerKeys(question, this::dispatchComposer, this::canSend);
         question.getDocument().addDocumentListener(new DocumentListener() {
             @Override
             public void insertUpdate(DocumentEvent event) {
@@ -306,15 +324,27 @@ public final class FolioPanel extends JPanel implements Disposable {
                 refreshPreviewHint();
             }
         });
-        askButton.addActionListener(event -> runAsk(null));
+        askButton.addActionListener(event -> dispatchComposer());
         askButton.setToolTipText("Send");
         askButton.setMargin(JBUI.emptyInsets());
         indexButton.addActionListener(event -> chooseFiles());
         commitButton.addActionListener(event -> draftCommit());
         previewButton.addActionListener(event -> runGenerate(selectedTest));
-        stopButton.addActionListener(event -> tasks.stop());
+        stopButton.addActionListener(event -> {
+            stopChatMotion();
+            tasks.stop();
+        });
         stopButton.setEnabled(false);
         clearChatButton.addActionListener(event -> clearChat());
+        clearChatButton.setToolTipText("Clear chat");
+        clearChatButton.getAccessibleContext().setAccessibleName("Clear chat");
+        modeButton.setToolTipText("Choose mode or open course files");
+        modeButton.getAccessibleContext().setAccessibleName("Conversation mode");
+        modeButton.addActionListener(event -> {
+            JPopupMenu menu = modeMenu();
+            menu.show(modeButton, 0, -menu.getPreferredSize().height);
+        });
+        backButton.addActionListener(event -> selectMode(mode));
         writeButton.addActionListener(event -> writePreview());
         refreshKeyActions();
         refreshPreviewHint();
@@ -357,7 +387,12 @@ public final class FolioPanel extends JPanel implements Disposable {
 
     public void ask(String text, String selection) {
         question.setText(text == null ? "" : text);
-        runAsk(selection);
+        runAsk(selection, null);
+    }
+
+    public void ask(String text, String selection, String source, VirtualFile directory) {
+        question.setText(text == null ? "" : text);
+        runAsk(selection, captureTestContext(source == null ? "" : source, directory));
     }
 
     public String scenarioText() {
@@ -374,7 +409,7 @@ public final class FolioPanel extends JPanel implements Disposable {
         rawTranscript.setText("");
         previewTarget.setBody("");
         refreshWrite();
-        showTab(TAB_TEST);
+        selectMode(Mode.TESTS);
     }
 
     public void generateFromSelection(String source, VirtualFile directory) {
@@ -422,17 +457,30 @@ public final class FolioPanel extends JPanel implements Disposable {
     }
 
     public void drill(String selection) {
-        showTab(TAB_ASK);
+        runDrill(selection, null);
+    }
+
+    private void runDrill(String selection, String asked) {
+        selectMode(Mode.DRILL);
+        if (tasks.active(FolioTasks.Channel.CHAT)) {
+            setStatus("Wait for the current answer or press Stop.", FolioChrome.Tone.INFO);
+            return;
+        }
         ProviderConnection connection = captureConnection();
         if (connection == null) {
             return;
         }
         CourseSearch snapshot = library.snapshot().index();
         String captured = selection == null ? "" : selection;
+        if (asked != null) {
+            question.setText("");
+        }
         FolioChrome.AnswerCard card = addExchange(captured.isBlank() ? "Course drill" : captured.strip());
-        submit(FolioTasks.Channel.CHAT,
-                () -> Drill.questions(snapshot, client, connection.baseUrl(), connection.key(), connection.model(), captured),
-                outcome -> showAnswer(card, outcome, connection, null, null));
+        tasks.submit(FolioTasks.Channel.CHAT,
+                publish -> Drill.questions(snapshot, client, connection.baseUrl(), connection.key(), connection.model(), captured, publish),
+                updates -> updateAnswer(card, updates),
+                outcome -> showAnswer(card, outcome, connection, asked, null));
+        refreshActivity();
     }
 
     public void draftCommit() {
@@ -440,7 +488,7 @@ public final class FolioPanel extends JPanel implements Disposable {
     }
 
     public void draftCommit(CommitMessageI control) {
-        showTab(TAB_COMMIT);
+        selectMode(Mode.COMMIT);
         ProviderConnection connection = captureConnection();
         if (connection == null) {
             return;
@@ -488,19 +536,20 @@ public final class FolioPanel extends JPanel implements Disposable {
     }
 
     private JPanel header() {
-        JBPanel<?> panel = new JBPanel<>(new BorderLayout(0, JBUI.scale(6)));
+        JBPanel<?> panel = new JBPanel<>(new BorderLayout(0, JBUI.scale(4)));
         panel.setOpaque(false);
         panel.setBorder(JBUI.Borders.compound(
-                JBUI.Borders.customLineBottom(FolioChrome.accent()),
-                JBUI.Borders.empty(0, 0, 8, 0)));
-        JBLabel mark = new JBLabel(FolioChrome.mark());
-        mark.setBorder(JBUI.Borders.emptyRight(8));
-        FolioChrome.TitleBlock titles = FolioChrome.TitleBlock.of("Folio", "Course assistant");
-        JBPanel<?> brand = new JBPanel<>(new BorderLayout());
-        brand.setOpaque(false);
-        brand.add(mark, BorderLayout.WEST);
-        brand.add(titles, BorderLayout.CENTER);
-        panel.add(new FolioChrome.HeaderBar(brand, (FolioChrome.ChipButton) badge, gear), BorderLayout.NORTH);
+                JBUI.Borders.customLineBottom(JBColor.border()), JBUI.Borders.emptyBottom(4)));
+        JPanel utilities = new JPanel(new BorderLayout());
+        utilities.setOpaque(false);
+        ((FolioChrome.ChipButton) badge).setCollapsed(true);
+        utilities.add(badge, BorderLayout.WEST);
+        JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, JBUI.scale(6), 0));
+        actions.setOpaque(false);
+        actions.add(clearChatButton);
+        actions.add(gear);
+        utilities.add(actions, BorderLayout.EAST);
+        panel.add(utilities, BorderLayout.NORTH);
         panel.add(settingsCard, BorderLayout.SOUTH);
         return panel;
     }
@@ -554,36 +603,63 @@ public final class FolioPanel extends JPanel implements Disposable {
     private JPanel sections() {
         JPanel panel = new JBPanel<>(new BorderLayout(0, JBUI.scale(4)));
         panel.setOpaque(false);
-        sectionButtons[TAB_ASK] = sectionButton("Ask", AllIcons.Actions.Find, TAB_ASK);
-        sectionButtons[TAB_FILES] = sectionButton("Files", AllIcons.FileTypes.Text, TAB_FILES);
-        sectionButtons[TAB_TEST] = sectionButton("Test", AllIcons.Nodes.JunitTestMark, TAB_TEST);
-        sectionButtons[TAB_COMMIT] = sectionButton("Commit", AllIcons.Actions.Commit, TAB_COMMIT);
-        FolioChrome.SegmentBar bar = new FolioChrome.SegmentBar(sectionButtons);
-        bar.setBorder(JBUI.Borders.compound(JBUI.Borders.empty(3), JBUI.Borders.emptyTop(8)));
         sectionDeck.setOpaque(false);
         sectionDeck.add(askTab(), "ask");
         sectionDeck.add(filesTab(), "files");
         sectionDeck.add(testTab(), "test");
         sectionDeck.add(commitTab(), "commit");
-        panel.add(bar, BorderLayout.NORTH);
+        JPanel navigation = new JPanel(new BorderLayout());
+        navigation.setOpaque(false);
+        navigation.add(modeButton, BorderLayout.WEST);
+        navigation.add(backButton, BorderLayout.EAST);
+        panel.add(navigation, BorderLayout.SOUTH);
         panel.add(sectionDeck, BorderLayout.CENTER);
-        selectSection(TAB_ASK);
+        selectMode(Mode.ASK);
         return panel;
     }
 
-    private JButton sectionButton(String text, javax.swing.Icon icon, int index) {
-        JButton button = FolioChrome.segment(text, icon);
-        button.setToolTipText(text);
-        button.addActionListener(event -> selectSection(index));
-        return button;
+    JPopupMenu modeMenu() {
+        JPopupMenu menu = new JPopupMenu();
+        ButtonGroup modes = new ButtonGroup();
+        for (Mode value : Mode.values()) {
+            var item = new JRadioButtonMenuItem(value.label, value.icon, mode == value && !filesVisible);
+            item.addActionListener(event -> selectMode(value));
+            modes.add(item);
+            menu.add(item);
+        }
+        menu.addSeparator();
+        JMenuItem files = new JMenuItem("Course files", AllIcons.FileTypes.Text);
+        files.addActionListener(event -> showFiles());
+        menu.add(files);
+        return menu;
     }
 
-    private void selectSection(int index) {
-        String[] names = {"ask", "files", "test", "commit"};
-        sections.show(sectionDeck, names[index]);
-        for (int i = 0; i < sectionButtons.length; i++) {
-            JButton button = sectionButtons[i];
-            FolioChrome.paintSegment(button, i == index);
+    private void showFiles() {
+        filesVisible = true;
+        sections.show(sectionDeck, "files");
+        backButton.setVisible(true);
+    }
+
+    private void selectMode(Mode value) {
+        mode = value;
+        filesVisible = false;
+        sections.show(sectionDeck, value.view);
+        modeButton.setText(value.label + " ▾");
+        modeButton.setIcon(value.icon);
+        backButton.setVisible(false);
+        question.setToolTipText(value == Mode.DRILL ? "Paste code for three practice questions" : "Ask about code or course material");
+        question.setPlaceholder(value == Mode.DRILL ? "Paste code for practice questions" : "Ask about code or course material");
+        refreshAskButton();
+    }
+
+    private void dispatchComposer() {
+        if (mode == Mode.DRILL) {
+            String code = question.getText();
+            if (canSend()) {
+                runDrill(code, code);
+            }
+        } else {
+            runAsk(null, null);
         }
     }
 
@@ -628,16 +704,12 @@ public final class FolioPanel extends JPanel implements Disposable {
     private JPanel askTab() {
         JBPanel<?> panel = new JBPanel<>(new BorderLayout(0, JBUI.scale(8)));
         panel.setOpaque(false);
-        panel.setBorder(JBUI.Borders.emptyTop(8));
+        panel.setBorder(JBUI.Borders.emptyTop(2));
         panel.add(chatScroll, BorderLayout.CENTER);
         applyChatSurface(chatScroll);
         chatColumn.addRow(chatEmpty);
         JPanel composer = new JBPanel<>(new BorderLayout(0, JBUI.scale(4)));
         composer.setOpaque(false);
-        JPanel controls = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
-        controls.setOpaque(false);
-        controls.add(clearChatButton);
-        composer.add(controls, BorderLayout.NORTH);
         composer.add(FolioChrome.composer(question, askButton), BorderLayout.CENTER);
         panel.add(composer, BorderLayout.SOUTH);
         return panel;
@@ -720,7 +792,7 @@ public final class FolioPanel extends JPanel implements Disposable {
         JBPanel<?> panel = new JBPanel<>(new BorderLayout(JBUI.scale(8), 0));
         panel.setBorder(JBUI.Borders.compound(
                 JBUI.Borders.customLineTop(JBColor.border()),
-                JBUI.Borders.emptyTop(8)));
+                JBUI.Borders.emptyTop(4)));
         JBPanel<?> lead = new JBPanel<>(new FlowLayout(FlowLayout.LEFT, JBUI.scale(6), 0));
         lead.setOpaque(false);
         lead.add(progress);
@@ -820,7 +892,8 @@ public final class FolioPanel extends JPanel implements Disposable {
             libraryLoading = false;
             if (outcome instanceof FolioTasks.Outcome.Success<CourseLibrary.Snapshot> success) {
                 String warning = success.value().warning();
-                setStatus(warning.isBlank() ? library.snapshot().index().size() + " chunks indexed. Shared across projects." : warning,
+                setStatus(warning.isBlank() ? countPhrase(library.snapshot().index().size(), "chunk", "chunks")
+                                + " · shared library" : warning,
                         warning.isBlank() ? FolioChrome.Tone.INFO : FolioChrome.Tone.WARNING);
             } else {
                 setStatus(outcomeText(outcome, null), FolioChrome.Tone.ERROR);
@@ -830,7 +903,7 @@ public final class FolioPanel extends JPanel implements Disposable {
     }
 
     private void chooseFiles() {
-        showTab(TAB_FILES);
+        showFiles();
         JFileChooser chooser = new JFileChooser();
         chooser.setMultiSelectionEnabled(true);
         if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
@@ -858,7 +931,7 @@ public final class FolioPanel extends JPanel implements Disposable {
     }
 
     private void removeFile(String source) {
-        showTab(TAB_FILES);
+        showFiles();
         String name = Asker.citedFile(source);
         String message = fileLocation(source).isEmpty()
                 ? "Remove " + name + " from the course index?"
@@ -970,8 +1043,8 @@ public final class FolioPanel extends JPanel implements Disposable {
         return count + " " + (count == 1 ? singular : plural);
     }
 
-    private void runAsk(String selection) {
-        showTab(TAB_ASK);
+    private void runAsk(String selection, TestContext testContext) {
+        selectMode(Mode.ASK);
         if (tasks.active(FolioTasks.Channel.CHAT)) {
             setStatus("Wait for the current answer or press Stop.", FolioChrome.Tone.INFO);
             return;
@@ -989,15 +1062,38 @@ public final class FolioPanel extends JPanel implements Disposable {
         if (connection == null) {
             return;
         }
-        AskInput input = new AskInput(library.snapshot().index(), connection, asked, capturedSelection, conversation.context());
+        AskInput input = new AskInput(library.snapshot().index(), connection, asked, capturedSelection,
+                conversation.context(), testContext);
         question.setText("");
         fitComposer();
         question.requestFocusInWindow();
         FolioChrome.AnswerCard card = addExchange(bubble);
         String historyQuestion = capturedSelection.isBlank() ? asked : asked + "\nSelected code:\n" + capturedSelection;
-        submit(FolioTasks.Channel.CHAT, () -> Asker.ask(input.index(), client,
-                connection.baseUrl(), connection.key(), connection.model(), input.question(), input.selection(), input.conversation()),
-                outcome -> showAnswer(card, outcome, connection, asked, historyQuestion));
+        tasks.submit(FolioTasks.Channel.CHAT, publish -> Asker.ask(input.index(), client,
+                connection.baseUrl(), connection.key(), connection.model(), input.question(), input.selection(), input.conversation(), publish),
+                updates -> updateAnswer(card, updates),
+                outcome -> {
+                    showAnswer(card, outcome, connection, asked, historyQuestion);
+                    if (outcome instanceof FolioTasks.Outcome.Success<Answer> success && success.value().calledModel()
+                            && input.testContext() != null && !input.testContext().source().isBlank()
+                            && input.testContext().directory() != null && input.testContext().directory().isValid()
+                            && input.testContext().directory().isDirectory() && input.testContext().directory().isWritable()) {
+                        card.offerTest(() -> {
+                            selectedTest = input.testContext();
+                            if (scenario.getText().isBlank()) {
+                                scenario.setText("Verify the behavior described by: " + input.question());
+                            }
+                            runGenerate(input.testContext());
+                        });
+                    }
+                });
+        refreshActivity();
+    }
+
+    private void updateAnswer(FolioChrome.AnswerCard card, List<Asker.Update> updates) {
+        boolean follow = chatNearBottom();
+        card.update(updates);
+        scrollChat(follow);
     }
 
     private FolioChrome.AnswerCard addExchange(String bubble) {
@@ -1006,11 +1102,13 @@ public final class FolioPanel extends JPanel implements Disposable {
         chatRows.addLast(user);
         hideChatEmpty();
         FolioChrome.AnswerCard card = new FolioChrome.AnswerCard(this::openSource, FolioPanel::copy);
-        JComponent answer = FolioChrome.bubbleRow(card, false);
+        JComponent answer = FolioChrome.bubbleRow(card);
         chatColumn.addRow(answer);
         chatRows.addLast(answer);
         while (chatRows.size() > Conversation.MAX_TURNS * 2) {
-            chatColumn.remove(chatRows.removeFirst());
+            JComponent removed = chatRows.removeFirst();
+            stopRowMotion(removed);
+            chatColumn.remove(removed);
         }
         scrollChat(true);
         return card;
@@ -1036,6 +1134,7 @@ public final class FolioPanel extends JPanel implements Disposable {
 
     void clearChat() {
         tasks.clear(FolioTasks.Channel.CHAT);
+        stopChatMotion();
         conversation.clear();
         chatRows.clear();
         chatColumn.clearRows();
@@ -1156,11 +1255,11 @@ public final class FolioPanel extends JPanel implements Disposable {
         head.add(FolioChrome.copyButton(() -> copy(text)), BorderLayout.EAST);
         card.add(head, BorderLayout.NORTH);
         card.add(new FolioChrome.WrapText(text), BorderLayout.CENTER);
-        return FolioChrome.bubbleRow(card, true);
+        return FolioChrome.bubbleRow(card);
     }
 
     private void runGenerate(TestContext context) {
-        showTab(TAB_TEST);
+        selectMode(Mode.TESTS);
         if (!Scenario.canGenerate(scenario.getText())) {
             showNote(Scenario.MISSING);
             return;
@@ -1219,7 +1318,7 @@ public final class FolioPanel extends JPanel implements Disposable {
     }
 
     private void writePreview() {
-        showTab(TAB_TEST);
+        selectMode(Mode.TESTS);
         FolioTasks.Accepted<TestPreview> result = tasks.accepted(FolioTasks.Channel.TEST, TestPreview.class);
         try {
             boolean used = tasks.use(FolioTasks.Channel.TEST, result, preview -> {
@@ -1425,6 +1524,7 @@ public final class FolioPanel extends JPanel implements Disposable {
         progress.setVisible(active);
         working.setVisible(active);
         stopButton.setEnabled(tasks.activeCount() > 0);
+        stopButton.setVisible(active);
         indexButton.setEnabled(!libraryLoading);
         refreshAskButton();
     }
@@ -1458,9 +1558,17 @@ public final class FolioPanel extends JPanel implements Disposable {
         refreshAskButton();
     }
 
-    private void showTab(int index) {
-        if (sectionButtons[0] != null) {
-            selectSection(index);
+    private void stopChatMotion() {
+        for (JComponent row : chatRows) {
+            stopRowMotion(row);
+        }
+    }
+
+    private static void stopRowMotion(JComponent row) {
+        for (Component child : row.getComponents()) {
+            if (child instanceof FolioChrome.AnswerCard card) {
+                card.stopMotion();
+            }
         }
     }
 
@@ -1591,6 +1699,7 @@ public final class FolioPanel extends JPanel implements Disposable {
     @Override
     public void dispose() {
         disposed = true;
+        stopChatMotion();
         tasks.close();
         closeSubscription(librarySubscription);
         closeSubscription(providerSubscription);

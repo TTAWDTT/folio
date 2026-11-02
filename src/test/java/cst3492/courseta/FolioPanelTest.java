@@ -251,14 +251,12 @@ class FolioPanelTest {
         UIManager.put("ButtonUI", ResetButtonUI.class.getName());
         UIManager.put("TextAreaUI", ResetTextUI.class.getName());
         try {
-            JButton segment = FolioChrome.segment("Ask", null);
-            FolioChrome.paintSegment(segment, true);
-            segment.updateUI();
-            assertFalse(segment.isOpaque());
-            assertFalse(segment.isContentAreaFilled());
-            assertFalse(segment.isBorderPainted());
-            assertFalse(segment.isFocusPainted());
-            assertTrue(segment.getFont().isBold());
+            JButton action = FolioChrome.iconButton(null);
+            action.updateUI();
+            assertFalse(action.isOpaque());
+            assertFalse(action.isContentAreaFilled());
+            assertFalse(action.isBorderPainted());
+            assertEquals("borderless", action.getClientProperty("JButton.buttonType"));
 
             FolioChrome.WrapText text = new FolioChrome.WrapText("hello");
             text.updateUI();
@@ -371,48 +369,33 @@ class FolioPanelTest {
     }
 
     @Test
-    void narrowHeaderAndTabsDoNotCoverEachOther() {
-        FolioChrome.TitleBlock titles = FolioChrome.TitleBlock.of("Folio", "Course assistant");
-        FolioChrome.ChipButton badge = new FolioChrome.ChipButton("Key ready · test-model", null);
-        JButton gear = FolioChrome.gear(null);
-        FolioChrome.HeaderBar header = new FolioChrome.HeaderBar(titles, badge, gear);
-        header.setSize(220, 160);
-        header.doLayout();
-        Rectangle subtitle = SwingUtilities.convertRectangle(titles, titles.subtitle().getBounds(), header);
-        assertFalse(badge.getBounds().intersects(subtitle), badge.getBounds() + " covers " + subtitle);
-        assertFalse(gear.getBounds().intersects(subtitle));
-        assertTrue(badge.getWidth() > 0);
-        assertTrue(subtitle.width > 0);
-        boolean collapsed = badge.getText() == null || badge.getText().isEmpty();
-        Rectangle brand = titles.getBounds();
-        boolean onNextLine = badge.getY() >= brand.y + brand.height;
-        assertTrue(collapsed || onNextLine,
-                "badge at 220 should collapse or wrap, text='" + badge.getText()
-                        + "' badge=" + badge.getBounds() + " brand=" + brand);
-
-        header.setSize(720, 80);
-        header.doLayout();
-        assertEquals("Key ready · test-model", badge.getText());
-
-        JButton[] tabs = {
-                FolioChrome.segment("Ask", null),
-                FolioChrome.segment("Files", null),
-                FolioChrome.segment("Test", null),
-                FolioChrome.segment("Commit", null)
-        };
-        FolioChrome.SegmentBar bar = new FolioChrome.SegmentBar(tabs);
-        int labels = bar.getPreferredSize().width;
-        bar.setSize(Math.max(32, labels / 4), 36);
-        bar.doLayout();
-        for (JButton tab : tabs) {
-            assertEquals("", tab.getText());
-            assertFalse(tab.getToolTipText().isBlank());
+    void narrowSidebarKeepsNavigationAndComposerWithinItsWidth() {
+        FolioPanel panel = new FolioPanel(null, cst3492.courseta.index.CourseLibrary.inMemory(),
+                ProviderAccess.inMemory(), Runnable::run, Runnable::run, (base, key, model, system, user) -> "reply");
+        try {
+            for (int width : List.of(240, 360)) {
+                panel.setSize(width, 700);
+                layoutTree(panel);
+                JButton mode = button(panel, "Ask ▾");
+                assertTrue(mode.getWidth() > 0);
+                Rectangle bounds = SwingUtilities.convertRectangle(mode.getParent(), mode.getBounds(), panel);
+                assertTrue(bounds.x >= 0 && bounds.x + bounds.width <= width);
+                FolioChrome.PromptArea input = composer(panel);
+                Rectangle field = SwingUtilities.convertRectangle(input.getParent(), input.getBounds(), panel);
+                assertTrue(field.width > 0 && field.x >= 0 && field.x + field.width <= width);
+            }
+        } finally {
+            panel.dispose();
         }
-        assertEquals("Commit", tabs[3].getToolTipText());
-        bar.setSize(Math.max(labels + 80, 960), 48);
-        bar.doLayout();
-        assertEquals("Commit", tabs[3].getText());
-        assertEquals("Ask", tabs[0].getText());
+    }
+
+    private static void layoutTree(Container root) {
+        root.doLayout();
+        for (Component child : root.getComponents()) {
+            if (child instanceof Container nested) {
+                layoutTree(nested);
+            }
+        }
     }
 
     @Test
@@ -512,32 +495,28 @@ class FolioPanelTest {
         assertEquals(1, sent.get());
     }
 
-    /**
-     * Narrow layout drops the words. Measuring the preferred size afterwards must not put them back.
-     * Calling {@code getPreferredSize} first hides that, because the labels are already showing.
-     */
     @Test
-    void segmentMeasurementDoesNotMutateButtonsOrOverlap() {
-        JButton[] tabs = {
-                FolioChrome.segment("Ask", null),
-                FolioChrome.segment("Files", null),
-                FolioChrome.segment("Test", null),
-                FolioChrome.segment("Commit", null)
-        };
-        FolioChrome.SegmentBar bar = new FolioChrome.SegmentBar(tabs);
-        bar.setSize(48, 36);
-        bar.doLayout();
-        for (int i = 0; i < tabs.length; i++) {
-            assertEquals("", tabs[i].getText());
-            assertTrue(tabs[i].getWidth() > 0);
-            for (int j = i + 1; j < tabs.length; j++) {
-                assertFalse(tabs[i].getBounds().intersects(tabs[j].getBounds()),
-                        tabs[i].getBounds() + " overlaps " + tabs[j].getBounds());
+    void modeMenuKeepsAllWorkflowsReachableAndReturnsFromCourseFiles() {
+        FolioPanel panel = new FolioPanel(null, cst3492.courseta.index.CourseLibrary.inMemory(),
+                ProviderAccess.inMemory(), Runnable::run, Runnable::run, (base, key, model, system, user) -> "reply");
+        try {
+            var menu = panel.modeMenu();
+            List<String> labels = java.util.Arrays.stream(menu.getComponents())
+                    .filter(component -> component instanceof javax.swing.JMenuItem)
+                    .map(component -> ((javax.swing.JMenuItem) component).getText()).toList();
+            assertEquals(List.of("Ask", "Tests", "Commit", "Drill", "Course files"), labels);
+            for (int i = 0; i < 4; i++) {
+                ((javax.swing.JMenuItem) panel.modeMenu().getComponent(i)).doClick();
+                assertTrue(button(panel, labels.get(i) + " ▾").isVisible());
+                assertTrue(((javax.swing.JRadioButtonMenuItem) panel.modeMenu().getComponent(i)).isSelected());
             }
-        }
-        assertTrue(bar.getPreferredSize().width > 48);
-        for (JButton tab : tabs) {
-            assertEquals("", tab.getText());
+            ((javax.swing.JMenuItem) panel.modeMenu().getComponent(5)).doClick();
+            assertTrue(button(panel, "Back").isVisible());
+            button(panel, "Back").doClick();
+            assertFalse(button(panel, "Back").isVisible());
+            assertTrue(((javax.swing.JRadioButtonMenuItem) panel.modeMenu().getComponent(3)).isSelected());
+        } finally {
+            panel.dispose();
         }
     }
 

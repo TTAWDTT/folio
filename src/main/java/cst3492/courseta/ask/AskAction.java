@@ -11,6 +11,7 @@ import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiMethod;
 import com.intellij.psi.util.PsiTreeUtil;
+import com.intellij.openapi.vfs.VirtualFile;
 import cst3492.courseta.FolioPanels;
 import org.jetbrains.annotations.NotNull;
 
@@ -26,6 +27,11 @@ public final class AskAction extends AnAction {
             return;
         }
         String selection = selectedText(event);
+        Editor editor = event.getData(CommonDataKeys.EDITOR);
+        VirtualFile file = event.getData(CommonDataKeys.VIRTUAL_FILE);
+        boolean javaSource = editor != null && file != null && "java".equalsIgnoreCase(file.getExtension());
+        String source = javaSource ? editor.getDocument().getText() : "";
+        VirtualFile directory = javaSource ? file.getParent() : null;
         ToolWindow window = ToolWindowManager.getInstance(event.getProject()).getToolWindow("Folio");
         if (window == null) {
             return;
@@ -33,7 +39,8 @@ public final class AskAction extends AnAction {
         window.activate(() -> {
             var panel = FolioPanels.get(event.getProject());
             if (panel != null) {
-                panel.ask(selection.isBlank() ? "Explain this." : "Explain the selected code.", selection);
+                String question = selection.isBlank() ? "Explain this." : "Explain the selected code.";
+                panel.ask(question, selection, source, directory);
             }
         }, true);
     }
