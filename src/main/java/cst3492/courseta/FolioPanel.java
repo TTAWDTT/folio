@@ -878,7 +878,7 @@ public final class FolioPanel extends JPanel {
             return;
         }
         if (ApplicationManager.getApplication() == null) {
-            new SourcePreview(project, chunk, true).show();
+            setStatus(Asker.scopePhrase(chunk) + " · " + Asker.snippet(chunk), FolioChrome.Tone.INFO);
             return;
         }
         String path = chunk.sourceDocument();

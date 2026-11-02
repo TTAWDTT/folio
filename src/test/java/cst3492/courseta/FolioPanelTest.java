@@ -11,7 +11,12 @@ import cst3492.courseta.index.ScopeKind;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import javax.swing.AbstractButton;
 import javax.swing.JButton;
+import javax.swing.UIManager;
+import javax.swing.plaf.basic.BasicButtonUI;
+import javax.swing.plaf.basic.BasicTextAreaUI;
+import java.awt.Font;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -128,33 +133,69 @@ class FolioPanelTest {
 
     @Test
     void customChromeSurvivesAThemeRefresh() {
-        JButton segment = FolioChrome.segment("Ask", null);
-        FolioChrome.paintSegment(segment, true);
-        segment.updateUI();
-        assertFalse(segment.isOpaque());
-        assertFalse(segment.isContentAreaFilled());
-        assertFalse(segment.isBorderPainted());
-        assertFalse(segment.isFocusPainted());
-        assertTrue(segment.getFont().isBold());
+        Object buttonUi = UIManager.get("ButtonUI");
+        Object textUi = UIManager.get("TextAreaUI");
+        Object loader = UIManager.get("ClassLoader");
+        UIManager.put("ClassLoader", FolioPanelTest.class.getClassLoader());
+        UIManager.put("ButtonUI", ResetButtonUI.class.getName());
+        UIManager.put("TextAreaUI", ResetTextUI.class.getName());
+        try {
+            JButton segment = FolioChrome.segment("Ask", null);
+            FolioChrome.paintSegment(segment, true);
+            segment.updateUI();
+            assertFalse(segment.isOpaque());
+            assertFalse(segment.isContentAreaFilled());
+            assertFalse(segment.isBorderPainted());
+            assertFalse(segment.isFocusPainted());
+            assertTrue(segment.getFont().isBold());
 
-        FolioChrome.WrapText text = new FolioChrome.WrapText("hello");
-        text.updateUI();
-        assertFalse(text.isOpaque());
-        assertFalse(text.isEditable());
-        assertTrue(text.getLineWrap());
-        assertEquals(0, text.getInsets().top);
-        assertEquals(0, text.getInsets().left);
+            FolioChrome.WrapText text = new FolioChrome.WrapText("hello");
+            text.updateUI();
+            assertFalse(text.isOpaque());
+            assertFalse(text.isEditable());
+            assertTrue(text.getLineWrap());
+            assertEquals(0, text.getInsets().top);
+            assertEquals(0, text.getInsets().left);
 
-        JButton chip = new FolioChrome.ChipButton("Key", null);
-        chip.updateUI();
-        assertFalse(chip.isOpaque());
-        assertFalse(chip.isContentAreaFilled());
-        assertFalse(chip.isBorderPainted());
-        assertFalse(chip.isFocusPainted());
+            JButton chip = new FolioChrome.ChipButton("Key", null);
+            chip.updateUI();
+            assertFalse(chip.isOpaque());
+            assertFalse(chip.isContentAreaFilled());
+            assertFalse(chip.isBorderPainted());
+            assertFalse(chip.isFocusPainted());
 
-        JButton gear = FolioChrome.gear(null);
-        gear.updateUI();
-        assertEquals("borderless", gear.getClientProperty("JButton.buttonType"));
+            JButton gear = FolioChrome.gear(null);
+            gear.updateUI();
+            assertEquals("borderless", gear.getClientProperty("JButton.buttonType"));
+        } finally {
+            UIManager.put("ButtonUI", buttonUi);
+            UIManager.put("TextAreaUI", textUi);
+            UIManager.put("ClassLoader", loader);
+        }
+    }
+
+    /** Installs the filled button the look-and-feel puts back on a theme change. */
+    public static final class ResetButtonUI extends BasicButtonUI {
+        @Override
+        protected void installDefaults(AbstractButton button) {
+            super.installDefaults(button);
+            button.setOpaque(true);
+            button.setContentAreaFilled(true);
+            button.setBorderPainted(true);
+            button.setFocusPainted(true);
+            button.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
+            button.putClientProperty("JButton.buttonType", null);
+        }
+    }
+
+    /** Installs an opaque text area with padding, which a theme change does too. */
+    public static final class ResetTextUI extends BasicTextAreaUI {
+        @Override
+        protected void installDefaults() {
+            super.installDefaults();
+            getComponent().setOpaque(true);
+            getComponent().setBorder(javax.swing.BorderFactory.createEmptyBorder(4, 6, 4, 6));
+        }
     }
 
     @Test

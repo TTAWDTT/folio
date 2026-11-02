@@ -30,7 +30,7 @@ The Ask section is a short chat. An empty window shows a one-line hint. Each que
 Retrieval still runs before the model call. At most four chunks are sent. Each one is numbered in the prompt. The model is told to cite those numbers inline as [1], [2], with a space before the bracket, and not to invent a number. Folio then checks the reply:
 
 - A marker is kept only when its number names one of those retrieved chunks. Markers are rewritten so [1], [2] follow the source list under the answer.
-- A number that was not retrieved is removed from the text and never becomes a card. Removing one only tidies the space it left. Indexes such as `args[0]` and `m[0][2]`, calls such as `foo()[1]`, assignments such as `x = [1, 2]`, fenced blocks, and inline code are left as written, including their indentation.
+- A number that was not retrieved is removed from the text and never becomes a card. Removing one only tidies the space it left. Adjacent prose markers such as `[1][2]` are both mapped. An index, a call, or a list in an expression (`m[0][2]`, `foo()[1]`, `print([1, 2, 3])`, `return [1, 2]`, `x = [1, 2]`) is not. Fenced blocks (including `~~~` and a fence indented by up to three spaces), four-space code blocks, and inline code are left as written, including their indentation.
 - If the reply contains no markers, the source list is the retrieved chunks. The model was given only those chunks and did not name a subset.
 - If every marker is out of range, there are no source cards. The card says: "The reply did not cite a retrieved course chunk."
 
@@ -449,7 +449,7 @@ docs/course-ta-plugin-plan.md
 
 ## Testing
 
-`./gradlew test buildPlugin` with JDK 25 completes successfully. The suite is **94 tests, 0 failures**.
+`./gradlew test buildPlugin` with JDK 25 completes successfully. The suite is **101 tests, 0 failures**.
 
 | Test class | Tests |
 | --- | ---: |
@@ -457,11 +457,11 @@ docs/course-ta-plugin-plan.md
 | `HttpChatClientTest` | 10 |
 | `CommitMessageActionTest` | 9 |
 | `FolioPanelTest` | 10 |
-| `AskerTest` | 19 |
+| `AskerTest` | 26 |
 | `CourseFileParserTest` | 7 |
 | `GenerateTestActionTest` | 3 |
 | `TaSettingsTest` | 1 |
 | `AnswerTest` | 1 |
 | `CourseDrillActionTest` | 1 |
 
-`AskerTest` locks citation mapping: prose `[n]` markers are renumbered onto retrieved chunks, unknown numbers are dropped, and code spans, fences, indexes, and indentation stay as written. An empty retrieval says the answer is not grounded and still leaves a code list alone. The index tests lock the retrieval rules above: weather and unrelated questions return no hits, a lecture term still hits when it appears in every chunk, polite Chinese and English questions still reach the course term, and removing one absolute path leaves another file with the same name. They also load a legacy bare-name row: re-indexing the same handout drops that row, and Remove drops it too. `FolioPanelTest` locks the button gate, empty Save, the badge text, the scaled hint width, cancellation, and that Write copies a preview only after it succeeded. A prose reply leaves Write off. Error text that contains `class ` or `org.junit` does not enable Write either. `CourseFileParserTest` checks page and slide order and that a chosen source id is stored. The UI tests do not construct a `Project`, so they do not click the confirmation dialog or the live tool window.
+`AskerTest` locks citation mapping: prose `[n]` markers, including adjacent `[1][2]`, are renumbered onto retrieved chunks, unknown numbers are dropped, and expression lists are not citations. Separate cases fail if the backtick fence, the `~~~` fence, inline code, an indented fence, or a four-space code block is no longer skipped. An empty retrieval says the answer is not grounded and still leaves a code list alone. The index tests lock the retrieval rules above: weather and unrelated questions return no hits, a lecture term still hits when it appears in every chunk, polite Chinese and English questions still reach the course term, and removing one absolute path leaves another file with the same name. They also load a legacy bare-name row: re-indexing the same handout drops that row, and Remove drops it too. `FolioPanelTest` locks the button gate, empty Save, the badge text, the scaled hint width, cancellation, and that Write copies a preview only after it succeeded. A prose reply leaves Write off. Error text that contains `class ` or `org.junit` does not enable Write either. `CourseFileParserTest` checks page and slide order and that a chosen source id is stored. The UI tests do not construct a `Project`, so they do not click the confirmation dialog or the live tool window.

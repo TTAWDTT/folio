@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -224,36 +225,48 @@ public final class Asker {
         }
     }
 
-    /** Fenced blocks and inline code. Markers inside them are not citations. */
+    /** Words that introduce an expression, as in {@code return [1, 2]}. */
+    private static final Set<String> EXPRESSION_WORDS = Set.of(
+            "return", "throw", "yield", "await", "new", "sizeof", "typeof", "instanceof", "delete");
+
+    /** Fenced blocks, indented code blocks, and inline code. Markers inside them are not citations. */
     private static List<int[]> codeSpans(String raw) {
         List<int[]> spans = new ArrayList<>();
-        int i = 0;
-        while (i < raw.length()) {
-            if (fenceAt(raw, i)) {
-                int close = fenceEnd(raw, i);
-                spans.add(new int[] {i, close});
-                i = close;
-                continue;
-            }
-            if (raw.charAt(i) == '`') {
-                int close = raw.indexOf('`', i + 1);
-                int newline = raw.indexOf('\n', i + 1);
-                if (close > i + 1 && (newline < 0 || close < newline)) {
-                    spans.add(new int[] {i, close + 1});
-                    i = close + 1;
-                    continue;
-                }
-            }
-            i++;
-        }
+        addFences(raw, spans);
+        addIndentedBlocks(raw, spans);
+        addInlineCode(raw, spans);
         return spans;
     }
 
-    private static boolean fenceAt(String raw, int index) {
-        if (index > 0 && raw.charAt(index - 1) != '\n') {
-            return false;
+    private static void addFences(String raw, List<int[]> spans) {
+        int line = 0;
+        while (line < raw.length()) {
+            int open = fenceMarkerAt(raw, line);
+            if (open >= 0) {
+                int close = fenceEnd(raw, open);
+                spans.add(new int[] {line, close});
+                line = close;
+                continue;
+            }
+            int newline = raw.indexOf('\n', line);
+            line = newline < 0 ? raw.length() : newline + 1;
         }
-        return raw.startsWith("```", index) || raw.startsWith("~~~", index);
+    }
+
+    /** Index of ``` or ~~~ on this line, after at most three spaces. -1 when the line is not a fence. */
+    private static int fenceMarkerAt(String raw, int lineStart) {
+        int index = lineStart;
+        int spaces = 0;
+        while (index < raw.length() && raw.charAt(index) == ' ' && spaces < 3) {
+            index++;
+            spaces++;
+        }
+        boolean backtickFence = raw.startsWith("```", index);
+        boolean tildeFence = raw.startsWith("~~~", index);
+        if (backtickFence || tildeFence) {
+            return index;
+        }
+        return -1;
     }
 
     private static int fenceEnd(String raw, int open) {
@@ -277,6 +290,70 @@ public final class Asker {
         return raw.length();
     }
 
+    private static void addIndentedBlocks(String raw, List<int[]> spans) {
+        int line = 0;
+        boolean blankBefore = true;
+        while (line < raw.length()) {
+            int newline = raw.indexOf('\n', line);
+            int end = newline < 0 ? raw.length() : newline;
+            String text = raw.substring(line, end);
+            if (blankBefore && indentedCodeLine(text) && !inside(spans, line)) {
+                int blockEnd = newline < 0 ? raw.length() : newline + 1;
+                int next = blockEnd;
+                while (next < raw.length()) {
+                    int newline2 = raw.indexOf('\n', next);
+                    int end2 = newline2 < 0 ? raw.length() : newline2;
+                    String follow = raw.substring(next, end2);
+                    if (!follow.isBlank() && !indentedCodeLine(follow)) {
+                        break;
+                    }
+                    blockEnd = newline2 < 0 ? raw.length() : newline2 + 1;
+                    if (newline2 < 0) {
+                        break;
+                    }
+                    next = blockEnd;
+                }
+                spans.add(new int[] {line, blockEnd});
+                line = blockEnd;
+                blankBefore = true;
+                continue;
+            }
+            blankBefore = text.isBlank();
+            line = newline < 0 ? raw.length() : newline + 1;
+        }
+    }
+
+    private static boolean indentedCodeLine(String line) {
+        if (line.startsWith("\t") && line.length() > 1) {
+            return true;
+        }
+        int spaces = 0;
+        while (spaces < line.length() && line.charAt(spaces) == ' ') {
+            spaces++;
+        }
+        return spaces >= 4 && spaces < line.length();
+    }
+
+    private static void addInlineCode(String raw, List<int[]> spans) {
+        int index = 0;
+        while (index < raw.length()) {
+            if (inside(spans, index)) {
+                index++;
+                continue;
+            }
+            if (raw.charAt(index) == '`') {
+                int close = raw.indexOf('`', index + 1);
+                int newline = raw.indexOf('\n', index + 1);
+                if (close > index + 1 && (newline < 0 || close < newline)) {
+                    spans.add(new int[] {index, close + 1});
+                    index = close + 1;
+                    continue;
+                }
+            }
+            index++;
+        }
+    }
+
     private static boolean hasProseCitation(String raw, List<int[]> code) {
         Matcher matcher = MARKER.matcher(raw);
         while (matcher.find()) {
@@ -288,25 +365,92 @@ public final class Asker {
     }
 
     /**
-     * A standalone citation in prose. Skips code, and skips a bracket that follows
-     * an identifier or a closing bracket, as in {@code m[0][2]} and {@code foo()[1]}.
-     * An assignment such as {@code x = [1, 2]} is a list, not a citation.
+     * A citation is {@code [n]} or {@code [n, m]} in prose.
+     * It follows whitespace or prose punctuation, including another citation ({@code [1][2]}).
+     * It is not part of an expression: an index, a call, an assignment, or a list literal
+     * such as {@code print([1, 2, 3])} or {@code return [1, 2]}.
      */
     private static boolean isProseCitation(String raw, int bracketAt, List<int[]> code) {
         if (inside(code, bracketAt)) {
             return false;
         }
-        if (bracketAt > 0) {
-            char previous = raw.charAt(bracketAt - 1);
-            if (Character.isLetterOrDigit(previous) || previous == '_' || previous == ')' || previous == ']') {
-                return false;
-            }
+        if (bracketAt == 0) {
+            return true;
+        }
+        char previous = raw.charAt(bracketAt - 1);
+        if (isIdent(previous) || previous == ')') {
+            return false;
+        }
+        if (previous == ']') {
+            return closesCitation(raw, bracketAt - 1, code);
         }
         int at = bracketAt - 1;
-        while (at >= 0 && (raw.charAt(at) == ' ' || raw.charAt(at) == '\t')) {
+        while (at >= 0 && isInlineSpace(raw.charAt(at))) {
             at--;
         }
-        return at < 0 || raw.charAt(at) != '=';
+        if (at < 0) {
+            return true;
+        }
+        char token = raw.charAt(at);
+        if (token == '=' || token == '(' || token == '[' || token == '{'
+                || token == '<' || token == '>' || token == '+' || token == '-'
+                || token == '*' || token == '/' || token == '%' || token == '&'
+                || token == '|' || token == '^' || token == '~') {
+            return false;
+        }
+        if (token == ',') {
+            return !insideParentheses(raw, at, code);
+        }
+        if (isIdent(token)) {
+            int end = at + 1;
+            while (at >= 0 && isIdent(raw.charAt(at))) {
+                at--;
+            }
+            String word = raw.substring(at + 1, end);
+            return !EXPRESSION_WORDS.contains(word.toLowerCase(Locale.ROOT));
+        }
+        return true;
+    }
+
+    private static boolean closesCitation(String raw, int close, List<int[]> code) {
+        int depth = 0;
+        for (int index = close - 1; index >= 0; index--) {
+            char c = raw.charAt(index);
+            if (c == ']') {
+                depth++;
+            } else if (c == '[') {
+                if (depth == 0) {
+                    String body = raw.substring(index + 1, close);
+                    return body.matches("\\d+(?:\\s*,\\s*\\d+)*") && isProseCitation(raw, index, code);
+                }
+                depth--;
+            }
+        }
+        return false;
+    }
+
+    private static boolean insideParentheses(String raw, int at, List<int[]> code) {
+        int depth = 0;
+        for (int index = 0; index < at; index++) {
+            if (inside(code, index)) {
+                continue;
+            }
+            char c = raw.charAt(index);
+            if (c == '(') {
+                depth++;
+            } else if (c == ')' && depth > 0) {
+                depth--;
+            }
+        }
+        return depth > 0;
+    }
+
+    private static boolean isIdent(char c) {
+        return Character.isLetterOrDigit(c) || c == '_';
+    }
+
+    private static boolean isInlineSpace(char c) {
+        return c == ' ' || c == '\t' || c == '\n' || c == '\r';
     }
 
     private static boolean inside(List<int[]> spans, int index) {

@@ -553,8 +553,10 @@ final class FolioChrome {
 
     /** Ask / Files / Test / Commit, drawn as one segmented control. */
     static final class SegmentBar extends JBPanel<SegmentBar> {
+        // MainToolbar.background is #27282E in expUI Light, so light-theme labels disappear on it.
+        // This key is the gray track there (#EBECF0) and #2B2D30 in the dark themes.
         private static final Color TRACK = JBColor.namedColor(
-                "MainToolbar.background", new JBColor(0xEBECF0, 0x2B2D30));
+                "Editor.ToolTip.selectionBackground", new JBColor(0xEBECF0, 0x2B2D30));
         private static final Color PILL = JBColor.namedColor(
                 "SegmentedButton.selectedButtonColor", new JBColor(0xFFFFFF, 0x3C3F41));
         private final JButton[] buttons;

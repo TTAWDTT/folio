@@ -249,6 +249,68 @@ class AskerTest {
     }
 
     @Test
+    void adjacentProseMarkersEachMap() {
+        CourseChunk first = page("lecture-servlet.pdf", 1, "doGet");
+        CourseChunk second = page("lecture-jpa.pdf", 2, "OneToMany");
+        CourseChunk third = page("lecture-jpa.pdf", 3, "persistence");
+        Asker.CitationMap mapped = Asker.mapCitations(List.of(first, second, third), "Use [3][1].");
+        assertEquals(List.of(third, first), mapped.sources());
+        assertEquals("Use [1][2].", mapped.text());
+
+        Asker.CitationMap pair = Asker.mapCitations(List.of(first, second, third), "See [1][2].");
+        assertEquals(List.of(first, second), pair.sources());
+        assertEquals("See [1][2].", pair.text());
+
+        Asker.CitationMap indexes = Asker.mapCitations(List.of(first, second), "Keep m[0][2] and foo()[1].");
+        assertEquals(List.of(first, second), indexes.sources());
+        assertEquals("Keep m[0][2] and foo()[1].", indexes.text());
+    }
+
+    @Test
+    void expressionListsAreNotCitations() {
+        CourseChunk first = page("lecture-servlet.pdf", 1, "doGet");
+        CourseChunk second = page("lecture-jpa.pdf", 2, "OneToMany");
+        String text = String.join("\n",
+                "See [2], [1].",
+                "print([1, 2, 3])",
+                "return [1, 2];",
+                "foo(a, [1, 2])",
+                "Hello, [1] still counts.");
+        Asker.CitationMap mapped = Asker.mapCitations(List.of(first, second), text);
+        assertEquals(List.of(second, first), mapped.sources());
+        assertTrue(mapped.text().contains("See [1], [2]."));
+        assertTrue(mapped.text().contains("print([1, 2, 3])"));
+        assertTrue(mapped.text().contains("return [1, 2];"));
+        assertTrue(mapped.text().contains("foo(a, [1, 2])"));
+        assertTrue(mapped.text().contains("Hello, [2] still counts."));
+    }
+
+    @Test
+    void backtickFenceGuardIsRequired() {
+        assertCodeRegionStaysLiteral(String.join("\n", "Before.", "```", "See [2].", "```", "After."));
+    }
+
+    @Test
+    void tildeFenceGuardIsRequired() {
+        assertCodeRegionStaysLiteral(String.join("\n", "Before.", "~~~", "See [2].", "~~~", "After."));
+    }
+
+    @Test
+    void inlineCodeGuardIsRequired() {
+        assertCodeRegionStaysLiteral("Before. `See [2].` After.");
+    }
+
+    @Test
+    void indentedFenceGuardIsRequired() {
+        assertCodeRegionStaysLiteral(String.join("\n", "Before.", " ```", "See [2].", " ```", "After."));
+    }
+
+    @Test
+    void indentedCodeBlockGuardIsRequired() {
+        assertCodeRegionStaysLiteral(String.join("\n", "Before.", "", "    See [2].", "After."));
+    }
+
+    @Test
     void citationsSkipCodeSpansFencesAndIndexes() {
         CourseChunk first = page("lecture-servlet.pdf", 1, "doGet");
         CourseChunk second = page("lecture-jpa.pdf", 2, "OneToMany");
@@ -321,6 +383,15 @@ class AskerTest {
         CourseChunk first = new CourseChunk("lecture.pdf#PAGE#4#1", "lecture.pdf", ScopeKind.PAGE, 4, "alpha servlet part");
         CourseChunk second = new CourseChunk("lecture.pdf#PAGE#4#2", "lecture.pdf", ScopeKind.PAGE, 4, "beta servlet part");
         assertEquals(List.of("lecture.pdf page 4"), Asker.citationLines(List.of(first, second)));
+    }
+
+    /** The marker inside the region is a real prose citation if that guard is missing. */
+    private static void assertCodeRegionStaysLiteral(String text) {
+        CourseChunk first = page("lecture-servlet.pdf", 1, "doGet");
+        CourseChunk second = page("lecture-jpa.pdf", 2, "OneToMany");
+        Asker.CitationMap mapped = Asker.mapCitations(List.of(first, second), text);
+        assertEquals(text, mapped.text());
+        assertEquals(List.of(first, second), mapped.sources());
     }
 
     private static CourseChunk page(String file, int number, String text) {
