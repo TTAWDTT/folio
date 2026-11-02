@@ -473,6 +473,53 @@ class AskerTest {
     }
 
     /**
+     * {@code and} and {@code cf.} between ordinary words are the sentence, not a citation joiner.
+     * Inside {@code (see )} the cue is dropped with the empty parentheses. Chinese {@code ，} and
+     * {@code 和} follow the same rule, and a removed marker does not leave a space at the line edge.
+     */
+    @Test
+    void proseConnectiveStaysWhenItJoinsWords() {
+        CourseChunk first = page("lecture-servlet.pdf", 1, "doGet");
+        CourseChunk second = page("lecture-jpa.pdf", 2, "OneToMany");
+        assertEquals("A and B", Asker.mapCitations(List.of(first), "A and [9] B").text());
+        assertEquals("Servlets and JPA", Asker.mapCitations(List.of(first), "Servlets [9] and JPA").text());
+        assertEquals("Cf. page", Asker.mapCitations(List.of(first), "Cf. [9] page").text());
+        assertEquals("General answer and x = [1, 2].",
+                Asker.mapCitations(List.of(), "General answer [1] and x = [1, 2].").text());
+        assertEquals("见 [1]。", Asker.mapCitations(List.of(first, second), "见 [1] 和 [9]。").text());
+        assertEquals("中文，见 [1]。", Asker.mapCitations(List.of(first, second), "中文，[9]，见 [1]。").text());
+        assertEquals("Note.", Asker.mapCitations(List.of(first), "Note (see [9]).").text());
+        assertEquals("Words.", Asker.mapCitations(List.of(first), "Words (a [9]).").text());
+        assertEquals("page", Asker.mapCitations(List.of(first), "[9] page").text());
+        assertEquals("See\nNext", Asker.mapCitations(List.of(first), "See [9]\nNext").text());
+    }
+
+    /**
+     * A parenthesis after {@code =}, an operator, or {@code if}/{@code return}/{@code new}
+     * is an expression and stays as written. {@code Servlets ([1])} is still a citation.
+     */
+    @Test
+    void expressionParenIsNotACitation() {
+        CourseChunk first = page("lecture-servlet.pdf", 1, "doGet");
+        CourseChunk second = page("lecture-jpa.pdf", 2, "OneToMany");
+        CourseChunk third = page("lecture-jpa.pdf", 3, "persistence");
+        Asker.CitationMap assigned = Asker.mapCitations(List.of(first, second, third), "x = ([3]) then see [3].");
+        assertEquals("x = ([3]) then see [1].", assigned.text());
+        assertEquals(List.of(third), assigned.sources());
+
+        assertEquals("if ([3])", Asker.mapCitations(List.of(first, second, third), "if ([3])").text());
+        assertEquals("while ([3])", Asker.mapCitations(List.of(first, second, third), "while ([3])").text());
+        assertEquals("for ([3])", Asker.mapCitations(List.of(first, second, third), "for ([3])").text());
+        assertEquals("switch ([3])", Asker.mapCitations(List.of(first, second, third), "switch ([3])").text());
+        assertEquals("return ([3])", Asker.mapCitations(List.of(first, second, third), "return ([3])").text());
+        assertEquals("new ([3])", Asker.mapCitations(List.of(first, second, third), "new ([3])").text());
+
+        Asker.CitationMap kept = Asker.mapCitations(List.of(first, second), "Hello, ([2])");
+        assertEquals("Hello, ([1])", kept.text());
+        assertEquals(List.of(second), kept.sources());
+    }
+
+    /**
      * Seeded replies mix in-range and out-of-range prose, repeats, adjacent markers, groups,
      * fences, inline code, calls, and lists. Each marker is labeled citation or code when it
      * is built. The check uses those labels, so a wrong classifier cannot agree with itself.
@@ -683,7 +730,7 @@ class AskerTest {
             if (part > 0) {
                 text.append('\n');
             }
-            int kind = random.nextInt(23);
+            int kind = random.nextInt(25);
             int left = markerNumber(random, retrieved, true);
             int right = markerNumber(random, retrieved, true);
             switch (kind) {
@@ -746,6 +793,26 @@ class AskerTest {
                     int number = markerNumber(random, retrieved, false);
                     code(text, marks, "\n    ind" + tag + " [" + number + "]", false);
                 }
+                case 17 -> {
+                    int tag = trial * 10 + part;
+                    int number = markerNumber(random, retrieved, true);
+                    String leftWord = "wa" + tag;
+                    String rightWord = "wb" + tag;
+                    text.append(leftWord).append(" and ");
+                    cite(text, marks, "", "", number);
+                    text.append(" ").append(rightWord);
+                    keep(marks, leftWord + " and");
+                    keep(marks, rightWord);
+                }
+                case 18 -> {
+                    int tag = trial * 10 + part;
+                    int number = markerNumber(random, retrieved, true);
+                    text.append("Cf. ");
+                    cite(text, marks, "", "", number);
+                    text.append(" pg").append(tag);
+                    keep(marks, "Cf.");
+                    keep(marks, "pg" + tag);
+                }
                 default -> literalFragment(text, marks, random, trial, part, retrieved);
             }
         }
@@ -765,6 +832,11 @@ class AskerTest {
     private static void code(StringBuilder text, List<Mark> marks, String literal, boolean blocksRewrite) {
         text.append(literal);
         marks.add(new Mark(false, List.of(), literal, blocksRewrite));
+    }
+
+    /** A phrase that must survive even when a nearby citation is removed. It is not appended again. */
+    private static void keep(List<Mark> marks, String literal) {
+        marks.add(new Mark(false, List.of(), literal, false));
     }
 
     private static void literalFragment(StringBuilder text, List<Mark> marks, Random random, int trial, int part,
@@ -862,6 +934,7 @@ class AskerTest {
         assertFalse(text.contains("(cf."), "orphan cf." + where);
         assertFalse(text.contains("and."), "orphan and" + where);
         assertFalse(text.contains("and ."), "orphan and" + where);
+        assertFalse(Pattern.compile("\\(\\s*see\\s*\\)").matcher(text).find(), "empty see paren" + where);
         assertTrue(emptyParens(text) <= emptyParens(input), "empty parens" + where);
     }
 

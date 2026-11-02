@@ -54,11 +54,13 @@ public final class Asker {
      * Keeps a cite only when its number names a retrieved chunk.
      * The first time a valid number appears it becomes the next source, and every candidate
      * with that same original number is rewritten to that same new number. A number that was
-     * not retrieved is removed only from a candidate, together with a separating comma,
-     * {@code and}, or {@code cf.} that only attached it, and with parentheses that held nothing else.
+     * not retrieved is removed only from a candidate. A comma, {@code and}, {@code cf.}, or {@code 和}
+     * goes with it when that word joins two citations, or when it is inside parentheses beside the marker.
+     * A connective between ordinary words stays. Parentheses left empty are removed.
      * Indexes, calls, and expression lists are not candidates and are never edited.
-     * A parenthesis is a call only in {@code ident(}, {@code )(}, and {@code ](}.
-     * A {@code (} after whitespace or at the start opens prose, so {@code ([n])} is a citation.
+     * A parenthesis is a call in {@code ident(}, {@code )(}, and {@code ](}, and an expression when
+     * {@code =}, an operator, or a keyword such as {@code if} or {@code return} precedes it.
+     * {@code Servlets ([n])} is still a citation.
      * Afterwards the numbers written into candidate positions are exactly {@code 1..cards},
      * and each one is that card. A single {@code [n]} left outside code collides when {@code n}
      * names a retrieved chunk ({@code 1..retrieved}) and this pass did not write it.
@@ -102,7 +104,7 @@ public final class Asker {
                 }
             }
             if (kept.isEmpty()) {
-                cursor = omitRemovedMarker(out, raw, matcher.end());
+                cursor = omitRemovedMarker(out, raw, matcher.end(), code);
                 removed = true;
             } else {
                 int start = out.length();
@@ -120,6 +122,9 @@ public final class Asker {
             }
         }
         appendSlice(out, raw.substring(cursor), removed);
+        if (removed) {
+            trimTrailingSpaces(out);
+        }
         String text = out.toString();
         if (!citationsMatchCards(text, ordered, written, retrieved.size())) {
             return new CitationMap(withoutUnretrievedProse(raw, code, retrieved.size()), List.copyOf(retrieved));
@@ -156,7 +161,7 @@ public final class Asker {
                 kept.add(part.strip());
             }
             if (kept.isEmpty()) {
-                cursor = omitRemovedMarker(out, raw, matcher.end());
+                cursor = omitRemovedMarker(out, raw, matcher.end(), code);
                 removed = true;
             } else if (!dropped) {
                 out.append(raw, matcher.start(), matcher.end());
@@ -176,6 +181,9 @@ public final class Asker {
             }
         }
         appendSlice(out, raw.substring(cursor), removed);
+        if (removed) {
+            trimTrailingSpaces(out);
+        }
         return out.toString();
     }
 
@@ -296,6 +304,10 @@ public final class Asker {
     /** Words that introduce an expression, as in {@code return [1, 2]}. */
     private static final Set<String> EXPRESSION_WORDS = Set.of(
             "return", "throw", "yield", "await", "new", "sizeof", "typeof", "instanceof", "delete");
+
+    /** A {@code (} after one of these, ignoring spaces, opens an expression, not a citation. */
+    private static final Set<String> PAREN_KEYWORDS = Set.of(
+            "if", "while", "for", "switch", "else", "catch", "do");
 
     /** Fenced blocks, indented code blocks, and inline code. Markers inside them are not citations. */
     private static List<int[]> codeSpans(String raw) {
@@ -449,8 +461,8 @@ public final class Asker {
      * closing emphasis ({@code **A** [1]}, {@code _A_ [1]}), and a parenthesis that opens prose
      * ({@code ([1])}, {@code Servlets ([1])}).
      * It is not part of an expression: an index, a call ({@code ident(}, {@code )(}, {@code ](}),
-     * an assignment, or a list literal such as {@code print([1, 2, 3])}, {@code foo(a, [1, 2])},
-     * or {@code return [1, 2]}.
+     * an assignment ({@code x = ([1])}), a keyword parenthesis ({@code if ([1])}, {@code return ([1])}),
+     * or a list literal such as {@code print([1, 2, 3])}, {@code foo(a, [1, 2])}, or {@code return [1, 2]}.
      */
     private static boolean isProseCitation(String raw, int bracketAt, List<int[]> code) {
         return roleAt(raw, bracketAt, code) == Role.PROSE;
@@ -487,7 +499,7 @@ public final class Asker {
             return Role.PROSE;
         }
         if (token == '(') {
-            return callParen(raw, at) ? Role.OPAQUE : Role.PROSE;
+            return expressionParen(raw, at, code) ? Role.OPAQUE : Role.PROSE;
         }
         if (isExpressionToken(token)) {
             return gluedEmphasis(raw, at) ? Role.READABLE : Role.OPAQUE;
@@ -507,15 +519,41 @@ public final class Asker {
     }
 
     /**
-     * {@code ident(}, {@code )(}, and {@code ](} are calls. The character directly before
-     * {@code (} decides: whitespace or the start of the text opens prose, as in {@code ([n])}.
+     * A call ({@code ident(}, {@code )(}, {@code ](}), or a parenthesis that still belongs to an
+     * expression: {@code =} or another operator, a comma that is not a citation list, or a keyword
+     * such as {@code if}, {@code while}, {@code return}, {@code for}, {@code switch}, or {@code new}.
+     * Spaces before {@code (} do not matter. {@code Servlets ([1])} stays prose.
      */
-    private static boolean callParen(String raw, int parenAt) {
-        if (parenAt <= 0) {
+    private static boolean expressionParen(String raw, int parenAt, List<int[]> code) {
+        if (parenAt > 0) {
+            char immediate = raw.charAt(parenAt - 1);
+            if (isIdent(immediate) || immediate == ')' || immediate == ']') {
+                return true;
+            }
+        }
+        int at = parenAt - 1;
+        while (at >= 0 && isSpaceTab(raw.charAt(at))) {
+            at--;
+        }
+        if (at < 0 || raw.charAt(at) == '\n' || raw.charAt(at) == '\r') {
             return false;
         }
-        char previous = raw.charAt(parenAt - 1);
-        return isIdent(previous) || previous == ')' || previous == ']';
+        char token = raw.charAt(at);
+        if (isExpressionToken(token)) {
+            return true;
+        }
+        if (token == ',') {
+            return !commaContinuesCitation(raw, at, code);
+        }
+        if (!isIdent(token)) {
+            return false;
+        }
+        int end = at + 1;
+        while (at >= 0 && isIdent(raw.charAt(at))) {
+            at--;
+        }
+        String word = raw.substring(at + 1, end).toLowerCase(Locale.ROOT);
+        return EXPRESSION_WORDS.contains(word) || PAREN_KEYWORDS.contains(word);
     }
 
     private static boolean closesCitation(String raw, int close, List<int[]> code) {
@@ -734,26 +772,32 @@ public final class Asker {
     }
 
     /**
-     * The marker named nothing retrieved. Drop a comma, {@code and}, or {@code cf.} that
-     * only separated it from a neighbor, then drop parentheses that are now empty.
-     * A sentence comma with prose on the other side, as in {@code Text, [9] only}, stays.
+     * The marker named nothing retrieved. A comma, {@code and}, {@code cf.}, or {@code 和}
+     * is removed with it only when that word joins this marker to another citation, or when
+     * it sits inside parentheses directly beside the marker. Otherwise only the marker goes.
+     * Parentheses left empty, or holding only a leftover cue such as {@code see}, are removed.
      * Returns where copying resumes.
      */
-    private static int omitRemovedMarker(StringBuilder out, String raw, int markerEnd) {
-        int cursor = skipFollowingConnective(raw, markerEnd);
+    private static int omitRemovedMarker(StringBuilder out, String raw, int markerEnd, List<int[]> code) {
+        boolean inParen = insideParentheses(raw, markerEnd, code);
+        int cursor = skipFollowingConnective(raw, markerEnd, inParen);
         if (cursor == markerEnd) {
-            stripPrecedingConnective(out, raw, cursor);
+            stripPrecedingConnective(out, raw, cursor, inParen);
         }
-        return dropEmptyParens(out, raw, cursor);
+        return dropVacantParens(out, raw, cursor);
     }
 
-    /** A comma, {@code and}, or {@code cf.} immediately after the marker. The index sits past it. */
-    private static int skipFollowingConnective(String raw, int at) {
+    /**
+     * A comma, or {@code and}/{@code cf.}/{@code 和}, immediately after the marker.
+     * The word is dropped when a citation marker is on its other side, or when the marker
+     * is inside parentheses. A word between ordinary prose stays.
+     */
+    private static int skipFollowingConnective(String raw, int at, boolean inParen) {
         int start = skipSpaceTab(raw, at);
         if (start >= raw.length()) {
             return at;
         }
-        if (raw.charAt(start) == ',') {
+        if (isComma(raw.charAt(start))) {
             int after = skipSpaceTab(raw, start + 1);
             if (after >= raw.length() || raw.charAt(after) == '[' || raw.charAt(after) == ')'
                     || isTightPunct(raw.charAt(after))) {
@@ -762,25 +806,49 @@ public final class Asker {
             return at;
         }
         String token = tokenAt(raw, start);
-        if (token == null) {
+        if (token == null || !wordJoinsCitation(raw, start + token.length(), inParen)) {
             return at;
         }
         return skipSpaceTab(raw, start + token.length());
     }
 
-    private static void stripPrecedingConnective(StringBuilder out, String raw, int cursor) {
+    private static void stripPrecedingConnective(StringBuilder out, String raw, int cursor, boolean inParen) {
         int end = out.length();
         while (end > 0 && isSpaceTab(out.charAt(end - 1))) {
             end--;
         }
         int token = precedingTokenStart(out, end);
-        if (token >= 0) {
+        if (token >= 0 && (inParen || citationBefore(out, token))) {
             out.setLength(token);
             return;
         }
-        if (end > 0 && out.charAt(end - 1) == ',' && danglingAfter(raw, cursor)) {
+        if (end > 0 && isComma(out.charAt(end - 1)) && danglingAfter(raw, cursor)) {
             out.setLength(end - 1);
         }
+    }
+
+    /** The connective's other side is a citation bracket, or the marker is inside parentheses. */
+    private static boolean wordJoinsCitation(String raw, int afterToken, boolean inParen) {
+        if (inParen) {
+            return true;
+        }
+        int index = skipSpaceTab(raw, afterToken);
+        return index < raw.length() && raw.charAt(index) == '[';
+    }
+
+    private static boolean citationBefore(StringBuilder out, int tokenStart) {
+        int index = skipBack(out, tokenStart);
+        if (index > 0 && out.charAt(index - 1) == ')') {
+            index = skipBack(out, index - 1);
+        }
+        return index > 0 && out.charAt(index - 1) == ']';
+    }
+
+    private static int skipBack(StringBuilder out, int index) {
+        while (index > 0 && isSpaceTab(out.charAt(index - 1))) {
+            index--;
+        }
+        return index;
     }
 
     /** Index of a trailing {@code cf.}, {@code cf}, or {@code and}, or -1. */
@@ -794,6 +862,9 @@ public final class Asker {
         if (endsWithToken(out, end, "and")) {
             return end - 3;
         }
+        if (endsWithToken(out, end, "和")) {
+            return end - 1;
+        }
         return -1;
     }
 
@@ -806,22 +877,53 @@ public final class Asker {
         return c == ')' || isTightPunct(c);
     }
 
-    private static int dropEmptyParens(StringBuilder out, String raw, int cursor) {
+    /**
+     * Drops {@code ()} and parentheses whose only leftover is a cue word, as in {@code (see )}
+     * or {@code (a )} after the marker inside them was removed.
+     */
+    private static int dropVacantParens(StringBuilder out, String raw, int cursor) {
         while (true) {
-            int end = out.length();
-            while (end > 0 && isSpaceTab(out.charAt(end - 1))) {
-                end--;
-            }
-            if (end == 0 || out.charAt(end - 1) != '(') {
-                return cursor;
-            }
             int close = skipSpaceTab(raw, cursor);
             if (close >= raw.length() || raw.charAt(close) != ')') {
                 return cursor;
             }
-            out.setLength(end - 1);
+            int open = matchingOpen(out);
+            if (open < 0 || !vacantInterior(out.substring(open + 1))) {
+                return cursor;
+            }
+            out.setLength(open);
             cursor = close + 1;
         }
+    }
+
+    private static int matchingOpen(StringBuilder out) {
+        int depth = 0;
+        for (int index = out.length() - 1; index >= 0; index--) {
+            char c = out.charAt(index);
+            if (c == ')') {
+                depth++;
+            } else if (c == '(') {
+                if (depth == 0) {
+                    return index;
+                }
+                depth--;
+            }
+        }
+        return -1;
+    }
+
+    /** Empty, or a single leftover cue such as {@code see}, {@code a}, {@code cf.}, or {@code 和}. */
+    private static boolean vacantInterior(String interior) {
+        String trimmed = interior.strip();
+        if (trimmed.isEmpty() || "和".equals(trimmed) || "cf.".equalsIgnoreCase(trimmed)) {
+            return true;
+        }
+        for (int i = 0; i < trimmed.length(); i++) {
+            if (!isIdent(trimmed.charAt(i))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static String tokenAt(String raw, int at) {
@@ -833,6 +935,9 @@ public final class Asker {
         }
         if (startsWithToken(raw, at, "cf")) {
             return "cf";
+        }
+        if (startsWithToken(raw, at, "和")) {
+            return "和";
         }
         return null;
     }
@@ -882,29 +987,54 @@ public final class Asker {
             return;
         }
         int index = 0;
-        while (index < slice.length() && (slice.charAt(index) == ' ' || slice.charAt(index) == '\t')) {
+        while (index < slice.length() && isSpaceTab(slice.charAt(index))) {
             index++;
         }
-        boolean punct = index < slice.length() && isTightPunct(slice.charAt(index));
-        if (punct) {
+        if (index >= slice.length()) {
+            // A zero-length gap means the next citation is about to be written, so the space
+            // before the removed marker still separates that word. Spaces that were the whole
+            // tail are trailing and go away.
+            if (slice.length() > 0) {
+                trimTrailingSpaces(out);
+            }
+            return;
+        }
+        if (slice.charAt(index) == '\n' || slice.charAt(index) == '\r') {
             trimTrailingSpaces(out);
             out.append(slice.substring(index));
             return;
         }
-        boolean outSpace = out.length() > 0
-                && (out.charAt(out.length() - 1) == ' ' || out.charAt(out.length() - 1) == '\t');
+        char next = slice.charAt(index);
+        if (isTightPunct(next) || next == ')') {
+            trimTrailingSpaces(out);
+            out.append(slice.substring(index));
+            return;
+        }
+        boolean boundary = out.length() == 0
+                || out.charAt(out.length() - 1) == '\n'
+                || out.charAt(out.length() - 1) == '\r';
+        if (boundary) {
+            out.append(slice.substring(index));
+            return;
+        }
+        boolean outSpace = out.length() > 0 && isSpaceTab(out.charAt(out.length() - 1));
         if (outSpace) {
             out.append(slice.substring(index));
             return;
         }
-        if (index > 0 && index < slice.length()) {
+        if (index > 0) {
             out.append(' ');
         }
         out.append(slice.substring(index));
     }
 
+    private static boolean isComma(char c) {
+        return c == ',' || c == '，' || c == '、';
+    }
+
     private static boolean isTightPunct(char c) {
-        return c == '.' || c == ',' || c == ';' || c == ':' || c == '!' || c == '?';
+        return c == '.' || c == ',' || c == ';' || c == ':' || c == '!' || c == '?'
+                || c == '。' || c == '；' || c == '：' || c == '！' || c == '？' || c == '，' || c == '、';
     }
 
     private static void trimTrailingSpaces(StringBuilder out) {
