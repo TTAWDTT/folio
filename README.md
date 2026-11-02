@@ -1,467 +1,255 @@
 # Folio
 
-Folio is an IntelliJ IDEA plugin for CST3492 Group B. It sits in a tool window and answers questions from the course files the lecturer has indexed. When a retrieved chunk is used, the answer cites it inline as [1], [2] and lists that chunk under the answer. When nothing in the index is relevant, the answer says it is not grounded in course files and does not invent a citation.
+Folio is an IntelliJ IDEA plugin for CST3492 Group B. It answers questions from indexed course files, uses selected code as context, generates JUnit previews, drafts commit messages, and creates short course drills.
 
-Group B covers answering from course material and the IDE actions around it: generate a JUnit test, draft a commit message, and run a short course drill. It does not edit the student's code or drive the built-in diff viewer.
+Group B requires F0 course retrieval and F1 IDE actions. Source-code editing and the built-in diff viewer belong to Group C. Folio retains an explicit **Write test file** action for a validated test preview. It does not execute Git commits or change staging.
 
-Plugin id `cst3492.folio`, version 0.1.0. The tool window is named **Folio**, anchored on the right. The course plan is `docs/course-ta-plugin-plan.md`, with a Chinese copy at `docs/course-ta-plugin-plan.zh.md`.
+The plugin id is `cst3492.folio`, version `0.1.0`. The **Folio** tool window is on the right. [review.md](review.md) records the review, selected designs, implementation status, and verification gaps. The original course plans are [English](docs/course-ta-plugin-plan.md) and [Chinese](docs/course-ta-plugin-plan.zh.md).
 
-## Demo story
+## Use Folio in a course project
 
-A twenty-minute demo in a course project:
+1. Open **Folio**. On **Files**, choose **Index files** and select course materials. Indexing needs no API key. Materials are shared across projects in the same IDE configuration.
+2. On **Ask**, enter a course question. Without a key, Folio retrieves local sources and explains that model configuration is missing. It makes no HTTP request.
+3. Open the gear to configure the endpoint, model, and API key. A typed key can be used for the next request before saving. **Save settings** stores it in Password Safe and reports success after the write finishes. An empty key field keeps the stored key. **Clear API key** removes it.
+4. Send a question with a configured key. Folio shows the answer and labels whether its cards are inline citations, retrieved context, or a citation fallback. Follow-up questions use bounded conversation context. **Stop** cancels active work. **Clear chat** clears the conversation and prevents a late reply from restoring it.
+5. Select a Java class or method and run **Generate JUnit From Scenario** in the editor menu. Accept a natural-language scenario to generate a preview. Inspect the Java, target path, and validation note before choosing **Write test file**.
+6. Stage changes and run **Draft Folio Commit Messages** from the commit dialog or the Commit tab. Folio captures every configured Git root, shows the captured diff and call estimate, and asks for three candidates. **Copy** and **Fill commit box** remain available for the current, unchanged staged snapshot.
 
-1. Open **Folio**. The header reads Folio / Course assistant. With no key stored, the badge says **No API key**, and Ask, Preview test, and Draft commit messages are disabled.
-2. Open the gear. Set the base URL and model if needed, paste an API key, and choose **Save settings**. The field clears and the badge becomes **Key ready · deepseek-flash**. An empty Save after that keeps the stored key.
-3. On **Files**, choose **Index files** and pick a lecture PDF and a slide deck. Each row shows the file name, the directory, and the page or slide count. **Remove** asks before deleting that path. Re-index and Remove also drop a legacy row stored under the bare file name.
-4. On **Ask**, type a question about the lecture. Folio shows the question, then the answer. Under the answer, each source card is a retrieved chunk the reply cited: the file name, the page or slide (and part, when a page was split), and a short excerpt. The numbers match the [1], [2] marks in the answer. Clicking a card opens a text file in the editor at that excerpt, or a preview when the file is a PDF, a slide deck, or not on disk. A question that matches nothing says the answer is not grounded in course files and shows no source cards.
-5. Put the caret on a method and run **Generate JUnit From Scenario** from the editor menu. The dialog is prefilled with the scenario already in the tool window. **Preview test** fills the preview. **Write test file** stays off until that preview returns a test, then writes it next to the class. A failed preview, or a reply that is not a test, leaves a note in the preview and does not enable Write.
-6. Stage a change and run **Draft Folio Commit Messages** from the commit dialog. Folio drafts three messages, copies the first, and, when the action was started from the commit box, places that first message in the box.
+The composer supports Enter to send, Shift+Enter for a newline, and IME composition. It grows to six rows and then scrolls. The header wraps at narrow widths, and section buttons retain their tooltips when labels collapse. The UI follows the IDE theme and zoom.
 
-The screenshots below are the tool window in Islands Light and Islands Dark, from before the theme in the next section. They are not a recording of that full demo.
+## Ask and citation behavior
 
-The tool window follows the IDE theme and the IDE zoom. The header wraps when the key chip does not fit beside the title, and the section bar drops to icons with tooltips when the labels would be cut off. Cards, the section bar, status banners, and the key badge take their colors from the platform, so the same window is readable in light and dark. Empty Files and Commit sections say what to do next, on the same surface as the section rather than a card inside a card. A running call, a saved key, a failure, and a successful write each use the platform banner color.
+Retrieval is local BM25, without embeddings or a web search. Each request captures a read-only course-library snapshot, the current question, selected code, conversation context, and connection settings. Retrieval uses the current question and selection and returns at most four chunks. History is quoted context, not current citation evidence.
 
-## Features
+A source card shows the document, page, slide, or section, any chunk part, and an excerpt. Clicking a text file on disk opens the editor near the excerpt. PDFs, slide decks, other non-text files, and missing paths use an indexed-chunk preview.
 
-### Ask, with sources
+The evidence label comes from `Answer.Evidence`:
 
-The Ask section is a chat. The message list fills the section. An empty list shows a hint. A question is a bubble on the right and the answer is a bubble on the left, with copy on each. Source cards sit under the answer. A card shows `[n]`, the file name, `page N` or `slide N` (plus `part N` when that page or slide was split), and a short excerpt of the chunk. The composer stays at the bottom: a field that grows up to six lines and then scrolls, a placeholder, Enter to send, Shift+Enter for a newline, and a send button that shows a spinner while the model is working.
+| Evidence | Meaning |
+| --- | --- |
+| `GENERAL` | No course chunk supports the current retrieval context. The answer is presented as general knowledge. |
+| `INLINE` | The reply contains mapped prose references to retrieved chunks. |
+| `RETRIEVED` | Course chunks were supplied, but the reply has no mapped prose references. Cards show retrieved context. |
+| `INVALID` | The mapper removed out-of-range prose references. Remaining cards do not make those references valid. |
+| `AMBIGUOUS` | A literal number conflicts with citation numbering. The mapper preserves in-range numbers and lists all retrieved chunks. |
+| `CONFIGURATION` | No model call was made because a key is missing. Local retrieval cards remain available. |
 
-Retrieval still runs before the model call. At most four chunks are sent. Each one is numbered in the prompt. The model is told to cite those numbers inline as [1], [2], with a space before the bracket, and not to invent a number. Folio then checks the reply:
+These labels describe provenance and citation syntax. They do not verify whether a model's claims follow from the material. With no relevant chunks, Folio states that the answer is not grounded in course files and removes invented prose references.
 
-- A marker is kept only when its number names one of those retrieved chunks. Markers are rewritten so [1], [2] follow the source list under the answer.
-- A number that was not retrieved is removed from the text and never becomes a card. Removing one tidies the space it left, including a space at the start or end of a line. A comma, `and`, `cf.`, or `和` is removed with the marker only when that word joins two citations, as in `[1] and [9]`, or when it sits inside parentheses beside the marker. A connective between ordinary words stays, so `Servlets [9] and JPA` becomes `Servlets and JPA` and `Cf. [9] page` becomes `Cf. page`. Parentheses left empty, or holding only a cue such as `see`, `cf.`, `and`, `见`, `和`, or `参见`, are removed. An ordinary word stays, so `(HttpServlet [9])` becomes `(HttpServlet)`. Full-width `（）` follow the same rule. A doubled Chinese comma such as `，，` is collapsed. That happens only when the marker was a citation. Adjacent prose markers such as `[1][2]` are both mapped, and so is a parenthetical list such as `(see [1], [2])`, a marker after a line-start `*`, `-`, or `>` (including `> > [1]`), a marker after closing emphasis (`**A** [1]`, `_A_ [1]`), and `([n])` when the parenthesis opens prose. A `(` is a call in `ident(`, `)(`, and `](` when the name is ASCII letters, digits, `_`, or `$`. A Chinese character before `(` is still prose, and a full-width `（` is never a call, so `如下（[2]）见 [3]` renumbers both markers. It is also an expression when `=`, an operator, or a keyword such as `if`, `while`, `return`, `for`, `switch`, or `new` precedes it, ignoring spaces, so `x = ([3])` and `if ([3])` are left as written. That leftover still counts: `a + ([1]) and see [3]` keeps the original numbers and every retrieved chunk. A two-space ending before a newline is kept. `[x](u) [9] and [1]` keeps `and`. Whitespace or the start of the text before `(` still makes `Servlets ([1])` a citation, while `foo([1])`, `foo()([1])`, and `m[0]([1])` stay literal. The same original number always becomes the same new number. An index, a call, or a list in an expression (`m[0][2]`, `foo()[1]`, `print([1, 2, 3])`, `foo(a, [1, 2])`, `foo(a, [5])`, `return [1, 2]`, `x = [1, 2]`, `a * [1]`) is not a citation and is never edited. If a `[n]` that this pass did not write names any retrieved chunk (`1` through the chunk count, not only the cards that were kept), including the label of a markdown link such as `[2](u)`, Folio lists every retrieved chunk in retrieval order and leaves the in-range markers as written. A prose marker that was not retrieved, such as `[9]`, is still removed on that path. Fenced blocks (including `~~~` and a fence indented by up to three spaces), four-space code blocks, and inline code are left as written, including their indentation. A citation on the line after a closing fence is still a citation.
-- If the reply contains no markers, the source list is the retrieved chunks. The model was given only those chunks and did not name a subset.
-- If every marker is out of range, there are no source cards. The card says: "The reply did not cite a retrieved course chunk."
+The visible chat holds at most 40 exchanges. Conversation context retains at most 40 completed Ask turns, including the selected code captured for each turn. The next request captures up to eight complete turns within 8,000 characters. `Asker` preserves every accepted history character as quoted data, including Java indexes and earlier reference numbers. History above 8,000 characters is rejected explicitly. Earlier references are not current citation evidence. Failed requests, configuration-only responses, and drills do not become Ask history.
 
-Clicking a source opens that course file. A text file on disk opens in the editor with the caret at the excerpt. A PDF, a slide deck, another non-text file, or a path that is not on disk opens a preview of the indexed chunk instead.
+**Ask Folio** in the editor asks about the selection. **Folio Course Drill** requests three short questions about selected code through the same retrieval and citation path. An empty drill selection makes no model call.
 
-If the key is missing, Ask does not call the model. The card shows: "No API key is configured. Add an API key in the Folio tool window and save settings." If there were hits, those retrieved chunks stay on the card as sources.
+<details>
+<summary>Citation compatibility reference</summary>
 
-If the key is present and no chunk passes the cutoff, the answer starts with: "Response is based on general knowledge; no specific course material is referenced." The card states: "This answer isn't grounded in course files." There are no source cards. A prose [n] the model invents is removed. A list or index in code is not.
+`Asker.mapCitations` retains the existing handling of prose, code, and mixed numbering:
 
-**Ask Folio** on the editor popup asks "Explain the selected code." or, with no selection, "Explain this." **Folio Course Drill** asks the model for three short questions about the selection and still cites chunks. With no selection the drill says "Select some code first." and does not call the model.
+- Valid prose markers are renumbered in first-citation order. Repeated original numbers retain the same new number. The source list follows those numbers.
+- Adjacent `[1][2]`, lists such as `(see [1], [2])`, line-start `*`, `-`, or `>` markers, closing emphasis such as `**A** [1]`, and prose parentheses such as `Servlets ([1])` are mapped. Chinese prose and full-width parentheses follow the same rule.
+- Unknown prose numbers are removed. Citation-only connectors such as `and`, `cf.`, or `和` and empty citation parentheses are removed with them. Ordinary words and sentence punctuation remain. For example, `Servlets [9] and JPA` becomes `Servlets and JPA`, and `(HttpServlet [9])` becomes `(HttpServlet)`.
+- Calls, indexes, and expression lists stay literal. Examples include `foo([1])`, `foo()([1])`, `m[0]([1])`, `m[0][2]`, `print([1, 2, 3])`, `return [1, 2]`, and `x = [1, 2]`. ASCII names including `$` count as call names. A full-width `（` remains prose.
+- A readable expression such as `a + ([1])` or a Markdown link label such as `[2](url)` can conflict with a retrieved number. Folio then preserves in-range numbering, returns every retrieved chunk in retrieval order, and reports `AMBIGUOUS`. Out-of-range prose references are still removed.
+- Backtick and tilde fences, fences indented by up to three spaces, four-space code blocks, and inline code remain unchanged. A citation after a closing fence is still mapped. Two trailing spaces that form a Markdown line break are preserved.
+- A reply without citation markers keeps all retrieved chunks as context. A reply whose prose markers are all invalid has no source cards and reports invalid source markers.
 
-### Files
+`AskerTest` covers these compatibility cases, including seeded mixed prose/code examples. Citation mapping is not a semantic answer-quality test.
 
-**Index files** opens a multi-select file chooser. It does not need an API key. Each file is stored under its absolute path, so two `notes.pdf` files in different directories stay separate. Re-indexing a path replaces that path and also drops a legacy row whose source id is only the file name. Older `index.tsv` files stored that bare name. A second file with the same name in another directory is left in place.
+</details>
 
-PDF and other formats Tika can turn into HTML are chunked from `div.page`. PPTX is read with POI so the slide number follows the order shown in the deck, including speaker notes on that slide and excluding the slide master. A page or slide longer than 700 characters is split with a 100-character overlap. The row shows the file name, the parent directory when the source is a path, and the distinct page or slide count plus the chunk count.
+## Course files and recovery
 
-**Remove** asks for confirmation, then deletes chunks whose source id is that path. Removing a path also deletes the legacy bare-name row for that file name. Removing a row that is already a bare name deletes only that row.
+**Index files** accepts multiple files. PDF page extraction preserves original page numbers, including blank-page gaps. PPTX extraction preserves slide order and includes nested groups, table cells, and attached notes. Slide-master content is excluded. TXT, Markdown, and DOCX fixtures use Tika's non-paginated body fallback and are labeled **section**, without invented page numbers. Other Tika-readable formats can be selected, but do not have the same format-specific regression coverage.
 
-The index is saved as `index.tsv` under the IDE config directory `folio/`. It is reloaded when the tool window is created.
+`CourseChunks` splits each page, slide, or section into at most 700 Java characters with a 100-character overlap. It prefers a space or newline in the latter half of a chunk and avoids splitting UTF-16 surrogate pairs. Split chunks retain their original scope number and a part identifier.
 
-### Test generation
+Sources use absolute paths, so two `notes.pdf` files in different directories remain distinct. Re-indexing replaces that source. **Remove** asks for confirmation. Re-index and Remove also clear a matching legacy bare-name row without removing another absolute path with the same basename.
 
-**Generate JUnit From Scenario** opens a multiline dialog, prefilled with the text already in the Test section. Cancel, or an empty accept, does not generate. A successful accept stores the scenario and starts a preview.
+`CourseLibrary` parses and validates the whole selected batch before committing it. A missing file, parser failure, zero-text result, or cancellation before commit preserves the old library. Overlapping changes to the same source are rejected with a retry message. Independent-source changes merge under the store lock. A cancellation after the atomic commit does not undo that committed revision.
 
-**Preview test** needs a key. The model is asked for one JUnit test class that includes an `org.junit` import. The result is written into the preview area. Write turns on only when that reply contains `org.junit` or `class `. A missing scenario, a missing key, a blank reply, an error, or any other reply stays in the preview and leaves Write off. A reply that is not a test is shown under the note "The reply was not a JUnit test."
+The library lives under the IDE configuration directory:
 
-**Write test file** copies that successful preview into a new Java file in the directory of the class or method the editor action captured. The file body is that preview string, not a second model call. With no directory captured, Write reports that a class or method must be selected and does not replace the preview. Starting another preview turns Write off until the new call succeeds.
+| File | Purpose |
+| --- | --- |
+| `folio/index.json` | Schema-versioned chunks, library revision, and source revisions. |
+| `folio/index.backup.json` | One previous valid JSON version. |
+| `folio/index.lock` | Process coordination during reads and commits. |
+| `folio/index.tsv` | Legacy import input. Migration preserves the original. |
 
-### Commit messages
+The store validates a temporary JSON file before an atomic replacement. A damaged current file falls back to a valid backup with a warning. If both are invalid, loading fails explicitly. Legacy migration also rejects malformed rows. Unsupported atomic moves fail rather than report a successful save. The protocol does not guarantee directory durability during power loss.
 
-**Draft commit messages** needs a key, a Git repository, and a non-empty staged diff (`git diff --cached -M`). The diff sent to the model is capped at 12,000 characters, without cutting a UTF-16 surrogate pair. The model is asked for three conventional messages separated by a line that is only `---`.
+All open Folio panels in the same IDE process observe committed library snapshots. Separate IDE processes coordinate writes and reread current state before committing, but do not receive cross-process push updates.
 
-The tool window shows the bounded diff and the numbered messages. Message 1 is copied to the clipboard. If the action was started from the commit dialog, message 1 is also placed in the commit message box ("Placed message 1 in the commit box and copied it."). From the tool window button, with no commit box attached, the line is "Copied message 1."
+### Retrieval rules
 
-## Screenshots
+`CourseIndex.top` uses BM25 with `k1 = 1.2` and `b = 0.75`. A chunk must cover at least half the question's coverage units. Among qualifying chunks, scores below 25% of the best score are dropped.
 
-Taken in IntelliJ IDEA 2026.2.4 with the new UI, before the theme above. Islands Light is the light set. Islands Dark is the dark set. The previous single-form window was not re-shot, and there is no screenshot of the Commit section. Headless paints of the themed window are not a substitute for these: icon glyphs do not draw without a window.
+English terms are lowercase words with a stop list and light stemming. Coverage ignores courtesy words and general task verbs when more specific terms remain. Those verbs stay indexed and remain searchable on their own. Chinese, Japanese, and Korean terms use overlapping bigrams. Chinese coverage groups runs of content characters and removes listed courtesy phrases. `Tokens` contains the exact word and character lists.
 
-Ask, Islands Light:
+The fixed public fixture has 12 positive and 12 negative queries over synthetic Java lecture text. The before/after check retained 12 of 12 positive hits and reduced false hits from 2 of 12 to 0 of 12. A separate local extraction check retained 3 real course PDFs, 85 page scopes, and 90 chunks. These are bounded extraction and retrieval checks, not model-answer quality measurements.
 
-![Folio Ask section, Islands Light](docs/images/ask-islands-light.png)
+## JUnit preview and explicit write
 
-Files, Islands Light. Indexed files would list under this empty state after **Index files**:
+**Generate JUnit From Scenario** opens a multiline scenario dialog. Cancel or an empty accept makes no generation request. Generation requires captured Java source and a key. The request keeps its scenario, source, target directory, and connection together.
 
-![Folio Files section, Islands Light](docs/images/files-islands-light.png)
+The Test tab separates the original model reply from the Java preview. `GeneratedTest.parse(Project, raw)` extracts one Java unit from a plain reply or one fenced block. IntelliJ PSI checks Java syntax and recognizes common JUnit annotations, nested containers, and basic method signatures. The filename comes from the parsed top-level declaration. The preview states, "Java syntax checked. Recognized JUnit annotations found. Not compiled or run."
 
-Test, Islands Light. This shot is from before Write was tied to a successful preview, so **Write test file** still looks enabled. In the current window it stays disabled until a preview returns a test. Preview test is disabled until a key is present:
+A valid preview with no captured directory remains visible but cannot be written. Folio prefers an existing matching package directory under the same module's Java test-source root. When none exists, it retains the adjacent source directory as the fallback. The target path is shown before writing.
 
-![Folio Test section, Islands Light](docs/images/test-islands-light.png)
+**Write test file** uses the current accepted preview and its original directory, not the transcript or a later selection. It rejects a closed project, unavailable or read-only directory, mismatched package, and existing filename. It creates the file through an IntelliJ write command, opens the created file, and supports IDE Undo. The model is not called again. A newer preview, Stop, or disposal prevents an old request from becoming the writable result.
 
-Settings, Islands Light. The key field is empty because a stored key is not copied back into the form:
+These checks do not establish runner-valid JUnit. They do not validate factory return compatibility, argument providers, generic types, inherited or composed tests, dependencies, discovery, execution, or test quality. Use the project's test command after inspection.
 
-![Folio settings, Islands Light](docs/images/settings-islands-light.png)
+## Commit candidates from all staged changes
 
-Ask, Islands Dark:
+Folio captures each configured Git root and falls back to the project base when no roots are configured. Capture includes the staged inventory, full text patch, binary metadata, renames, deletions, submodule changes, and initial commits. It disables external diff and textconv execution. The captured fingerprint binds candidates to that staged state.
 
-![Folio Ask section, Islands Dark](docs/images/ask-islands-dark.png)
+A single request handles a small diff. Larger diffs use ordered batches of at most 12,000 Java characters, followed by one synthesis request over every returned batch summary. No tail is silently discarded. Missing summaries and size or call limits fail explicitly without presenting a complete draft. Processing every raw character does not prove that the model's summaries retain every semantic detail.
 
-Settings, Islands Dark, default model `deepseek-flash`:
+The Commit tab shows roots, staged file count, character and call estimates, candidates, and the captured diff. It asks the model for three conventional commit messages separated by `---`. The number returned still depends on the provider response.
 
-![Folio settings, Islands Dark](docs/images/settings-islands-dark.png)
+Automatic copying or filling requires a current result, unchanged staging, and an unchanged original commit box. Automatic copying also preserves clipboard contents changed during generation. Explicit **Copy** and **Fill commit box** recheck staging and task identity. A full fingerprint check runs in the background. Delivery checks captured index and reference-file metadata immediately before a clipboard or commit-box write, including linked worktrees, split indexes, and reftable references. This catches ordinary queued changes. The file observation and UI write do not form an atomic operation against arbitrary external writes. Fill preserves user edits and refuses a closed or unreadable target. These actions do not execute a commit or alter staging.
 
-## Requirements
+## Connection settings and limits
 
-- JDK 25. The Gradle build sets source and target to 25.
-- IntelliJ IDEA 2026.2. The plugin depends on platform build `262` through `262.*`. The Gradle project resolves IntelliJ IDEA 2026.2.4.
-- A DeepSeek-compatible chat endpoint if you want live answers. The default base URL is `https://api.deepseek.com` and the default model id is `deepseek-flash`. `deepseek-v4-pro` is also a current model id on that API. Folio does not change the default.
+| Setting | Storage | Default |
+| --- | --- | --- |
+| Base URL | Application `folio.xml`, through `TaSettings` | `https://api.deepseek.com` |
+| Model | Application `folio.xml` | `deepseek-flash` |
+| Credential origin | Application `folio.xml`, scheme, host, and port only | none |
+| API key | IntelliJ Password Safe, service generated from `Folio` and `apiKey` | none |
 
-## Build, run, and test
+`ProviderAccess` orders credential loading, saving, and clearing on one background executor. Its badge distinguishes loading, saving, clearing, ready, and failed states. A save reports success after persistence. Newer edits are not cleared by an older callback.
 
-From the repository root, with JDK 25 on `JAVA_HOME`:
+A non-empty typed key takes precedence for a request. An empty field uses a stored key only for its saved HTTP or HTTPS origin. Changing origin requires a typed or newly saved key. While credentials are loading, saving, or clearing, Folio asks you to wait or enter a key for the request. It does not use the old cached key. An empty Save retains the stored key and its origin binding.
+
+The endpoint accepts HTTP and HTTPS, including remote HTTP hosts and query parameters. Folio appends `/chat/completions` unless that path is already present and preserves the query. URL credentials, fragments, unsupported schemes, invalid hosts, and invalid ports are rejected. Requests send a bearer token. Errors redact the actual submitted key, and connection objects do not print secrets.
+
+The following limits use Java characters unless the unit says bytes. They are not token budgets.
+
+| Boundary | Limit |
+| --- | --- |
+| Current Ask question plus selected code | 48,000 characters, with explicit refusal above the limit. |
+| Ask system and user prompt | 64,000 characters. |
+| HTTP model, system, and user text | 100,000 characters. |
+| HTTP response | 1,048,576 bytes. |
+| HTTP error detail | 500 characters before status and truncation text. |
+| HTTP timeouts | 20-second connection timeout and 60-second request timeout. |
+| Generated-test reply | 100,000 characters. |
+| Raw staged diff for generation | 240,000 characters. |
+| Commit batches and calls | At most 20 batches and 21 total calls. Continuation headers count toward each 12,000-character batch. |
+| Commit summary or final response | 8,000 characters each. |
+| Commit synthesis input | 24,000 characters. |
+| Commit cumulative system and user input | 280,000 characters. |
+| Each Git process output | 4,194,304 bytes and a 30-second deadline. |
+
+Continuation overhead can make a near-limit diff exceed the batch count. Folio refuses that request rather than omit content.
+
+## Build and verification
+
+The build requires JDK 25 and resolves IntelliJ IDEA 2026.2.4. The plugin targets platform builds `262` through `262.*` and depends on the Java plugin. A compatible chat endpoint is needed only for model-backed actions.
+
+Run these commands from the repository root with JDK 25 in `JAVA_HOME`:
 
 ```sh
-./gradlew test
-./gradlew buildPlugin
+./scripts/verify.sh
+```
+
+A nonzero exit means verification failed. The script runs `cleanTest test buildPlugin`, then rejects missing or empty required test suites, failures, errors, skipped tests, a corrupt ZIP, or missing plugin classes. It writes the measured count and plugin checksum to `build/verification/summary.json`. That generated summary is the result for the current checkout. A previous count is not proof of a new run.
+
+```sh
 ./gradlew runIde
 ```
 
-`test` runs the JUnit 5 suite. `buildPlugin` writes the plugin zip under `build/distributions/`. `runIde` launches a sandbox IDE with Folio installed. Open the tool window from the right stripe or with Find Action. The log line `Folio tool window created` means the factory ran.
+A nonzero exit means the sandbox launch failed. Successful launch alone does not verify a workflow. Open **Folio** in the sandbox. The `Folio tool window created` log confirms that its factory ran. `runIde` can require a first-time Compose hot-reload-agent download.
 
-`runIde` resolves a Compose hot-reload agent the first time it is not in the Gradle cache, so that task may need network even when `test` and `buildPlugin` run offline.
+GitHub Actions uses `scripts/verify.sh` and retains the summary, JUnit XML, and plugin ZIP as artifacts. This repository has not established a hosted CI pass merely by adding the workflow.
 
 ### Maven Central behind a firewall
 
-`build.gradle.kts` loads Tika, POI, Gson, PDFBox, and JUnit from Maven Central. The IntelliJ Platform plugin adds its own repositories for the IDE itself. Those IDE downloads are separate from Maven Central.
-
-To send Maven Central lookups to a mirror, pass a Gradle init script with `-I`. Keep the script outside this repo and do not commit a machine-specific path. Point the URL at whatever mirror you use:
+An external Gradle init script can add your Maven mirror. Replace the placeholder path with an existing script, then run:
 
 ```sh
 ./gradlew test buildPlugin -I /path/to/your-mirror.init.gradle
 ```
 
-```gradle
-allprojects {
-    repositories {
-        maven { url = uri("https://repo.example/maven") }
-    }
-}
-```
+A nonzero exit means tests or packaging failed. The mirror script does not retarget JetBrains IDE repositories. Keep machine-specific mirror configuration outside the repository.
 
-Replace `https://repo.example/maven` with the mirror. This does not retarget the JetBrains IDE repositories.
+## Architecture and ownership
 
-## Configuration
+`CourseLibrary` and `ProviderAccess` are application services. The first owns shared materials and committed revisions. The second owns connection settings and ordered Password Safe access. Each `FolioPanel` owns its task manager, bounded conversation, current results, and Swing presentation for one project/content lifetime.
 
-The gear opens a settings card. It starts collapsed. The badge and the gear both toggle it.
+`FolioToolWindowFactory` creates the panel, registers it in project user data through `FolioPanels`, and binds disposal to the tool-window content. Editor and VCS actions activate the tool window and find that project's panel. `FolioChrome` supplies the layout, cards, composer, responsive sections, and colors.
 
-| Setting | Where it is stored | Default |
-| --- | --- | --- |
-| Base URL | IDE application config `folio.xml`, via `TaSettings` | `https://api.deepseek.com` |
-| Model | same file | `deepseek-flash` |
-| API key | IntelliJ Password Safe, service name Folio / `apiKey` | none |
+The EDT captures immutable inputs. Background tasks use those values and read-only `CourseSearch` snapshots. `FolioTasks` tracks request IDs and typed success, failure, and cancellation outcomes. Test and Commit accept only the latest request. Delivery and later Write, Copy, or Fill require a live owner and current accepted result. Disposal cancels tasks and closes subscriptions. The activity indicator derives from active tasks.
 
-The key is not written into `folio.xml`. After a successful save the password field is cleared; the secret stays in the Password Safe.
-
-**Save settings** with a non-empty field stores that value and the badge becomes **Key ready**, plus the model name when the model field is not blank. **Save settings** with an empty field does not call the Password Safe. A key that was already stored stays stored, and the status line says the stored key was kept. **Clear API key** is the action that writes an empty secret and returns the badge to **No API key**.
-
-The badge is based on the stored secret, not on characters sitting in the field:
-
-- **No API key** when nothing is stored and the field is empty. Ask, Preview test, and Draft commit messages are disabled. Their tooltip is the missing-key sentence.
-- **Key not saved** when the field has characters and nothing is stored yet. Those three buttons are enabled, and a call uses the typed value.
-- **Key ready** only when a key is stored. Typing more characters does not change that badge. A call uses the typed characters when the field is non-empty, and the stored secret otherwise.
-
-**Index files** stays enabled with no key. **Write test file** stays off until a preview returns a JUnit test.
-
-## How retrieval works
-
-Indexing and search are local. There is no embedding model.
-
-### Chunks
-
-`CourseChunks` splits each page or slide. A body of at most 700 characters (`MAX_CHARS`) is one chunk. A longer body is cut on a space or newline in the second half of that window, then the next piece starts 100 characters earlier (`OVERLAP`). Cuts are moved so they do not split a UTF-16 surrogate pair. Every piece keeps the original page or slide number. A page with several pieces uses ids ending in `#1`, `#2`, and so on.
-
-### Tokens
-
-English tokens are `[A-Za-z0-9_]+`, lowercased, with a short stop list and a light stem (`sses` to `ss`, `ies` to `y`, a trailing `s` on longer words). `one` and `many` are not stop words, so a query such as `one-to-one` still indexes the word `one`.
-
-Chinese, Japanese, and Korean characters are indexed as overlapping bigrams. A bigram is dropped only when both characters are in the closed-class list in `Tokens` (的, 了, 是, 我, 你, …). A mixed pair such as 并发, 向量, 性能, or 不可变 stays in the index. 我们 and 可以 drop because both characters are grammatical.
-
-### Which chunks are hits
-
-`CourseIndex.top` scores with BM25 (`k1 = 1.2`, `b = 0.75`). The idf term is `ln(1 + (N - df + 0.5) / (df + 0.5))`. Postings are updated when a chunk is added or removed, so a re-index does not rebuild the whole index from scratch.
-
-A score is not enough. The question is split into coverage units, and a chunk must cover at least half of them (`MIN_COVERAGE = 0.5`):
-
-- Each English word that is not in the coverage-skip set is one unit. That set is `confused`, `give`, `simple`, `one`, `many`, `kindly`, `briefly`, `describe`. Those words can still be indexed. They just do not dilute the count. `describe` is also a stop word, so it is not indexed either.
-- Chinese is one unit per run of content Han characters, not one unit per bigram. The run is split on punctuation and on function characters. Courtesy phrases are stripped from the run, longest first, and do not add a unit: 能不能, 请问, 详细, 麻烦, 了解, 深入, 一下, 问题, 回事, 到底, 请, 讲, 地, 给. They are not removed from the index, so 请求 and 性能 stay searchable. Single characters 一, 关, 能, and 不 are not fillers, so 一对, 关系, 性能, and 不可变 stay intact.
-- If nothing remains (a lone technical word such as 不可变 or 请求), coverage falls back to the indexed terms.
-
-Among chunks that clear the half-coverage bar, Folio keeps those whose score is at least 25% of the best score (`RELATIVE_KEEP = 0.25`) and returns at most four. There is no absolute score floor. A question that shares one common word with the course, or a question about the weather, or an unrelated sentence, comes back with no hits.
-
-## Architecture
-
-### Package map
-
-| Package | Classes | Role |
-| --- | --- | --- |
-| `cst3492.courseta` | `FolioToolWindowFactory`, `FolioPanels`, `FolioPanel`, `FolioChrome`, `TaSettings`, `Secrets` | Tool window, layout, settings, Password Safe |
-| `cst3492.courseta.ask` | `AskAction`, `Asker`, `Answer`, `ChatClient`, `HttpChatClient` | Retrieval-backed answers and the HTTP client |
-| `cst3492.courseta.index` | `CourseIndex`, `CourseChunk`, `CourseChunks`, `CourseFileParser`, `Tokens`, `ScopeKind` | Parse, chunk, BM25 |
-| `cst3492.courseta.junitgen` | `GenerateTestAction`, `ScenarioDialog`, `Scenario`, `TestDraft` | Scenario dialog, preview, write |
-| `cst3492.courseta.commit` | `CommitMessageAction`, `CommitDraft`, `CommitBox`, `GitDiffs` | Staged diff, three messages, commit box |
-| `cst3492.courseta.drill` | `CourseDrillAction`, `Drill` | Three questions about the selection |
-
-`FolioPanel` is the behaviour owner. `FolioChrome` is the Swing layout: cards, the section bar, banners, buttons, and the empty states. Only `FolioPanel` uses it. `ScenarioDialog` is in another package and styles itself with the same platform colors. `FolioToolWindowFactory` builds the panel and registers it in `FolioPanels`, one panel per project. Editor and VCS actions do not call the factory. They activate the Folio tool window, then take the panel from `FolioPanels`.
-
-### Components
-
-Read the picture from the top, then left to right. UI is teal, services are blue, retrieval is orange, storage is tan, and the HTTP client is purple. The same colors flip for a dark page.
-
-`FolioToolWindowFactory` creates `FolioPanel` and registers it. Ask, drill, generate-test, and the commit action look the panel up in `FolioPanels`. Generate test also opens `ScenarioDialog`. The dialog does not call the panel. The action copies the scenario onto the panel after the dialog closes.
-
-`FolioPanel` calls the services under it. `Drill` calls `Asker`, and does not call HTTP itself. `Asker`, `TestDraft`, and `CommitDraft` call `HttpChatClient`. The panel fills `CommitBox` and reads `GitDiffs`. `CommitDraft` does neither.
-
-The panel parses files with `CourseFileParser`, which splits them through `CourseChunks`. `CourseIndex` stores and scores the chunks and asks `Tokens` for terms. It does not parse files. `Asker` calls `CourseIndex` as well. The index file is `folio/index.tsv` under the IDE config directory. The API key is Password Safe service `Folio/apiKey`. Base URL and model are `folio.xml` via `TaSettings`. The staged diff is `git diff --cached`.
+| Package | Main responsibility |
+| --- | --- |
+| `cst3492.courseta` | Tool window, project task and conversation state, application provider settings, Password Safe adapter, guarded commit target, and source preview. |
+| `cst3492.courseta.ask` | `Asker`, typed `Answer`, citation mapping, injectable `ChatClient`, and bounded `HttpChatClient`. |
+| `cst3492.courseta.index` | `CourseLibrary`, read-only `CourseSearch`, `CourseIndex`, parsing, chunking, tokens, and page/slide/section scopes. |
+| `cst3492.courseta.junitgen` | Editor scenario action, `TestDraft`, PSI-backed `GeneratedTest`, and explicit IDE write. |
+| `cst3492.courseta.commit` | Git snapshot capture, full-diff batching, candidates, and commit-control adapter. |
+| `cst3492.courseta.drill` | Selected-code questions through `Asker`. |
 
 ![Folio components](docs/images/components.svg)
 
-<details>
-<summary>Component diagram source</summary>
+### Historical statechart
 
-```mermaid
-flowchart TB
-  Factory[FolioToolWindowFactory] -->|creates| Panel[FolioPanel]
-  Factory -->|registers| Panels[FolioPanels]
-  AskDrill[AskAction and CourseDrillAction] --> Panels
-  Gen[GenerateTestAction] -->|opens| Dialog[ScenarioDialog]
-  CommitAct[CommitMessageAction] --> Panels
-  Gen --> Panels
-  Panels --> Panel
-  Panel --> Chrome[FolioChrome]
-  Panel --> Drill
-  Drill --> Asker
-  Panel --> Asker
-  Panel --> Tests[TestDraft]
-  Panel --> Commits[CommitDraft]
-  Panel --> Diffs[GitDiffs]
-  Panel --> Box[CommitBox]
-  Panel --> Settings[TaSettings]
-  Panel --> Secrets
-  Panel --> Parser[CourseFileParser]
-  Parser --> Chunks[CourseChunks]
-  Panel --> Index[CourseIndex]
-  Asker --> Index
-  Index --> Tokens
-  Asker --> Http[HttpChatClient]
-  Tests --> Http
-  Commits --> Http
-  Index --> Tsv["folio/index.tsv"]
-  Secrets --> Safe["Password Safe Folio/apiKey"]
-  Settings --> Xml[folio.xml]
-  Diffs --> Git["git diff --cached"]
-  class Factory,AskDrill,Gen,CommitAct,Panels,Dialog,Panel,Chrome teal
-  class Drill,Asker,Tests,Commits,Diffs,Box,Settings,Secrets blue
-  class Parser,Chunks,Index,Tokens orange
-  class Tsv,Safe,Xml,Git tan
-  class Http purple
-```
+The files under `docs/statechart/` model the earlier serial tool-window implementation. The chart is retained as a historical baseline. It does not model the current task channels, cancellation, request identities, application services, or immutable result targets. Its TLC result is not proof of current concurrency or write safety.
 
-</details>
+![Historical Folio tool-window statechart](docs/statechart/chart.svg)
 
-### Tool-window statechart
+The historical sources are [FolioWindow.tla](docs/statechart/FolioWindow.tla), [FolioWindow.cfg](docs/statechart/FolioWindow.cfg), [view.mjs](docs/statechart/view.mjs), and [chart.mmd](docs/statechart/chart.mmd).
 
-The chart is the path a person walks, not three dials side by side. Read it from the top.
+## Verification scope and remaining checks
 
-There are three places to start, drawn as arrows from the black dot. A fresh window starts at **No API key**. Opening the window again can start at **Key saved** or at **Files ready**, which is the saved key and the saved index. There is no restore arrow.
+The pre-change baseline ran 138 tests and built the plugin. Five supplied acceptance assertions failed against the original implementation before the repairs. The integrated core later ran 202 tests and built the plugin before frontend integration. The frontend separately ran 49 scoped tests and built the plugin. The original 18 real-Project PSI cases checked generated bytes, collisions, packages, opening, and Undo. Six later cases check actual nested-test containers, reject ordinary helpers and invalid basic method signatures, and retain dynamic factories. The structural checks recognize direct tests, Jupiter `@Nested` containers, and JUnit 4 `Enclosed` containers. They do not establish dependency resolution or successful discovery by a real test runner. These scoped results overlap and must not be added into a final suite count. The final integrated `scripts/verify.sh` run completed with 244 tests across 24 suites, zero failures, errors, or skips, and a validated plugin ZIP. Run the same command for a new checkout.
 
-**Setup** is tan: type a key, clear the field, or save it. **Ready** is where the saved key waits, with or without course files. **Course files** holds **Indexing** and **Files ready, key not stored**. Index files does not need a key, so that last box is tan. From Ready the four buttons diverge: **you click Ask**, **you click Preview test**, **you click Draft commit messages**, and **you index files**. Ask, Test, and Commit are separate boxes. **Finished** inside each box is an outcome. The arrow out of Finished is that same button again. **Preview shown** sits next to Finished because **you click Write test file** is a different step. **Preview failed** and **Not a test** are inside Finished and have no Write arrow.
+The deterministic tests cover shared-store commits and recovery, extraction fixtures, citation compatibility, staged-diff coverage, loopback HTTP boundaries, request identity, ordered settings, history, and existing keyboard/layout behavior. Real course-file checks preserved the 3-file, 85-page, 90-chunk denominator.
 
-Color is the phase. Tan is setup, before a key is saved, including files that were indexed with no stored key. Orange is the spinner: indexing, asking, generating a preview, or drafting. Teal is a saved key, files ready, or a successful result. Pink is a failed ask, preview, or draft, or a reply that is not a test.
+No live model call was completed during this review. The school API requires the campus network, as confirmed by the user. Its address timed out on the current network. Computer use could not attach to the exact running IDEA process, so a full live walkthrough remains open for Password Safe, multiple projects, source navigation, test-root selection, and actual commit controls. PSI and headless Swing tests do not close those integration gaps. The gaps describe missing verification, not established product defects.
 
-The checked rules are in `docs/statechart/FolioWindow.tla`. TLC reached 102 states and 502 steps and found no break. The chart draws 17 states and 24 arrows. Twenty-one of those arrows are the saved-key path. The other three are indexing with no stored key: **you index files** from **No API key**, **indexing finishes** into **Files ready, key not stored**, and **you index files** again from that box.
+## Historical screenshot gallery
 
-- The Ask, Preview, and Draft buttons are enabled exactly when a key is typed or stored.
-- A running call was started with a typed or stored key.
-- The spinner is on exactly while a call or indexing is in progress.
-- An empty Save does not drop a stored key.
-- Write copies the transcript only after the last preview returned a test, so a failed preview and a prose reply are not the test file.
+These screenshots came from an earlier IntelliJ IDEA 2026.2.4 Islands session. They preserve the earlier layout and theme reference. They do not show the current Stop/Clear controls, evidence labels, settings lifecycle, or validated Write behavior, and are not end-to-end verification.
 
-The chart hides steps that repeat a drawn arrow or that do not change the box you are looking at. They are still in the spec.
+Ask in Islands Light:
 
-- Empty Save, and Write again after the file is already written. The box does not change.
-- Remove a file. It enters Indexing the same way as indexing again.
-- Ask, Preview, and Draft while the key is typed but not saved, including when files are already indexed. The buttons do turn on. The chart shows those clicks after Save, from Ready.
-- From a finished Ask, Test, or Commit, the other features' buttons, and indexing. The chart draws only the same button again.
-- From Preview shown, another Ask, Preview, or Draft. The drawn step is Write.
-- Clearing the key, clearing the field, or saving, when you do that from a result rather than from Setup or Key saved.
-- Saving a key that was only typed while files were already indexed. That reaches **Files ready**.
-- Indexing while a key is typed but not saved. The chart draws indexing from **No API key** and from a saved key.
-- An empty index when no key is stored. That returns to **No API key**, or to **Key typed, not saved** if a key was typed. The drawn empty-index arrow returns only to **Key saved**.
-- Typing a key while files are ready. The box stays **Files ready, key not stored**.
+![Historical Folio Ask, Islands Light](docs/images/ask-islands-light.png)
 
-The model runs one activity at a time. The panel's spinner is a busy counter, so two `run` calls can overlap and the spinner stays up until both finish. The model also leaves out the editor and VCS actions. They can still call the panel when the tool-window buttons are off. With no key they return the missing-key sentence and do not call HTTP, but the spinner still runs. It leaves out changing the key while a call is already running. Clear is only allowed at a hub. If it were allowed mid-call, `rest` would end the call, and TLC would not report it. The window lets that call finish. It leaves out cancelling a call, `showNote` (an empty scenario from the editor, or an index error), and the target directory. A reply that is not a test is a state. Write in the model assumes a directory is known. The panel also refuses when the editor action never set one. Clearing the key after files are indexed is left out. The window allows it, and the files stay. Starting Ask, Preview, or Draft clears the test transcript in the model. The panel keeps the previous preview on screen until that call returns. Chat cards and the wording of a commit message are not states. The chart's "message in the commit box" is only that the draft succeeded.
+Files in Islands Light:
 
-![Folio tool window](docs/statechart/chart.svg)
+![Historical Folio Files, Islands Light](docs/images/files-islands-light.png)
 
-<details>
-<summary>Statechart source</summary>
+Test in Islands Light. The enabled Write button predates validated previews:
 
-```mermaid
----
-title: "Folio tool window"
----
-stateDiagram-v2
-  state "Legend" as legend {
-    lg0: Setup
-    lg1: Working
-    lg2: Ready
-    lg3: Error
-  }
-  class lg0 tan
-  class lg1 orange
-  class lg2 teal
-  class lg3 pink
-  state "Setup" as s0 {
-    s1: No API key
-    s2: Key typed, not saved
-  }
-  state "Ready" as s3 {
-    s4: Key saved
-    s5: Files ready
-  }
-  state "Ask" as s6 {
-    s7: Asking
-    state "Finished" as s8 {
-      s9: Answer with citations
-      s10: The ask failed
-    }
-  }
-  state "Commit" as s11 {
-    s12: Drafting a message
-    state "Finished" as s13 {
-      s14: The draft failed
-      s15: Message in the commit box
-    }
-  }
-  state "Test" as s16 {
-    s17: Generating the preview
-    state "Finished" as s18 {
-      s19: Preview failed
-      s20: Not a test
-      s21: Test file written
-    }
-    s22: Preview shown
-  }
-  state "Course files" as s23 {
-    s24: Indexing
-    s25: Files ready, key not stored
-  }
-  [*] --> s1
-  [*] --> s4
-  [*] --> s5
-  s1 --> s2: you type an API key
-  s1 --> s24: you index files
-  s4 --> s1: you clear the API key
-  s7 --> s9: the model answers
-  s7 --> s10: the ask fails
-  s12 --> s14: the draft fails
-  s12 --> s15: the message is in the commit box
-  s2 --> s1: you clear the field
-  s2 --> s4: you save settings
-  s17 --> s19: the preview fails
-  s17 --> s20: the reply is not a test
-  s17 --> s22: the model shows a preview
-  s24 --> s25: indexing finishes
-  s24 --> s4: the index is empty
-  s24 --> s5: indexing finishes
-  s25 --> s24: you index files
-  s22 --> s21: you click Write test file
-  s3 --> s7: you click Ask
-  s3 --> s12: you click Draft commit messages
-  s3 --> s17: you click Preview test
-  s3 --> s24: you index files
-  s8 --> s7: you click Ask
-  s13 --> s12: you click Draft commit messages
-  s18 --> s17: you click Preview test
-  class s1 tan
-  class s2 tan
-  class s4 teal
-  class s5 teal
-  class s7 orange
-  class s9 teal
-  class s10 pink
-  class s12 orange
-  class s14 pink
-  class s15 teal
-  class s17 orange
-  class s19 pink
-  class s20 pink
-  class s21 teal
-  class s22 teal
-  class s24 orange
-  class s25 tan
-```
+![Historical Folio Test, Islands Light](docs/images/test-islands-light.png)
 
-</details>
+Settings in Islands Light:
 
-Source files: `docs/statechart/FolioWindow.tla`, `FolioWindow.cfg`, `view.mjs`, `chart.mmd`, and `chart.svg`. `view.mjs` supplies the labels, the groups, and the colors. `chart.mmd` is regenerated from the spec and that view with the statechart script (`scripts/statechart FolioWindow.tla --view view.mjs --out DIR`, with mise on `PATH`). `chart.svg` is that Mermaid rendered with pele 1.9.0 (`limit` 1000000, `outputLimit` 8000000, `maxEdges` 10000) and the statechart colors inlined. The component picture is `docs/images/components.svg`. It is the same graph as the mermaid above it, laid out by hand in those colors so the five layers read on a page. `classDef` is not used for the layer colors, because a `classDef` fill is painted as an inline style and a dark page cannot restyle it.
+![Historical Folio settings, Islands Light](docs/images/settings-islands-light.png)
 
-### Data flow for Ask
+Ask in Islands Dark:
 
-```mermaid
-sequenceDiagram
-  participant User
-  participant Panel as FolioPanel
-  participant Asker
-  participant Index as CourseIndex
-  participant HTTP as HttpChatClient
-  User->>Panel: Ask, or Ask Folio from the editor
-  Panel->>Panel: show the question card and start the spinner
-  Panel->>Asker: ask with the index, key, and model
-  Asker->>Index: top of the question plus any selection, limit 4
-  alt no key
-    Asker-->>Panel: missing-key text and the retrieved chunks, no HTTP call
-  else hits
-    Asker->>HTTP: chat completion, chunks numbered [1], [2]
-    HTTP-->>Asker: answer text
-    Asker->>Asker: keep only [n] markers that name a retrieved chunk
-    Asker-->>Panel: answer text and the validated sources
-  else no hits
-    Asker->>HTTP: general-knowledge prompt
-    HTTP-->>Asker: answer text
-    Asker-->>Panel: the answer is not grounded in course files
-  end
-  Panel->>Panel: show the answer, then the source cards, and stop the spinner
-```
+![Historical Folio Ask, Islands Dark](docs/images/ask-islands-dark.png)
 
-`Asker.ask` calls `CourseIndex.top` once. The prompt and the source cards come from that lookup, after citation markers are checked. The HTTP client posts JSON to `{baseUrl}/chat/completions` (or to the base URL itself when it already ends in `/chat/completions`) with a bearer token. Timeouts are 20 seconds to connect and 60 seconds for the response. The message content must be a JSON string. A non-2xx status becomes an `IOException` that includes a short piece of the error body. That failure is shown as the answer text, and the spinner stops.
+Settings in Islands Dark:
 
-Anything that uses `FolioPanel.run` (Ask, drill, preview, commit draft, index, remove) increments a busy counter on the calling thread and decrements it when the result is delivered. A platform cancellation (`ControlFlowException`, including `ProcessCanceledException`) schedules the same decrement and is rethrown, so the spinner does not stay up.
-
-## Limitations and what was not verified
-
-- No live model call was made for this write-up. Source cards were not clicked in a running IDE, and the commit box was not filled in a running IDE. The Islands screenshots are from an earlier `runIde` session, before the theme. A headless paint of the themed panel exists for Ask, Files, Test, and Setup in light and dark, and a headless paint of an answer with source cards. Icon glyphs do not draw in that paint.
-- There is no Islands screenshot of Commit, and no Islands dark screenshot of Files or Test.
-- The chat keeps every card. There is no clear button and no cap.
-- Ask, Preview, and Draft in the tool window are disabled with no key. The editor and VCS actions are not. They still open the tool window and call the panel. With no key, Ask, preview, and the commit draft return the missing-key sentence and do not call HTTP. The spinner still runs for that path and then stops.
-- **Write test file** turns on only when the last preview call succeeded and the reply contains `org.junit` or `class `. That check is only on the model reply. Failure text is shown as it is and does not enable Write, even when it contains those words. A reply that is not a test is shown with the note "The reply was not a JUnit test." and Write stays off. The no-directory sentence is a status line. It does not replace the preview, so it is not written.
-- Two `run` calls can overlap. The spinner is a counter, so it stays up until both finish. The statechart serializes them.
-- Saving a new key sets the badge to **Key ready** and then writes the Password Safe on a background thread. If that write fails, the badge still says **Key ready**. An empty Save does not take that path.
-- A source card opens a text file that is on disk in the editor, at the excerpt. A PDF, a slide deck, or a path that is not on disk opens a preview of the indexed chunk. That open path was not exercised in a running IDE.
-- Retrieval is lexical BM25 over the indexed files. It is not a web search and not a vector index.
-- The course plan in `docs/course-ta-plugin-plan.md` describes a larger program. This tree is the plugin that program built for Group B, not that program's process.
+![Historical Folio settings, Islands Dark](docs/images/settings-islands-dark.png)
 
 ## Project layout
 
-```
+```text
 build.gradle.kts          Java 25, IntelliJ 2026.2.4, Tika, POI, Gson
-src/main/java/            plugin sources, packages above
-src/main/resources/       plugin.xml and the tool-window icons
-src/test/java/            JUnit 5
-docs/images/              Islands screenshots and the component diagram
-docs/statechart/          TLA+ spec, TLC config, view, chart.mmd, chart.svg
+src/main/java/            Plugin implementation
+src/main/resources/       Plugin descriptor and icons
+src/test/java/            JUnit and IntelliJ fixture tests
+src/test/resources/       Synthetic retrieval fixtures
+scripts/                  Verification and result inspection
+.github/workflows/        CI verification entry
+docs/images/              Architecture diagram and historical screenshots
+docs/statechart/          Historical serial state model
 docs/course-ta-plugin-plan.md
+review.md                 Findings, selected options, status, and evidence gaps
 ```
-
-## Testing
-
-`./gradlew test buildPlugin` with JDK 25 completes successfully. The suite is **138 tests, 0 failures**.
-
-| Test class | Tests |
-| --- | ---: |
-| `CourseIndexTest` | 33 |
-| `HttpChatClientTest` | 10 |
-| `CommitMessageActionTest` | 9 |
-| `FolioPanelTest` | 25 |
-| `AskerTest` | 48 |
-| `CourseFileParserTest` | 7 |
-| `GenerateTestActionTest` | 3 |
-| `TaSettingsTest` | 1 |
-| `AnswerTest` | 1 |
-| `CourseDrillActionTest` | 1 |
-
-`AskerTest` locks citation mapping: prose `[n]` markers, including adjacent `[1][2]`, a parenthetical list `(see [1], [2])`, a line-start `*`, `-`, or `>`, closing emphasis such as `**A** [2]`, and a prose parenthesis such as `Servlets ([1])`, are renumbered onto retrieved chunks. `foo([1])`, `foo()([1])`, and `m[0]([1])` are calls and stay literal. A call name is ASCII, so `如下（[2]）见 [3]` and `如下([2])见 [3]` are both renumbered, and `cache$([3])` stays a call. A full-width `（` after `foo` is still prose. `x = ([3])`, `if ([3])`, and `return ([3])` are expressions and stay as written. An in-range expression such as `a + ([1])` beside `see [3]` keeps every retrieved chunk instead of minting a second `[1]`. `[2](u) and [3]` with three chunks does the same, so the link label is not left dangling. `(HttpServlet)` stays when the marker inside it is removed; a cue word still drops the parentheses, including full-width `（see ）`. Two spaces before a newline stay. `ends here [1] [9]` does not keep a trailing space. `[x](u) [9] and [1]` keeps `and`. The same original number always gets the same new number. Unknown numbers are dropped from candidates only. A comma, `and`, `cf.`, or `和` goes with the marker when it joins two citations or sits inside parentheses beside the marker, and a pair of parentheses left empty, including `(see )`, is removed. `A and [9] B` keeps `and`. A sentence comma such as `Text, [9] only` stays. A call argument such as `foo(a, [5])` is not rewritten. A leftover `[n]` in `1` through the retrieved count, including one past the card list such as `new [2] and [3]`, keeps every retrieved chunk and still drops a prose marker that was not retrieved, such as `[9]` beside `return [2]`, without leaving `and.`. A seeded generator labels each marker as a citation or as code when it builds the reply, including `([n])`, `new [n]`, `a**b** [n]`, `(a, [n])`, a `~~~` fence, and an indented code block, and checks the reply against those labels. Expression lists are not citations. Separate cases fail if the backtick fence, the `~~~` fence, inline code, an indented fence, or a four-space code block is no longer skipped, or if a citation on the line after a closing fence is left unmapped. An empty retrieval says the answer is not grounded and still leaves a code list alone. The index tests lock the retrieval rules above: weather and unrelated questions return no hits, a lecture term still hits when it appears in every chunk, polite Chinese and English questions still reach the course term, and removing one absolute path leaves another file with the same name. They also load a legacy bare-name row: re-indexing the same handout drops that row, and Remove drops it too. `FolioPanelTest` locks the button gate, empty Save, the badge text, the scaled hint width, cancellation, and that Write copies a preview only after it succeeded. Enter sends when the composer is enabled and the field is not blank. Shift+Enter stays a newline, and an input method that still has uncommitted text does not send. The field on the panel grows through six rows and then stays put. A request in flight disables Send and shows the spinner as the disabled icon. A blank question does not call the model. A failed ask puts the question back through the failure callback, and only when the composer is still empty. The chat pane's own theme refresh paints the viewport with the tool-window colour. After a narrow section bar drops its labels, measuring the preferred size does not put the words back, and the buttons do not overlap. Committed input-method text still sends on Enter. New messages follow the tail only when the user just sent or was already at the bottom. A narrow header collapses or wraps the key chip, and a narrow section bar keeps the tab labels as tooltips. A prose reply leaves Write off. Error text that contains `class ` or `org.junit` does not enable Write either. `CourseFileParserTest` checks page and slide order and that a chosen source id is stored. The UI tests do not construct a `Project`, so they do not click the confirmation dialog or the live tool window.
