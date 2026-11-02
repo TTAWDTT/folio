@@ -15,9 +15,9 @@ stateDiagram-v2
       [*] --> s0
       s0 --> s1: you type an API key
       s0 --> s2: the window restores a saved key or the window restores a saved key and indexed files [when Course files is No files and Model call is Idle]
-      s1 --> s0: you clear the field
+      s1 --> s0: you clear the field [when Model call is not Working]
       s1 --> s2: you save settings
-      s2 --> s0: you clear the API key
+      s2 --> s0: you clear the API key [when Model call is not Working]
     }
     --
     state "Course files" as r1 {

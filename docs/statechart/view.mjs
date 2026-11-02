@@ -20,7 +20,7 @@ const callLabel = {
 };
 
 export const state = (v) => ({
-  "API key": keyLabel[v.key],
+  "API key": keyLabel[v.key] ?? "Bad key",
   "Course files": indexLabel[v.index],
   "Model call": callLabel[v.call],
 });
@@ -29,7 +29,7 @@ const labels = {
   YouTypeKey: "you type an API key",
   YouEraseTypedKey: "you clear the field",
   YouSaveKey: "you save settings",
-  YouSaveEmpty: null,
+  YouSaveEmpty: "you save settings with the key field empty",
   YouClearKey: "you clear the API key",
   YouIndexFiles: "you index files",
   YouRemoveFile: "you remove a file",
@@ -42,7 +42,7 @@ const labels = {
   TheCallAnswers: "the model answers",
   TheCallFails: "the call fails",
   YouCancelCall: "the call is canceled",
-  YouWrite: null,
+  YouWrite: "you write the test file",
   RestoreKey: "the window restores a saved key",
   RestoreFiles: "the window restores indexed files",
   RestoreBoth: "the window restores a saved key and indexed files",
