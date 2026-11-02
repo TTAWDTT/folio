@@ -683,7 +683,10 @@ final class FolioChrome {
             while (nextLine < text.length()) {
                 int lineStart = nextLine;
                 int lineEnd = lineStart;
-                while (lineEnd < text.length() && text.charAt(lineEnd) != '\r' && text.charAt(lineEnd) != '\n') {
+                while (lineEnd < text.length() && switch (text.charAt(lineEnd)) {
+                    case '\r', '\n', '\u000B', '\f', '\u0085', '\u2028', '\u2029' -> false;
+                    default -> true;
+                }) {
                     lineEnd++;
                 }
                 nextLine = lineEnd;
