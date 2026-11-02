@@ -48,7 +48,6 @@ import java.awt.event.MouseListener;
 import java.awt.event.HierarchyEvent;
 import java.util.List;
 import java.util.function.Consumer;
-import java.util.regex.Pattern;
 
 final class FolioChrome {
     enum Tone { NEUTRAL, INFO, SUCCESS, WARNING, ERROR }
@@ -466,7 +465,6 @@ final class FolioChrome {
 
     static final class AnswerCard extends JBPanel<AnswerCard> {
         private enum State { RETRIEVING, GENERATING, STREAMING, FINAL }
-        private static final Pattern CODE = Pattern.compile("(?m)^```([^\\r\\n]*)\\R([\\s\\S]*?)^```[ \\t]*(?:\\R|$)");
         private final JPanel bannerSlot = new JPanel(new BorderLayout());
         private final JPanel sources = new JPanel(new GridBagLayout());
         private final JPanel content = new JPanel(new BorderLayout());
@@ -677,17 +675,49 @@ final class FolioChrome {
         private JComponent formattedBody(String text) {
             Column blocks = new Column();
             blocks.setBorder(JBUI.Borders.empty());
-            var matcher = CODE.matcher(text);
             int cursor = 0;
-            while (matcher.find()) {
-                if (matcher.start() > cursor) {
-                    blocks.addRow(new WrapText(text.substring(cursor, matcher.start()).stripTrailing()));
+            int fenceStart = -1;
+            int headerEnd = 0;
+            int codeStart = 0;
+            int nextLine = 0;
+            while (nextLine < text.length()) {
+                int lineStart = nextLine;
+                int lineEnd = lineStart;
+                while (lineEnd < text.length() && text.charAt(lineEnd) != '\r' && text.charAt(lineEnd) != '\n') {
+                    lineEnd++;
+                }
+                nextLine = lineEnd;
+                if (nextLine < text.length()) {
+                    if (text.charAt(nextLine++) == '\r' && nextLine < text.length() && text.charAt(nextLine) == '\n') {
+                        nextLine++;
+                    }
+                }
+                if (!text.startsWith("```", lineStart)) {
+                    continue;
+                }
+                if (fenceStart < 0) {
+                    if (nextLine > lineEnd) {
+                        fenceStart = lineStart;
+                        headerEnd = lineEnd;
+                        codeStart = nextLine;
+                    }
+                    continue;
+                }
+                int fenceEnd = lineStart + 3;
+                while (fenceEnd < lineEnd && (text.charAt(fenceEnd) == ' ' || text.charAt(fenceEnd) == '\t')) {
+                    fenceEnd++;
+                }
+                if (fenceEnd != lineEnd) {
+                    continue;
+                }
+                if (fenceStart > cursor) {
+                    blocks.addRow(new WrapText(text.substring(cursor, fenceStart).stripTrailing()));
                 }
                 JPanel code = card(answerFill());
                 JPanel head = new JPanel(new BorderLayout());
                 head.setOpaque(false);
-                head.add(muted(matcher.group(1).strip()), BorderLayout.WEST);
-                String codeText = matcher.group(2);
+                head.add(muted(text.substring(fenceStart + 3, headerEnd).strip()), BorderLayout.WEST);
+                String codeText = text.substring(codeStart, lineStart);
                 if (onCopy != null) {
                     head.add(copyButton(() -> onCopy.accept(codeText)), BorderLayout.EAST);
                 }
@@ -695,7 +725,8 @@ final class FolioChrome {
                 WrapText source = new CodeText(codeText);
                 code.add(source, BorderLayout.CENTER);
                 blocks.addRow(code);
-                cursor = matcher.end();
+                cursor = nextLine;
+                fenceStart = -1;
             }
             if (cursor < text.length()) {
                 blocks.addRow(new WrapText(text.substring(cursor)));
