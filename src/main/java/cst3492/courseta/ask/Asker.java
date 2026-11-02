@@ -58,8 +58,8 @@ public final class Asker {
      * are not candidates and are never edited.
      * Afterwards the numbers written into candidate positions are exactly {@code 1..cards},
      * and each one is that card. A single {@code [n]} left outside code collides when {@code n}
-     * is one of those cards and this pass did not write it. On a collision the original text
-     * is returned with every retrieved chunk, in retrieval order.
+     * names a retrieved chunk ({@code 1..retrieved}) and this pass did not write it.
+     * On a collision the original text is returned with every retrieved chunk, in retrieval order.
      */
     public static CitationMap mapCitations(List<CourseChunk> hits, String modelText) {
         List<CourseChunk> retrieved = hits == null ? List.of() : hits;
@@ -115,7 +115,7 @@ public final class Asker {
         }
         appendSlice(out, raw.substring(cursor), removed);
         String text = out.toString();
-        if (!citationsMatchCards(text, ordered, written)) {
+        if (!citationsMatchCards(text, ordered, written, retrieved.size())) {
             return new CitationMap(raw, List.copyOf(retrieved));
         }
         return new CitationMap(text, List.copyOf(ordered));
@@ -562,10 +562,13 @@ public final class Asker {
 
     /**
      * Candidate positions must be exactly the cards {@code 1..sources}, and a single {@code [n]}
-     * outside code that this pass did not write must not reuse one of those numbers.
+     * outside code that this pass did not write must not name a retrieved chunk
+     * ({@code 1..retrievedCount}). A number past the card list still dangles when it names a
+     * chunk that was retrieved and then left out of the cards.
      * A grouped expression list, an index, and an infix operator are not that {@code [n]}.
      */
-    private static boolean citationsMatchCards(String text, List<CourseChunk> sources, List<int[]> written) {
+    private static boolean citationsMatchCards(String text, List<CourseChunk> sources, List<int[]> written,
+                                               int retrievedCount) {
         boolean[] seen = new boolean[sources.size() + 1];
         List<int[]> code = codeSpans(text);
         Matcher matcher = MARKER.matcher(text);
@@ -587,7 +590,7 @@ public final class Asker {
                 continue;
             }
             int number = markerNumber(matcher.group(1));
-            if (number >= 1 && number <= sources.size() && readableAsCitation(text, matcher.start(), code)) {
+            if (number >= 1 && number <= retrievedCount && readableAsCitation(text, matcher.start(), code)) {
                 return false;
             }
         }

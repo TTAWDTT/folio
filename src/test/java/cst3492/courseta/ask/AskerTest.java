@@ -8,6 +8,8 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -343,15 +345,18 @@ class AskerTest {
     /**
      * A call argument is not a candidate, so it is never deleted.
      * Removing that guard turns {@code foo(a, [5])} into {@code foo(a, )}.
+     * {@code (a, [2])} is also not a candidate. Leaving it beside a rewritten {@code [3]}
+     * would dangle {@code [2]}, so the original reply and every retrieved chunk are kept.
      */
     @Test
     void parenArgumentDoesNotLeaveADanglingMarker() {
         CourseChunk first = page("lecture-servlet.pdf", 1, "doGet");
         CourseChunk second = page("lecture-jpa.pdf", 2, "OneToMany");
         CourseChunk third = page("lecture-jpa.pdf", 3, "persistence");
-        Asker.CitationMap mapped = Asker.mapCitations(List.of(first, second, third), "(a, [2]) and [3].");
-        assertEquals(List.of(third), mapped.sources());
-        assertEquals("(a, [2]) and [1].", mapped.text());
+        String text = "(a, [2]) and [3].";
+        Asker.CitationMap mapped = Asker.mapCitations(List.of(first, second, third), text);
+        assertEquals(List.of(first, second, third), mapped.sources());
+        assertEquals(text, mapped.text());
 
         Asker.CitationMap call = Asker.mapCitations(List.of(first, second, third), "See [1]. foo(a, [5]).");
         assertEquals(List.of(first), call.sources());
@@ -375,6 +380,55 @@ class AskerTest {
         Asker.CitationMap mapped = Asker.mapCitations(List.of(first, second, third), text);
         assertEquals(List.of(first, second, third), mapped.sources());
         assertEquals(text, mapped.text());
+    }
+
+    /**
+     * {@code new [2]} is not a candidate, so only {@code [3]} would become card {@code [1]}.
+     * The leftover {@code [2]} still names a retrieved chunk. Bounding the check by the card
+     * count ({@code sources.size()}) keeps {@code new [2] and [1]} and drops two chunks.
+     */
+    @Test
+    void leftoverAboveTheCardCountFallsBack() {
+        CourseChunk first = page("lecture-servlet.pdf", 1, "doGet");
+        CourseChunk second = page("lecture-jpa.pdf", 2, "OneToMany");
+        CourseChunk third = page("lecture-jpa.pdf", 3, "persistence");
+        String text = "new [2] and [3]";
+        Asker.CitationMap mapped = Asker.mapCitations(List.of(first, second, third), text);
+        assertEquals(text, mapped.text());
+        assertEquals(List.of(first, second, third), mapped.sources());
+    }
+
+    /**
+     * Every prose {@code [n]} in range of the retrieved chunks names a card.
+     * A bound of {@code sources.size()} leaves {@code new [2]} beside a single card.
+     */
+    @Test
+    void proseMarkerAlwaysNamesACard() {
+        CourseChunk first = page("lecture-servlet.pdf", 1, "doGet");
+        CourseChunk second = page("lecture-jpa.pdf", 2, "OneToMany");
+        CourseChunk third = page("lecture-jpa.pdf", 3, "persistence");
+        CourseChunk[] all = {first, second, third};
+        String[] samples = {
+                "new [2] and [3]",
+                "(a, [2]) and [3].",
+                "See [1] and [3]. Also (a, [2]).",
+                "word [1] then new [2] and [3].",
+                "Start with [2], then [1].",
+                "See [1] and also [9].",
+                "See [1]. foo(a, [5]).",
+                "**A** [2] and see [3].",
+                "Override doGet [1]. The mapping is [2].",
+                "[1][2]",
+                "See [1, 2].",
+                "g(x, [2])",
+                "a**b** [1] see [2]"
+        };
+        for (int count = 1; count <= all.length; count++) {
+            List<CourseChunk> retrieved = List.of(all).subList(0, count);
+            for (String sample : samples) {
+                assertProseMarkersNameCards(count, Asker.mapCitations(retrieved, sample));
+            }
+        }
     }
 
     /**
@@ -514,6 +568,36 @@ class AskerTest {
         Asker.CitationMap mapped = Asker.mapCitations(List.of(first, second), text);
         assertEquals(text, mapped.text());
         assertEquals(List.of(first, second), mapped.sources());
+    }
+
+    private static final Pattern PROSE_MARKER = Pattern.compile("\\[(\\d+(?:\\s*,\\s*\\d+)*)\\]");
+
+    /** A prose {@code [n]} in {@code 1..retrieved} must be one of the cards under the answer. */
+    private static void assertProseMarkersNameCards(int retrieved, Asker.CitationMap mapped) {
+        Matcher matcher = PROSE_MARKER.matcher(mapped.text());
+        while (matcher.find()) {
+            if (!proseLooking(mapped.text(), matcher.start())) {
+                continue;
+            }
+            for (String part : matcher.group(1).split("\\s*,\\s*")) {
+                int number = Integer.parseInt(part);
+                if (number < 1 || number > retrieved) {
+                    continue;
+                }
+                assertTrue(number <= mapped.sources().size(),
+                        "dangling [" + number + "] in '" + mapped.text() + "' with "
+                                + mapped.sources().size() + " cards, retrieved " + retrieved);
+            }
+        }
+    }
+
+    /** An index ({@code m[1]}) and a call ({@code foo()[1]}) are not prose. */
+    private static boolean proseLooking(String text, int bracketAt) {
+        if (bracketAt == 0) {
+            return true;
+        }
+        char previous = text.charAt(bracketAt - 1);
+        return !Character.isLetterOrDigit(previous) && previous != '_' && previous != ')';
     }
 
     private static CourseChunk page(String file, int number, String text) {
