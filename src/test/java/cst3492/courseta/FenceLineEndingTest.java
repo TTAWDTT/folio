@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class FenceLineEndingTest {
     @ParameterizedTest
-    @ValueSource(strings = {"\n", "\r\n", "\r"})
+    @ValueSource(strings = {"\n", "\r\n", "\r", "\u000B", "\f", "\u0085", "\u2028", "\u2029"})
     void completeBlocksAndUnclosedTailKeepExactTextAndCopy(String newline) throws Exception {
         String first = "first" + newline + "```nested" + newline + "second" + newline;
         String second = "third" + newline;
@@ -43,7 +43,7 @@ class FenceLineEndingTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"\n", "\r\n", "\r"})
+    @ValueSource(strings = {"\n", "\r\n", "\r", "\u000B", "\f", "\u0085", "\u2028", "\u2029"})
     void closingFenceAtEndOfAnswerKeepsExactCode(String newline) throws Exception {
         String code = "return 1;" + newline;
         String reply = "```java" + newline + code + "```";
