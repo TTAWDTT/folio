@@ -8,7 +8,6 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
@@ -418,7 +417,7 @@ class AskerTest {
                 "foo(a, [9]) and x = [1, 2]");
         Asker.CitationMap mapped = Asker.mapCitations(List.of(first, second, third), text);
         assertEquals(List.of(first, second, third), mapped.sources());
-        assertEquals("See [1] and. return [2] here.", mapped.text().lines().findFirst().orElse(""));
+        assertEquals("See [1]. return [2] here.", mapped.text().lines().findFirst().orElse(""));
         assertFalse(mapped.text().contains("and [9]"));
         assertTrue(mapped.text().contains("return [2] here."));
         assertTrue(mapped.text().contains("keep [9]"));
@@ -427,9 +426,56 @@ class AskerTest {
     }
 
     /**
+     * {@code ([n])} is a citation when the parenthesis is not a call.
+     * {@code foo([n])}, {@code bar()([n])}, and {@code m[0]([n])} stay literal, so the two
+     * {@code [1]} marks in {@code Servlets ([1]) and JPA [3].} cannot point at different cards.
+     */
+    @Test
+    void spacedParenIsACitation() {
+        CourseChunk first = page("lecture-servlet.pdf", 1, "doGet");
+        CourseChunk second = page("lecture-jpa.pdf", 2, "OneToMany");
+        CourseChunk third = page("lecture-jpa.pdf", 3, "persistence");
+        Asker.CitationMap mapped = Asker.mapCitations(List.of(first, second, third), "Servlets ([1]) and JPA [3].");
+        assertEquals("Servlets ([1]) and JPA [2].", mapped.text());
+        assertEquals(List.of(first, third), mapped.sources());
+
+        Asker.CitationMap later = Asker.mapCitations(List.of(first, second, third), "Text ([2]) and see [3].");
+        assertEquals("Text ([1]) and see [2].", later.text());
+        assertEquals(List.of(second, third), later.sources());
+
+        Asker.CitationMap missing = Asker.mapCitations(List.of(first, second), "Text ([9]) and [1].");
+        assertEquals("Text and [1].", missing.text());
+        assertEquals(List.of(first), missing.sources());
+        assertFalse(missing.text().contains("[9]"));
+
+        String calls = "Use ([3]). Keep foo([3]), bar()([2]), and m[0]([1]).";
+        Asker.CitationMap call = Asker.mapCitations(List.of(first, second, third), calls);
+        assertEquals("Use ([1]). Keep foo([3]), bar()([2]), and m[0]([1]).", call.text());
+        assertEquals(List.of(third), call.sources());
+    }
+
+    /**
+     * A removed marker takes the comma, {@code and}, or {@code cf.} that only attached it.
+     * Parentheses left empty by that removal are deleted. A sentence comma stays.
+     */
+    @Test
+    void removedMarkerTakesItsConnective() {
+        CourseChunk first = page("lecture-servlet.pdf", 1, "doGet");
+        CourseChunk second = page("lecture-jpa.pdf", 2, "OneToMany");
+        assertEquals("See [1].", Asker.mapCitations(List.of(first, second), "See [1], [9].").text());
+        assertEquals("See [1].", Asker.mapCitations(List.of(first, second), "See [1] and [9].").text());
+        assertEquals("See [1].", Asker.mapCitations(List.of(first, second), "See [9] and [1].").text());
+        assertEquals("(see [1])", Asker.mapCitations(List.of(first, second), "(see [3], [2])").text());
+        assertEquals("(see [1])", Asker.mapCitations(List.of(first, second), "(see [2], [3])").text());
+        assertEquals("Note.", Asker.mapCitations(List.of(first), "Note (cf. [9]).").text());
+        assertEquals("(see [1])", Asker.mapCitations(List.of(first, second), "(see [1], [9])").text());
+        assertEquals("Text, only", Asker.mapCitations(List.of(first), "Text, [9] only").text());
+    }
+
+    /**
      * Seeded replies mix in-range and out-of-range prose, repeats, adjacent markers, groups,
-     * fences, inline code, calls, and lists. Each prose {@code [n]} must name one card, that
-     * card must be the same chunk wherever {@code [n]} appears, and protected code stays put.
+     * fences, inline code, calls, and lists. Each marker is labeled citation or code when it
+     * is built. The check uses those labels, so a wrong classifier cannot agree with itself.
      */
     @Test
     void generatedRepliesKeepOneChunkPerProseNumber() {
@@ -491,6 +537,17 @@ class AskerTest {
     @Test
     void tildeFenceGuardIsRequired() {
         assertCodeRegionStaysLiteral(String.join("\n", "Before.", "~~~", "See [2].", "~~~", "After."));
+    }
+
+    /** The closing fence's {@code ~} is not an operator for the next line. */
+    @Test
+    void citationOnTheLineAfterAFenceIsMapped() {
+        CourseChunk first = page("lecture-servlet.pdf", 1, "doGet");
+        CourseChunk second = page("lecture-jpa.pdf", 2, "OneToMany");
+        String text = String.join("\n", "Before.", "~~~", "See [9].", "~~~", "Then [2].");
+        Asker.CitationMap mapped = Asker.mapCitations(List.of(first, second), text);
+        assertEquals(String.join("\n", "Before.", "~~~", "See [9].", "~~~", "Then [1]."), mapped.text());
+        assertEquals(List.of(second), mapped.sources());
     }
 
     @Test
@@ -602,61 +659,129 @@ class AskerTest {
         assertEquals(List.of(first, second), mapped.sources());
     }
 
-    private static final Pattern PROSE_MARKER = Pattern.compile("\\[(\\d+(?:\\s*,\\s*\\d+)*)\\]");
-    private static final Set<String> EXPRESSION_WORDS = Set.of(
-            "return", "throw", "yield", "await", "new", "sizeof", "typeof", "instanceof", "delete");
+    private static final Pattern MARKER = Pattern.compile("\\[(\\d+(?:\\s*,\\s*\\d+)*)\\]");
 
-    private record GeneratedReply(String text, List<String> protectedText) {
+    /**
+     * A marker labeled while the reply is built.
+     * {@code citation} is prose that must be mapped. {@code literal} is code that must survive
+     * unchanged. {@code blocksRewrite} is a single in-range bracket a reader can take as a card
+     * ({@code new [n]}, {@code (a, [n])}, {@code a**b** [n]}, {@code return [n]}), recorded here
+     * rather than by scanning the text again.
+     */
+    private record Mark(boolean citation, List<Integer> numbers, String literal, boolean blocksRewrite) {
+    }
+
+    private record GeneratedReply(String text, List<Mark> marks) {
     }
 
     /** A few hundred shapes. The seed is fixed so a failure can be replayed. */
     private static GeneratedReply generateReply(Random random, int trial, int retrieved) {
         StringBuilder text = new StringBuilder();
-        List<String> protectedText = new ArrayList<>();
+        List<Mark> marks = new ArrayList<>();
         int parts = 4 + random.nextInt(5);
         for (int part = 0; part < parts; part++) {
             if (part > 0) {
                 text.append('\n');
             }
-            int kind = random.nextInt(14);
+            int kind = random.nextInt(23);
             int left = markerNumber(random, retrieved, true);
             int right = markerNumber(random, retrieved, true);
             switch (kind) {
-                case 0 -> text.append("See [").append(left).append("].");
-                case 1 -> text.append("See [").append(left).append("] and [").append(right).append("].");
-                case 2 -> text.append("[").append(left).append("][").append(right).append("]");
-                case 3 -> text.append("Notes [").append(left).append(", ").append(right).append("].");
-                case 4 -> text.append("(see [").append(left).append("], [").append(right).append("])");
-                case 5 -> text.append("**A** [").append(left).append("]");
-                case 6 -> text.append("* [").append(left).append("]");
-                case 7 -> text.append("See [").append(left).append("] again [").append(left).append("].");
-                case 8 -> text.append("Also [").append(outOfRange(random, retrieved)).append("].");
-                case 9 -> text.append("See [").append(left).append("] and [")
-                        .append(outOfRange(random, retrieved)).append("]. return [")
-                        .append(1 + random.nextInt(retrieved)).append("] here.");
-                default -> {
-                    String literal = literalFragment(random, trial, part, retrieved);
-                    protectedText.add(literal);
-                    text.append(literal);
+                case 0 -> cite(text, marks, "See ", ".", left);
+                case 1 -> {
+                    cite(text, marks, "See ", "", left);
+                    text.append(" and ");
+                    cite(text, marks, "", ".", right);
                 }
+                case 2 -> {
+                    cite(text, marks, "", "", left);
+                    cite(text, marks, "", "", right);
+                }
+                case 3 -> citeGroup(text, marks, "Notes ", ".", left, right);
+                case 4 -> {
+                    text.append("(see ");
+                    cite(text, marks, "", "", left);
+                    text.append(", ");
+                    cite(text, marks, "", ")", right);
+                }
+                case 5 -> cite(text, marks, "**A** ", "", left);
+                case 6 -> cite(text, marks, "* ", "", left);
+                case 7 -> {
+                    cite(text, marks, "See ", "", left);
+                    text.append(" again ");
+                    cite(text, marks, "", ".", left);
+                }
+                case 8 -> cite(text, marks, "Also ", ".", outOfRange(random, retrieved));
+                case 9 -> {
+                    cite(text, marks, "See ", "", left);
+                    text.append(" and ");
+                    cite(text, marks, "", ". ", outOfRange(random, retrieved));
+                    int kept = 1 + random.nextInt(retrieved);
+                    code(text, marks, "return [" + kept + "] here.", true);
+                }
+                case 10 -> cite(text, marks, "(", ")", left);
+                case 11 -> {
+                    cite(text, marks, "Servlets (", ") and JPA ", left);
+                    cite(text, marks, "", ".", right);
+                }
+                case 12 -> {
+                    int number = markerNumber(random, retrieved, true);
+                    code(text, marks, "new [" + number + "].", number >= 1 && number <= retrieved);
+                }
+                case 13 -> {
+                    int number = markerNumber(random, retrieved, true);
+                    code(text, marks, "a**b** [" + number + "]", number >= 1 && number <= retrieved);
+                }
+                case 14 -> {
+                    int number = markerNumber(random, retrieved, true);
+                    code(text, marks, "(a, [" + number + "])", number >= 1 && number <= retrieved);
+                }
+                case 15 -> {
+                    int tag = trial * 10 + part;
+                    int number = markerNumber(random, retrieved, false);
+                    code(text, marks, "~~~\nslot" + tag + " [" + number + "]\n~~~", false);
+                }
+                case 16 -> {
+                    int tag = trial * 10 + part;
+                    int number = markerNumber(random, retrieved, false);
+                    code(text, marks, "\n    ind" + tag + " [" + number + "]", false);
+                }
+                default -> literalFragment(text, marks, random, trial, part, retrieved);
             }
         }
-        return new GeneratedReply(text.toString(), protectedText);
+        return new GeneratedReply(text.toString(), marks);
     }
 
-    private static String literalFragment(Random random, int trial, int part, int retrieved) {
+    private static void cite(StringBuilder text, List<Mark> marks, String before, String after, int number) {
+        text.append(before).append('[').append(number).append(']').append(after);
+        marks.add(new Mark(true, List.of(number), null, false));
+    }
+
+    private static void citeGroup(StringBuilder text, List<Mark> marks, String before, String after, int left, int right) {
+        text.append(before).append('[').append(left).append(", ").append(right).append(']').append(after);
+        marks.add(new Mark(true, List.of(left, right), null, false));
+    }
+
+    private static void code(StringBuilder text, List<Mark> marks, String literal, boolean blocksRewrite) {
+        text.append(literal);
+        marks.add(new Mark(false, List.of(), literal, blocksRewrite));
+    }
+
+    private static void literalFragment(StringBuilder text, List<Mark> marks, Random random, int trial, int part,
+                                        int retrieved) {
         int tag = trial * 10 + part;
         int number = markerNumber(random, retrieved, true);
         int other = outOfRange(random, retrieved);
-        return switch (random.nextInt(7)) {
-            case 0 -> "fn" + tag + "(a, [" + number + "])";
-            case 1 -> "arr" + tag + " = [" + number + ", " + other + "]";
-            case 2 -> "print" + tag + "([" + number + ", " + other + "])";
-            case 3 -> "m" + tag + "[0][" + number + "]";
-            case 4 -> "call" + tag + "()[" + number + "]";
-            case 5 -> "`slot" + tag + " [" + other + "]`";
-            default -> "```\nslot" + tag + " = [" + other + "]\n```";
-        };
+        boolean inRange = number >= 1 && number <= retrieved;
+        switch (random.nextInt(7)) {
+            case 0 -> code(text, marks, "fn" + tag + "(a, [" + number + "])", inRange);
+            case 1 -> code(text, marks, "arr" + tag + " = [" + number + ", " + other + "]", false);
+            case 2 -> code(text, marks, "print" + tag + "([" + number + ", " + other + "])", false);
+            case 3 -> code(text, marks, "m" + tag + "[0][" + number + "]", false);
+            case 4 -> code(text, marks, "call" + tag + "()[" + number + "]", false);
+            case 5 -> code(text, marks, "`slot" + tag + " [" + other + "]`", false);
+            default -> code(text, marks, "```\nslot" + tag + " = [" + other + "]\n```", false);
+        }
     }
 
     private static int markerNumber(Random random, int retrieved, boolean allowOut) {
@@ -677,253 +802,98 @@ class AskerTest {
 
     private static void assertGeneratedReply(List<CourseChunk> retrieved, GeneratedReply reply, Asker.CitationMap mapped) {
         String where = "\ninput: " + reply.text() + "\noutput: " + mapped.text();
-        List<CourseChunk> inputChunks = new ArrayList<>();
-        for (int number : proseNumbers(reply.text())) {
-            if (number >= 1 && number <= retrieved.size()) {
-                inputChunks.add(retrieved.get(number - 1));
-            }
-        }
-        List<CourseChunk> outputChunks = new ArrayList<>();
-        for (int number : proseNumbers(mapped.text())) {
-            assertTrue(number >= 1 && number <= retrieved.size(), "out-of-range prose [" + number + "]" + where);
-            assertTrue(number <= mapped.sources().size(), "prose [" + number + "] has no card" + where);
-            outputChunks.add(mapped.sources().get(number - 1));
-        }
-        assertEquals(inputChunks, outputChunks, "one number mapped to two chunks" + where);
-        for (String literal : reply.protectedText()) {
-            assertTrue(mapped.text().contains(literal), "changed " + literal + where);
-        }
-    }
-
-    private static List<Integer> proseNumbers(String text) {
-        List<Integer> numbers = new ArrayList<>();
-        List<int[]> code = generatedCodeSpans(text);
-        Matcher matcher = PROSE_MARKER.matcher(text);
-        while (matcher.find()) {
-            if (!generatedProse(text, matcher.start(), code)) {
+        String masked = mapped.text();
+        boolean anyCitation = false;
+        boolean blocks = false;
+        for (Mark mark : reply.marks()) {
+            if (mark.citation()) {
+                anyCitation = true;
                 continue;
             }
+            assertTrue(masked.contains(mark.literal()), "changed " + mark.literal() + where);
+            masked = maskOnce(masked, mark.literal());
+            blocks = blocks || mark.blocksRewrite();
+        }
+        assertNoOrphan(reply.text(), mapped.text(), where);
+        if (!anyCitation) {
+            assertEquals(reply.text(), mapped.text(), where);
+            assertEquals(retrieved, mapped.sources(), where);
+            return;
+        }
+        List<Integer> inRange = new ArrayList<>();
+        List<CourseChunk> expectedChunks = new ArrayList<>();
+        List<CourseChunk> distinct = new ArrayList<>();
+        for (Mark mark : reply.marks()) {
+            if (!mark.citation()) {
+                continue;
+            }
+            List<Integer> kept = new ArrayList<>();
+            for (int number : mark.numbers()) {
+                if (number < 1 || number > retrieved.size() || kept.contains(number)) {
+                    continue;
+                }
+                kept.add(number);
+                CourseChunk chunk = retrieved.get(number - 1);
+                expectedChunks.add(chunk);
+                if (!distinct.contains(chunk)) {
+                    distinct.add(chunk);
+                }
+            }
+            inRange.addAll(kept);
+        }
+        List<Integer> actualNumbers = markerNumbers(masked);
+        if (blocks) {
+            assertEquals(retrieved, mapped.sources(), "collision should keep every chunk" + where);
+            assertEquals(inRange, actualNumbers, "fallback changed a citation number" + where);
+            return;
+        }
+        assertEquals(distinct, mapped.sources(), where);
+        List<CourseChunk> actualChunks = new ArrayList<>();
+        for (int number : actualNumbers) {
+            assertTrue(number >= 1 && number <= mapped.sources().size(), "prose [" + number + "] has no card" + where);
+            actualChunks.add(mapped.sources().get(number - 1));
+        }
+        assertEquals(expectedChunks, actualChunks, "one number mapped to two chunks" + where);
+    }
+
+    private static void assertNoOrphan(String input, String text, String where) {
+        assertFalse(text.contains(",."), "orphan comma" + where);
+        assertFalse(text.contains("(see,"), "orphan comma" + where);
+        assertFalse(text.contains("(cf."), "orphan cf." + where);
+        assertFalse(text.contains("and."), "orphan and" + where);
+        assertFalse(text.contains("and ."), "orphan and" + where);
+        assertTrue(emptyParens(text) <= emptyParens(input), "empty parens" + where);
+    }
+
+    private static int emptyParens(String text) {
+        int count = 0;
+        Matcher matcher = Pattern.compile("\\(\\s*\\)").matcher(text);
+        while (matcher.find()) {
+            count++;
+        }
+        return count;
+    }
+
+    private static String maskOnce(String text, String literal) {
+        int at = text.indexOf(literal);
+        return text.substring(0, at) + " " + text.substring(at + literal.length());
+    }
+
+    private static List<Integer> markerNumbers(String text) {
+        List<Integer> numbers = new ArrayList<>();
+        Matcher matcher = MARKER.matcher(text);
+        while (matcher.find()) {
             List<Integer> seen = new ArrayList<>();
             for (String part : matcher.group(1).split("\\s*,\\s*")) {
-                int number = Integer.parseInt(part);
-                if (!seen.contains(number)) {
-                    seen.add(number);
-                    numbers.add(number);
+                int number = Integer.parseInt(part.strip());
+                if (seen.contains(number)) {
+                    continue;
                 }
+                seen.add(number);
+                numbers.add(number);
             }
         }
         return numbers;
-    }
-
-    /** Fences and inline code only. The generator does not emit indented blocks. */
-    private static List<int[]> generatedCodeSpans(String text) {
-        List<int[]> spans = new ArrayList<>();
-        int line = 0;
-        while (line < text.length()) {
-            int newline = text.indexOf('\n', line);
-            int end = newline < 0 ? text.length() : newline;
-            String row = text.substring(line, end).stripLeading();
-            if (row.startsWith("```") || row.startsWith("~~~")) {
-                int close = fenceClose(text, newline < 0 ? text.length() : newline + 1, row.startsWith("```") ? "```" : "~~~");
-                spans.add(new int[] {line, close});
-                line = close;
-                continue;
-            }
-            line = newline < 0 ? text.length() : newline + 1;
-        }
-        for (int index = 0; index < text.length(); index++) {
-            if (insideSpan(spans, index) || text.charAt(index) != '`') {
-                continue;
-            }
-            int close = text.indexOf('`', index + 1);
-            int newline = text.indexOf('\n', index + 1);
-            if (close > index + 1 && (newline < 0 || close < newline)) {
-                spans.add(new int[] {index, close + 1});
-                index = close;
-            }
-        }
-        return spans;
-    }
-
-    private static int fenceClose(String text, int from, String marker) {
-        int at = from;
-        while (at < text.length()) {
-            int newline = text.indexOf('\n', at);
-            int end = newline < 0 ? text.length() : newline;
-            if (text.substring(at, end).strip().equals(marker)) {
-                return newline < 0 ? text.length() : newline + 1;
-            }
-            if (newline < 0) {
-                break;
-            }
-            at = newline + 1;
-        }
-        return text.length();
-    }
-
-    private static boolean generatedProse(String text, int bracketAt, List<int[]> code) {
-        if (insideSpan(code, bracketAt)) {
-            return false;
-        }
-        if (bracketAt == 0) {
-            return true;
-        }
-        char previous = text.charAt(bracketAt - 1);
-        if (Character.isLetterOrDigit(previous) || previous == '_' || previous == ')') {
-            return false;
-        }
-        if (previous == ']') {
-            return closesNumeric(text, bracketAt - 1, code);
-        }
-        int at = bracketAt - 1;
-        while (at >= 0 && isGeneratedSpace(text.charAt(at))) {
-            at--;
-        }
-        if (at < 0) {
-            return true;
-        }
-        char token = text.charAt(at);
-        if ((token == '*' || token == '-' || token == '>') && generatedLineStart(text, at)) {
-            return true;
-        }
-        if ((token == '*' || token == '_') && generatedEmphasis(text, at)) {
-            return true;
-        }
-        if (token == '=' || token == '(' || token == '[' || token == '{' || token == '<' || token == '>'
-                || token == '+' || token == '-' || token == '*' || token == '/' || token == '%'
-                || token == '&' || token == '|' || token == '^' || token == '~') {
-            return false;
-        }
-        if (token == ',') {
-            return generatedCommaContinues(text, at, code);
-        }
-        if (Character.isLetterOrDigit(token) || token == '_') {
-            int end = at + 1;
-            while (at >= 0 && (Character.isLetterOrDigit(text.charAt(at)) || text.charAt(at) == '_')) {
-                at--;
-            }
-            return !EXPRESSION_WORDS.contains(text.substring(at + 1, end).toLowerCase(java.util.Locale.ROOT));
-        }
-        return true;
-    }
-
-    private static boolean generatedLineStart(String text, int at) {
-        char mark = text.charAt(at);
-        int index = at - 1;
-        while (index >= 0) {
-            char c = text.charAt(index);
-            if (c == ' ' || c == '\t' || c == mark) {
-                index--;
-                continue;
-            }
-            return c == '\n' || c == '\r';
-        }
-        return true;
-    }
-
-    private static boolean generatedEmphasis(String text, int at) {
-        char mark = text.charAt(at);
-        int closeStart = at;
-        while (closeStart > 0 && text.charAt(closeStart - 1) == mark) {
-            closeStart--;
-        }
-        int run = at - closeStart + 1;
-        if (run < 1 || run > 3) {
-            return false;
-        }
-        int contentEnd = closeStart - 1;
-        if (contentEnd < 0 || isGeneratedSpace(text.charAt(contentEnd))) {
-            return false;
-        }
-        int index = contentEnd;
-        while (index >= 0) {
-            char c = text.charAt(index);
-            if (c == '\n' || c == '\r') {
-                return false;
-            }
-            if (c != mark) {
-                index--;
-                continue;
-            }
-            int openEnd = index;
-            int openStart = index;
-            while (openStart > 0 && text.charAt(openStart - 1) == mark) {
-                openStart--;
-            }
-            if (openEnd - openStart + 1 == run && openEnd < contentEnd) {
-                int before = openStart - 1;
-                if (before < 0 || !(Character.isLetterOrDigit(text.charAt(before)) || text.charAt(before) == '_')) {
-                    return true;
-                }
-            }
-            index = openStart - 1;
-        }
-        return false;
-    }
-
-    private static boolean generatedCommaContinues(String text, int commaAt, List<int[]> code) {
-        if (!generatedInsideParens(text, commaAt, code)) {
-            return true;
-        }
-        int at = commaAt - 1;
-        while (at >= 0 && isGeneratedSpace(text.charAt(at))) {
-            at--;
-        }
-        if (at >= 0 && text.charAt(at) == ']' && closesNumeric(text, at, code)) {
-            return true;
-        }
-        // Dropping "[3]" from "(see [3], [2])" leaves "(see, [2])". The remaining marker is still the cite.
-        int wordEnd = at + 1;
-        while (at >= 0 && (Character.isLetterOrDigit(text.charAt(at)) || text.charAt(at) == '_')) {
-            at--;
-        }
-        return "see".equals(text.substring(at + 1, wordEnd));
-    }
-
-    private static boolean generatedInsideParens(String text, int at, List<int[]> code) {
-        int depth = 0;
-        for (int index = 0; index < at; index++) {
-            if (insideSpan(code, index)) {
-                continue;
-            }
-            char c = text.charAt(index);
-            if (c == '(') {
-                depth++;
-            } else if (c == ')' && depth > 0) {
-                depth--;
-            }
-        }
-        return depth > 0;
-    }
-
-    private static boolean closesNumeric(String text, int close, List<int[]> code) {
-        int depth = 0;
-        for (int index = close - 1; index >= 0; index--) {
-            char c = text.charAt(index);
-            if (c == ']') {
-                depth++;
-            } else if (c == '[') {
-                if (depth == 0) {
-                    String body = text.substring(index + 1, close);
-                    return body.matches("\\d+(?:\\s*,\\s*\\d+)*") && generatedProse(text, index, code);
-                }
-                depth--;
-            }
-        }
-        return false;
-    }
-
-    private static boolean insideSpan(List<int[]> spans, int index) {
-        for (int[] span : spans) {
-            if (index >= span[0] && index < span[1]) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static boolean isGeneratedSpace(char c) {
-        return c == ' ' || c == '\t' || c == '\n' || c == '\r';
     }
 
     private static CourseChunk page(String file, int number, String text) {

@@ -54,8 +54,11 @@ public final class Asker {
      * Keeps a cite only when its number names a retrieved chunk.
      * The first time a valid number appears it becomes the next source, and every candidate
      * with that same original number is rewritten to that same new number. A number that was
-     * not retrieved is removed only from a candidate. Indexes, calls, and expression lists
-     * are not candidates and are never edited.
+     * not retrieved is removed only from a candidate, together with a separating comma,
+     * {@code and}, or {@code cf.} that only attached it, and with parentheses that held nothing else.
+     * Indexes, calls, and expression lists are not candidates and are never edited.
+     * A parenthesis is a call only in {@code ident(}, {@code )(}, and {@code ](}.
+     * A {@code (} after whitespace or at the start opens prose, so {@code ([n])} is a citation.
      * Afterwards the numbers written into candidate positions are exactly {@code 1..cards},
      * and each one is that card. A single {@code [n]} left outside code collides when {@code n}
      * names a retrieved chunk ({@code 1..retrieved}) and this pass did not write it.
@@ -99,6 +102,7 @@ public final class Asker {
                 }
             }
             if (kept.isEmpty()) {
+                cursor = omitRemovedMarker(out, raw, matcher.end());
                 removed = true;
             } else {
                 int start = out.length();
@@ -111,9 +115,9 @@ public final class Asker {
                 }
                 out.append(']');
                 written.add(new int[] {start, out.length()});
+                cursor = matcher.end();
                 removed = false;
             }
-            cursor = matcher.end();
         }
         appendSlice(out, raw.substring(cursor), removed);
         String text = out.toString();
@@ -128,8 +132,8 @@ public final class Asker {
 
     /**
      * Fallback text. Prose numbers outside {@code 1..retrievedCount} are removed with the same
-     * spacing rules as a normal drop. Numbers inside that range are copied as written.
-     * Code, call arguments, and expression lists are not markers here and are left alone.
+     * spacing and connective rules as a normal drop. Numbers inside that range are copied
+     * as written. Code, call arguments, and expression lists are left alone.
      */
     private static String withoutUnretrievedProse(String raw, List<int[]> code, int retrievedCount) {
         StringBuilder out = new StringBuilder();
@@ -152,9 +156,11 @@ public final class Asker {
                 kept.add(part.strip());
             }
             if (kept.isEmpty()) {
+                cursor = omitRemovedMarker(out, raw, matcher.end());
                 removed = true;
             } else if (!dropped) {
                 out.append(raw, matcher.start(), matcher.end());
+                cursor = matcher.end();
                 removed = false;
             } else {
                 out.append('[');
@@ -165,9 +171,9 @@ public final class Asker {
                     out.append(kept.get(i));
                 }
                 out.append(']');
+                cursor = matcher.end();
                 removed = false;
             }
-            cursor = matcher.end();
         }
         appendSlice(out, raw.substring(cursor), removed);
         return out.toString();
@@ -427,46 +433,67 @@ public final class Asker {
     }
 
     /**
+     * One classification of a bracket, used both when rewriting and when checking a leftover.
+     * {@link Role#PROSE} is a citation. {@link Role#READABLE} is left as written but still collides
+     * when its number names a retrieved chunk ({@code new [2]}, {@code a**b** [1]}, {@code (a, [2])}).
+     * {@link Role#OPAQUE} is an index, a call, an operator, or code.
+     */
+    private enum Role {
+        PROSE, READABLE, OPAQUE
+    }
+
+    /**
      * A citation is {@code [n]} or {@code [n, m]} in prose.
      * It follows whitespace or prose punctuation, including another citation ({@code [1][2]}),
      * a parenthetical list such as {@code (see [1], [2])}, a line-start {@code *}, {@code -}, or {@code >},
-     * and closing emphasis ({@code **A** [1]}, {@code _A_ [1]}).
-     * It is not part of an expression: an index, a call, an assignment, or a list literal
-     * such as {@code print([1, 2, 3])}, {@code foo(a, [1, 2])}, or {@code return [1, 2]}.
+     * closing emphasis ({@code **A** [1]}, {@code _A_ [1]}), and a parenthesis that opens prose
+     * ({@code ([1])}, {@code Servlets ([1])}).
+     * It is not part of an expression: an index, a call ({@code ident(}, {@code )(}, {@code ](}),
+     * an assignment, or a list literal such as {@code print([1, 2, 3])}, {@code foo(a, [1, 2])},
+     * or {@code return [1, 2]}.
      */
     private static boolean isProseCitation(String raw, int bracketAt, List<int[]> code) {
+        return roleAt(raw, bracketAt, code) == Role.PROSE;
+    }
+
+    private static Role roleAt(String raw, int bracketAt, List<int[]> code) {
         if (inside(code, bracketAt)) {
-            return false;
+            return Role.OPAQUE;
         }
         if (bracketAt == 0) {
-            return true;
+            return Role.PROSE;
         }
         char previous = raw.charAt(bracketAt - 1);
         if (isIdent(previous) || previous == ')') {
-            return false;
+            return Role.OPAQUE;
         }
         if (previous == ']') {
-            return closesCitation(raw, bracketAt - 1, code);
+            return closesCitation(raw, bracketAt - 1, code) ? Role.PROSE : Role.OPAQUE;
         }
         int at = bracketAt - 1;
-        while (at >= 0 && isInlineSpace(raw.charAt(at))) {
+        while (at >= 0 && isSpaceTab(raw.charAt(at))) {
             at--;
         }
-        if (at < 0) {
-            return true;
+        // A newline starts prose. Crossing it would treat the previous line's last
+        // character, such as the '~' in a closing fence, as an operator on this one.
+        if (at < 0 || raw.charAt(at) == '\n' || raw.charAt(at) == '\r') {
+            return Role.PROSE;
         }
         char token = raw.charAt(at);
         if ((token == '*' || token == '-' || token == '>') && markdownPrefix(raw, at)) {
-            return true;
+            return Role.PROSE;
         }
         if ((token == '*' || token == '_') && closesEmphasis(raw, at)) {
-            return true;
+            return Role.PROSE;
+        }
+        if (token == '(') {
+            return callParen(raw, at) ? Role.OPAQUE : Role.PROSE;
         }
         if (isExpressionToken(token)) {
-            return false;
+            return gluedEmphasis(raw, at) ? Role.READABLE : Role.OPAQUE;
         }
         if (token == ',') {
-            return commaContinuesCitation(raw, at, code);
+            return commaContinuesCitation(raw, at, code) ? Role.PROSE : Role.READABLE;
         }
         if (isIdent(token)) {
             int end = at + 1;
@@ -474,9 +501,21 @@ public final class Asker {
                 at--;
             }
             String word = raw.substring(at + 1, end);
-            return !EXPRESSION_WORDS.contains(word.toLowerCase(Locale.ROOT));
+            return EXPRESSION_WORDS.contains(word.toLowerCase(Locale.ROOT)) ? Role.READABLE : Role.PROSE;
         }
-        return true;
+        return Role.PROSE;
+    }
+
+    /**
+     * {@code ident(}, {@code )(}, and {@code ](} are calls. The character directly before
+     * {@code (} decides: whitespace or the start of the text opens prose, as in {@code ([n])}.
+     */
+    private static boolean callParen(String raw, int parenAt) {
+        if (parenAt <= 0) {
+            return false;
+        }
+        char previous = raw.charAt(parenAt - 1);
+        return isIdent(previous) || previous == ')' || previous == ']';
     }
 
     private static boolean closesCitation(String raw, int close, List<int[]> code) {
@@ -496,9 +535,9 @@ public final class Asker {
         return false;
     }
 
-    /** {@code = ( [ { < > + - * / % & | ^ ~} introduce an expression, not a citation. */
+    /** {@code = [ { < > + - * / % & | ^ ~} introduce an expression, not a citation. Parentheses are calls or prose, not operators. */
     private static boolean isExpressionToken(char token) {
-        return token == '=' || token == '(' || token == '[' || token == '{'
+        return token == '=' || token == '[' || token == '{'
                 || token == '<' || token == '>' || token == '+' || token == '-'
                 || token == '*' || token == '/' || token == '%' || token == '&'
                 || token == '|' || token == '^' || token == '~';
@@ -662,29 +701,14 @@ public final class Asker {
 
     /**
      * A single bracket a reader can take as a card number.
-     * An index ({@code m[1]}, {@code foo()[1]}, {@code m[0][1]}) and an infix operator
-     * ({@code a * [1]}) are not. Emphasis glued to a word ({@code a**b** [1]}) is.
+     * Prose citations are. So is a leftover such as {@code new [2]}, {@code (a, [2])},
+     * or emphasis glued to a word ({@code a**b** [1]}).
+     * An index ({@code m[1]}, {@code foo()[1]}, {@code m[0][1]}), a call ({@code foo([1])}),
+     * and an infix operator ({@code a * [1]}) are not.
      */
     private static boolean readableAsCitation(String text, int bracketAt, List<int[]> code) {
-        if (bracketAt == 0) {
-            return true;
-        }
-        char previous = text.charAt(bracketAt - 1);
-        if (isIdent(previous) || previous == ')') {
-            return false;
-        }
-        if (previous == ']') {
-            return closesCitation(text, bracketAt - 1, code);
-        }
-        int at = bracketAt - 1;
-        while (at >= 0 && isInlineSpace(text.charAt(at))) {
-            at--;
-        }
-        if (at < 0) {
-            return true;
-        }
-        char token = text.charAt(at);
-        return !isExpressionToken(token) || gluedEmphasis(text, at);
+        Role role = roleAt(text, bracketAt, code);
+        return role == Role.PROSE || role == Role.READABLE;
     }
 
     /** A {@code *} or {@code _} run sitting against a word, as in {@code a**b** [1]}. */
@@ -707,6 +731,145 @@ public final class Asker {
             }
         }
         return false;
+    }
+
+    /**
+     * The marker named nothing retrieved. Drop a comma, {@code and}, or {@code cf.} that
+     * only separated it from a neighbor, then drop parentheses that are now empty.
+     * A sentence comma with prose on the other side, as in {@code Text, [9] only}, stays.
+     * Returns where copying resumes.
+     */
+    private static int omitRemovedMarker(StringBuilder out, String raw, int markerEnd) {
+        int cursor = skipFollowingConnective(raw, markerEnd);
+        if (cursor == markerEnd) {
+            stripPrecedingConnective(out, raw, cursor);
+        }
+        return dropEmptyParens(out, raw, cursor);
+    }
+
+    /** A comma, {@code and}, or {@code cf.} immediately after the marker. The index sits past it. */
+    private static int skipFollowingConnective(String raw, int at) {
+        int start = skipSpaceTab(raw, at);
+        if (start >= raw.length()) {
+            return at;
+        }
+        if (raw.charAt(start) == ',') {
+            int after = skipSpaceTab(raw, start + 1);
+            if (after >= raw.length() || raw.charAt(after) == '[' || raw.charAt(after) == ')'
+                    || isTightPunct(raw.charAt(after))) {
+                return after;
+            }
+            return at;
+        }
+        String token = tokenAt(raw, start);
+        if (token == null) {
+            return at;
+        }
+        return skipSpaceTab(raw, start + token.length());
+    }
+
+    private static void stripPrecedingConnective(StringBuilder out, String raw, int cursor) {
+        int end = out.length();
+        while (end > 0 && isSpaceTab(out.charAt(end - 1))) {
+            end--;
+        }
+        int token = precedingTokenStart(out, end);
+        if (token >= 0) {
+            out.setLength(token);
+            return;
+        }
+        if (end > 0 && out.charAt(end - 1) == ',' && danglingAfter(raw, cursor)) {
+            out.setLength(end - 1);
+        }
+    }
+
+    /** Index of a trailing {@code cf.}, {@code cf}, or {@code and}, or -1. */
+    private static int precedingTokenStart(StringBuilder out, int end) {
+        if (endsWithToken(out, end, "cf.")) {
+            return end - 3;
+        }
+        if (endsWithToken(out, end, "cf")) {
+            return end - 2;
+        }
+        if (endsWithToken(out, end, "and")) {
+            return end - 3;
+        }
+        return -1;
+    }
+
+    private static boolean danglingAfter(String raw, int at) {
+        int index = skipSpaceTab(raw, at);
+        if (index >= raw.length()) {
+            return true;
+        }
+        char c = raw.charAt(index);
+        return c == ')' || isTightPunct(c);
+    }
+
+    private static int dropEmptyParens(StringBuilder out, String raw, int cursor) {
+        while (true) {
+            int end = out.length();
+            while (end > 0 && isSpaceTab(out.charAt(end - 1))) {
+                end--;
+            }
+            if (end == 0 || out.charAt(end - 1) != '(') {
+                return cursor;
+            }
+            int close = skipSpaceTab(raw, cursor);
+            if (close >= raw.length() || raw.charAt(close) != ')') {
+                return cursor;
+            }
+            out.setLength(end - 1);
+            cursor = close + 1;
+        }
+    }
+
+    private static String tokenAt(String raw, int at) {
+        if (startsWithToken(raw, at, "and")) {
+            return "and";
+        }
+        if (startsWithToken(raw, at, "cf.")) {
+            return "cf.";
+        }
+        if (startsWithToken(raw, at, "cf")) {
+            return "cf";
+        }
+        return null;
+    }
+
+    private static boolean startsWithToken(String raw, int at, String token) {
+        if (at < 0 || at + token.length() > raw.length()) {
+            return false;
+        }
+        if (!raw.regionMatches(true, at, token, 0, token.length())) {
+            return false;
+        }
+        int after = at + token.length();
+        return after >= raw.length() || !isIdent(raw.charAt(after));
+    }
+
+    private static boolean endsWithToken(StringBuilder out, int end, String token) {
+        int start = end - token.length();
+        if (start < 0) {
+            return false;
+        }
+        for (int i = 0; i < token.length(); i++) {
+            if (Character.toLowerCase(out.charAt(start + i)) != token.charAt(i)) {
+                return false;
+            }
+        }
+        return start == 0 || !isIdent(out.charAt(start - 1));
+    }
+
+    private static int skipSpaceTab(String raw, int at) {
+        while (at < raw.length() && isSpaceTab(raw.charAt(at))) {
+            at++;
+        }
+        return at;
+    }
+
+    private static boolean isSpaceTab(char c) {
+        return c == ' ' || c == '\t';
     }
 
     /**
