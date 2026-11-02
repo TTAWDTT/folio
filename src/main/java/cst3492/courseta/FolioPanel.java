@@ -230,12 +230,48 @@ public final class FolioPanel extends JPanel {
         return failure.getMessage() == null ? failure.toString() : failure.getMessage();
     }
 
+    /** Shown when the model answered with something other than a test class. */
+    static final String NOT_A_TEST = "The reply was not a JUnit test.";
+
     /**
-     * A preview succeeded only when the model returned a test. Blank text is the
-     * same failure as a missing scenario. Error text never takes this path.
+     * The prompt asks for one JUnit class with an {@code org.junit} import.
+     * A refusal or an explanation usually has neither.
+     */
+    static boolean looksLikeTest(String text) {
+        return text != null && (text.contains("org.junit") || text.contains("class "));
+    }
+
+    /**
+     * A preview succeeded only when the model returned test-like text. Blank text
+     * is the same failure as a missing scenario. Error text never takes this path:
+     * only the model reply is checked here.
      */
     static boolean previewSucceeded(String generated) {
-        return generated != null && !generated.isBlank();
+        return generated != null && !generated.isBlank() && looksLikeTest(generated);
+    }
+
+    /**
+     * What the preview shows for a model reply that did not throw. A blank reply
+     * is the missing-scenario sentence. A reply that is not a test keeps the
+     * reply under a note. A test is the reply itself.
+     */
+    static String previewTranscript(String generated) {
+        if (generated == null || generated.isBlank()) {
+            return Scenario.MISSING;
+        }
+        if (!looksLikeTest(generated)) {
+            return NOT_A_TEST + "\n\n" + generated.strip();
+        }
+        return generated;
+    }
+
+    /**
+     * Write turns on only after the call succeeded and the text now on screen
+     * still looks like a test. Failure text and the not-a-test note leave it
+     * off, including when that text contains {@code org.junit} or {@code class }.
+     */
+    static boolean previewReadyAfter(boolean callSucceeded, String shown) {
+        return callSucceeded && looksLikeTest(shown);
     }
 
     /**
@@ -277,8 +313,9 @@ public final class FolioPanel extends JPanel {
     }
 
     public void showNote(String text) {
-        transcript.setText(text == null ? "" : text);
-        previewReady = false;
+        String shown = text == null ? "" : text;
+        transcript.setText(shown);
+        previewReady = previewReadyAfter(false, shown);
         refreshWrite();
         showTab(TAB_TEST);
     }
@@ -825,14 +862,11 @@ public final class FolioPanel extends JPanel {
             }
             String generated = TestDraft.generate(
                     new HttpChatClient(), baseUrl.getText().strip(), key, model.getText().strip(), wanted, source);
-            if (!previewSucceeded(generated)) {
-                return Scenario.MISSING;
-            }
-            succeeded.set(true);
-            return generated;
+            succeeded.set(previewSucceeded(generated));
+            return previewTranscript(generated);
         }, text -> {
             transcript.setText(text);
-            previewReady = succeeded.get();
+            previewReady = previewReadyAfter(succeeded.get(), text);
             refreshWrite();
         });
     }

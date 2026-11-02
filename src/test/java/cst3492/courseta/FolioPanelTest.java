@@ -106,6 +106,26 @@ class FolioPanelTest {
     }
 
     @Test
+    void proseReplyLeavesWriteDisabled() {
+        String prose = "I will not generate a test. Describe the behaviour more clearly.";
+        assertFalse(FolioPanel.looksLikeTest(prose));
+        assertFalse(FolioPanel.previewSucceeded(prose));
+        String shown = FolioPanel.previewTranscript(prose);
+        assertEquals(FolioPanel.NOT_A_TEST + "\n\n" + prose, shown);
+        assertFalse(FolioPanel.previewReadyAfter(false, shown));
+        assertFalse(FolioPanel.previewReadyAfter(true, shown));
+        assertNull(FolioPanel.textToWrite(FolioPanel.previewReadyAfter(false, shown), shown));
+        assertFalse(FolioPanel.previewReadyAfter(false, "Error: class not found"));
+        assertFalse(FolioPanel.previewReadyAfter(false, "HTTP 400: expected org.junit class"));
+        String test = "import org.junit.Test;\nclass FolioGeneratedTest {\n}\n";
+        assertEquals(test, FolioPanel.previewTranscript(test));
+        assertTrue(FolioPanel.previewReadyAfter(true, test));
+        assertFalse(FolioPanel.previewReadyAfter(false, test));
+        assertEquals(Scenario.MISSING, FolioPanel.previewTranscript("  "));
+        assertFalse(FolioPanel.previewReadyAfter(false, Scenario.MISSING));
+    }
+
+    @Test
     void hintWidthUsesTheScaledValue() {
         JBUIScale.setUserScaleFactorForTest(1f);
         int atOne = JBUI.scale(240);

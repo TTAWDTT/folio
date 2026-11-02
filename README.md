@@ -14,7 +14,7 @@ A twenty-minute demo in a course project:
 2. Open the gear. Set the base URL and model if needed, paste an API key, and choose **Save settings**. The field clears and the badge becomes **Key ready · deepseek-flash**. An empty Save after that keeps the stored key.
 3. On **Files**, choose **Index files** and pick a lecture PDF and a slide deck. Each row shows the file name, the directory, and the page or slide count. **Remove** asks before deleting that path. Re-index and Remove also drop a legacy row stored under the bare file name.
 4. On **Ask**, type a question about the lecture. Folio shows the question, then citation chips (`lecture-servlet.pdf page 1`, or a slide number for a deck), then the answer. A chip copies the citation. A question that does not match the course shows the general-knowledge sentence and no chips.
-5. Put the caret on a method and run **Generate JUnit From Scenario** from the editor menu. The dialog is prefilled with the scenario already in the tool window. **Preview test** fills the preview. **Write test file** stays off until that preview succeeds, then writes it next to the class. A failed preview leaves its message in the preview and does not enable Write.
+5. Put the caret on a method and run **Generate JUnit From Scenario** from the editor menu. The dialog is prefilled with the scenario already in the tool window. **Preview test** fills the preview. **Write test file** stays off until that preview returns a test, then writes it next to the class. A failed preview, or a reply that is not a test, leaves a note in the preview and does not enable Write.
 6. Stage a change and run **Draft Folio Commit Messages** from the commit dialog. Folio drafts three messages, copies the first, and, when the action was started from the commit box, places that first message in the box.
 
 The screenshots below are the tool window in Islands Light and Islands Dark. They are not a recording of that full demo.
@@ -47,7 +47,7 @@ The index is saved as `index.tsv` under the IDE config directory `folio/`. It is
 
 **Generate JUnit From Scenario** opens a multiline dialog, prefilled with the text already in the Test section. Cancel, or an empty accept, does not generate. A successful accept stores the scenario and starts a preview.
 
-**Preview test** needs a key. The model is asked for one JUnit test class that includes an `org.junit` import. The result is written into the preview area. Write turns on only when that call returns a non-blank test. A missing scenario, a missing key, a blank reply, or an error stays in the preview and leaves Write off.
+**Preview test** needs a key. The model is asked for one JUnit test class that includes an `org.junit` import. The result is written into the preview area. Write turns on only when that reply contains `org.junit` or `class `. A missing scenario, a missing key, a blank reply, an error, or any other reply stays in the preview and leaves Write off. A reply that is not a test is shown under the note "The reply was not a JUnit test."
 
 **Write test file** copies that successful preview into a new Java file in the directory of the class or method the editor action captured. The file body is that preview string, not a second model call. With no directory captured, Write reports that a class or method must be selected and does not replace the preview. Starting another preview turns Write off until the new call succeeds.
 
@@ -69,7 +69,7 @@ Files, Islands Light. Indexed files would list under this empty state after **In
 
 ![Folio Files section, Islands Light](docs/images/files-islands-light.png)
 
-Test, Islands Light. This shot is from before Write was tied to a successful preview, so **Write test file** still looks enabled. In the current window it stays disabled until a preview succeeds. Preview test is disabled until a key is present:
+Test, Islands Light. This shot is from before Write was tied to a successful preview, so **Write test file** still looks enabled. In the current window it stays disabled until a preview returns a test. Preview test is disabled until a key is present:
 
 ![Folio Test section, Islands Light](docs/images/test-islands-light.png)
 
@@ -145,7 +145,7 @@ The badge is based on the stored secret, not on characters sitting in the field:
 - **Key not saved** when the field has characters and nothing is stored yet. Those three buttons are enabled, and a call uses the typed value.
 - **Key ready** only when a key is stored. Typing more characters does not change that badge. A call uses the typed characters when the field is non-empty, and the stored secret otherwise.
 
-**Index files** and **Write test file** stay enabled with no key.
+**Index files** stays enabled with no key. **Write test file** stays off until a preview returns a JUnit test.
 
 ## How retrieval works
 
@@ -186,11 +186,11 @@ Among chunks that clear the half-coverage bar, Folio keeps those whose score is 
 | `cst3492.courseta.commit` | `CommitMessageAction`, `CommitDraft`, `CommitBox`, `GitDiffs` | Staged diff, three messages, commit box |
 | `cst3492.courseta.drill` | `CourseDrillAction`, `Drill` | Three questions about the selection |
 
-`FolioPanel` is the behaviour owner. `FolioChrome` is the Swing layout: cards, buttons, the spinner, and the section columns. `FolioPanels` keeps one panel per project in a weak map so the editor actions can find it after the tool window is shown.
+`FolioPanel` is the behaviour owner. `FolioChrome` is the Swing layout: cards, buttons, the spinner, and the section columns. `FolioToolWindowFactory` builds the panel and registers it in `FolioPanels`, one panel per project. Editor and VCS actions do not call the factory. They activate the Folio tool window, then take the panel from `FolioPanels`.
 
 ### Components
 
-The tool window owns the panel. Indexing, Ask, test generation, and commit drafting hang off that panel, and the editor actions call the same panel.
+Indexing, Ask, test generation, and commit drafting hang off `FolioPanel`. That panel calls `CourseFileParser` for each chosen file. `CourseIndex` stores and scores the chunks. It does not parse files.
 
 ![Folio components](docs/images/components.svg)
 
@@ -199,15 +199,16 @@ The tool window owns the panel. Indexing, Ask, test generation, and commit draft
 
 ```mermaid
 flowchart TB
-  Editor[Editor and VCS actions] --> Factory[FolioToolWindowFactory]
-  Factory --> Panel[FolioPanel]
+  Factory[FolioToolWindowFactory] --> Panel[FolioPanel]
+  Editor[Editor and VCS actions] --> Panels[FolioPanels]
+  Panels --> Panel
   Panel --> Chrome[FolioChrome]
   Panel --> Settings[TaSettings and Secrets]
   Panel --> Index[CourseIndex]
+  Panel --> Parser[CourseFileParser]
   Panel --> Asker
   Panel --> Tests[TestDraft]
   Panel --> Commits[CommitDraft]
-  Index --> Parser[CourseFileParser]
   Parser --> Chunks[CourseChunks]
   Index --> Tokens
   Asker --> Index
@@ -225,17 +226,17 @@ The chart is the path a person walks, not three dials side by side. Read it from
 
 There are three places to start, drawn as arrows from the black dot. A fresh window starts at **No API key**. Opening the window again can start at **Key saved** or at **Files ready**, which is the saved key and the saved index. There is no restore arrow.
 
-**Setup** is tan: type a key, clear the field, or save it. **Ready** is where the saved key waits, with or without course files. From that box the four buttons diverge: **you click Ask**, **you click Preview test**, **you click Draft commit messages**, and **you index files**. Ask, Test, and Commit are separate boxes. **Finished** inside each box is an outcome. The arrow out of Finished is that same button again. **Preview shown** sits next to Finished because **you click Write test file** is a different step. **Preview failed** is inside Finished and has no Write arrow.
+**Setup** is tan: type a key, clear the field, or save it. **Ready** is where the saved key waits, with or without course files. From that box the four buttons diverge: **you click Ask**, **you click Preview test**, **you click Draft commit messages**, and **you index files**. Ask, Test, and Commit are separate boxes. **Finished** inside each box is an outcome. The arrow out of Finished is that same button again. **Preview shown** sits next to Finished because **you click Write test file** is a different step. **Preview failed** and **Not a test** are inside Finished and have no Write arrow.
 
-Color is the phase. Tan is setup, before a key is saved. Orange is the spinner: indexing, asking, generating a preview, or drafting. Teal is a saved key, files ready, or a successful result. Pink is a failed ask, preview, or draft.
+Color is the phase. Tan is setup, before a key is saved. Orange is the spinner: indexing, asking, generating a preview, or drafting. Teal is a saved key, files ready, or a successful result. Pink is a failed ask, preview, or draft, or a reply that is not a test.
 
-The checked rules are in `docs/statechart/FolioWindow.tla`. TLC reached 67 states and 308 steps and found no break. The chart draws 15 states and 20 arrows.
+The checked rules are in `docs/statechart/FolioWindow.tla`. TLC reached 73 states and 348 steps and found no break. The chart draws 16 states and 21 arrows.
 
 - The Ask, Preview, and Draft buttons are enabled exactly when a key is typed or stored.
 - A running call was started with a typed or stored key.
 - The spinner is on exactly while a call or indexing is in progress.
 - An empty Save does not drop a stored key.
-- Write copies the transcript only after the last preview succeeded, so a failed preview is not the test file.
+- Write copies the transcript only after the last preview returned a test, so a failed preview and a prose reply are not the test file.
 
 The chart hides steps that repeat a drawn arrow or that do not change the box you are looking at. They are still in the spec.
 
@@ -246,7 +247,7 @@ The chart hides steps that repeat a drawn arrow or that do not change the box yo
 - From Preview shown, another Ask, Preview, or Draft. The drawn step is Write.
 - Clearing the key, clearing the field, or saving, when you do that from a result rather than from Setup or Key saved.
 
-The model also leaves out the editor and VCS actions. They can still call the panel when the tool-window buttons are off. With no key they return the missing-key sentence and do not call HTTP, but the spinner still runs. It leaves out overlapping `run` calls, changing the key while a call is already running, indexing before a key is stored, cancelling a call, `showNote`, and the target directory. Write in the model assumes a directory is known. The panel also refuses when the editor action never set one. Clearing the key after files are indexed is left out. The window allows it, and the files stay. Starting Ask, Preview, or Draft clears the test transcript in the model. The panel keeps the previous preview on screen until that call returns. Chat cards and the wording of a commit message are not states. The chart's "message in the commit box" is only that the draft succeeded.
+The model runs one activity at a time. The panel's spinner is a busy counter, so two `run` calls can overlap and the spinner stays up until both finish. The model also leaves out the editor and VCS actions. They can still call the panel when the tool-window buttons are off. With no key they return the missing-key sentence and do not call HTTP, but the spinner still runs. It leaves out changing the key while a call is already running. Clear is only allowed at a hub. If it were allowed mid-call, `rest` would end the call, and TLC would not report it. The window lets that call finish. It leaves out indexing before a key is stored, cancelling a call, `showNote` (an empty scenario from the editor, or an index error), and the target directory. A reply that is not a test is a state. Write in the model assumes a directory is known. The panel also refuses when the editor action never set one. Clearing the key after files are indexed is left out. The window allows it, and the files stay. Starting Ask, Preview, or Draft clears the test transcript in the model. The panel keeps the previous preview on screen until that call returns. Chat cards and the wording of a commit message are not states. The chart's "message in the commit box" is only that the draft succeeded.
 
 ![Folio tool window](docs/statechart/chart.svg)
 
@@ -294,12 +295,13 @@ stateDiagram-v2
     s17: Generating the preview
     state "Finished" as s18 {
       s19: Preview failed
-      s20: Test file written
+      s20: Not a test
+      s21: Test file written
     }
-    s21: Preview shown
+    s22: Preview shown
   }
-  state "Course files" as s22 {
-    s23: Indexing
+  state "Course files" as s23 {
+    s24: Indexing
   }
   [*] --> s1
   [*] --> s4
@@ -313,14 +315,15 @@ stateDiagram-v2
   s2 --> s1: you clear the field
   s2 --> s4: you save settings
   s17 --> s19: the preview fails
-  s17 --> s21: the model shows a preview
-  s23 --> s4: the index is empty
-  s23 --> s5: indexing finishes
-  s21 --> s20: you click Write test file
+  s17 --> s20: the reply is not a test
+  s17 --> s22: the model shows a preview
+  s24 --> s4: the index is empty
+  s24 --> s5: indexing finishes
+  s22 --> s21: you click Write test file
   s3 --> s7: you click Ask
   s3 --> s12: you click Draft commit messages
   s3 --> s17: you click Preview test
-  s3 --> s23: you index files
+  s3 --> s24: you index files
   s8 --> s7: you click Ask
   s13 --> s12: you click Draft commit messages
   s18 --> s17: you click Preview test
@@ -336,14 +339,15 @@ stateDiagram-v2
   class s15 teal
   class s17 orange
   class s19 pink
-  class s20 teal
+  class s20 pink
   class s21 teal
-  class s23 orange
+  class s22 teal
+  class s24 orange
 ```
 
 </details>
 
-Source files: `docs/statechart/FolioWindow.tla`, `FolioWindow.cfg`, `view.mjs`, `chart.mmd`, and `chart.svg`. The component picture is `docs/images/components.svg`.
+Source files: `docs/statechart/FolioWindow.tla`, `FolioWindow.cfg`, `view.mjs`, `chart.mmd`, and `chart.svg`. `view.mjs` supplies the labels, the groups, and the colors. `chart.mmd` is regenerated from the spec and that view with the statechart script (`scripts/statechart FolioWindow.tla --view view.mjs --out DIR`, with mise on `PATH`). `chart.svg` is that Mermaid rendered with pele 1.9.0 (`limit` 1000000, `outputLimit` 8000000, `maxEdges` 10000) and the statechart colors inlined. The component picture is `docs/images/components.svg`, rendered the same way.
 
 ### Data flow for Ask
 
@@ -383,9 +387,9 @@ Anything that uses `FolioPanel.run` (Ask, drill, preview, commit draft, index, r
 - There is no screenshot of Commit, and no dark screenshot of Files or Test.
 - The chat keeps every card. There is no clear button and no cap.
 - Ask, Preview, and Draft in the tool window are disabled with no key. The editor and VCS actions are not. They still open the tool window and call the panel. With no key, Ask, preview, and the commit draft return the missing-key sentence and do not call HTTP. The spinner still runs for that path and then stops.
-- **Write test file** is enabled only while the last preview succeeded. Failure text stays in the preview and is not written. The old guard looked for `org.junit` or `class ` and did let some of that text through, including the no-directory sentence, which itself contains `class `. That guard is gone. A refusal now sets the status line and leaves the preview as it is.
+- **Write test file** turns on only when the last preview call succeeded and the reply contains `org.junit` or `class `. That check is only on the model reply. Failure text is shown as it is and does not enable Write, even when it contains those words. A reply that is not a test is shown with the note "The reply was not a JUnit test." and Write stays off. The no-directory sentence is a status line. It does not replace the preview, so it is not written.
 - Two `run` calls can overlap. The spinner is a counter, so it stays up until both finish. The statechart serializes them.
-- Saving a new key sets the badge to **Key ready** and writes the Password Safe on a background thread. An empty Save does not take that path.
+- Saving a new key sets the badge to **Key ready** and then writes the Password Safe on a background thread. If that write fails, the badge still says **Key ready**. An empty Save does not take that path.
 - Indexed files may lie outside the project. Folio does not open them from a citation chip.
 - Retrieval is lexical BM25 over the indexed files. It is not a web search and not a vector index.
 - The course plan in `docs/course-ta-plugin-plan.md` describes a larger program. This tree is the plugin that program built for Group B, not that program's process.
@@ -404,14 +408,14 @@ docs/course-ta-plugin-plan.md
 
 ## Testing
 
-`./gradlew test buildPlugin` with JDK 25 completes successfully. The suite is **80 tests, 0 failures**.
+`./gradlew test buildPlugin` with JDK 25 completes successfully. The suite is **81 tests, 0 failures**.
 
 | Test class | Tests |
 | --- | ---: |
 | `CourseIndexTest` | 33 |
 | `HttpChatClientTest` | 10 |
 | `CommitMessageActionTest` | 9 |
-| `FolioPanelTest` | 8 |
+| `FolioPanelTest` | 9 |
 | `AskerTest` | 7 |
 | `CourseFileParserTest` | 7 |
 | `GenerateTestActionTest` | 3 |
@@ -419,4 +423,4 @@ docs/course-ta-plugin-plan.md
 | `AnswerTest` | 1 |
 | `CourseDrillActionTest` | 1 |
 
-The index tests lock the retrieval rules above: weather and unrelated questions return no hits, a lecture term still hits when it appears in every chunk, polite Chinese and English questions still reach the course term, and removing one absolute path leaves another file with the same name. They also load a legacy bare-name row: re-indexing the same handout drops that row, and Remove drops it too. `FolioPanelTest` locks the button gate, empty Save, the badge text, the scaled hint width, cancellation, and that Write copies a preview only after it succeeded, including when the transcript holds error text that contains `class ` or `org.junit`. `CourseFileParserTest` checks page and slide order and that a chosen source id is stored. The UI tests do not construct a `Project`, so they do not click the confirmation dialog or the live tool window.
+The index tests lock the retrieval rules above: weather and unrelated questions return no hits, a lecture term still hits when it appears in every chunk, polite Chinese and English questions still reach the course term, and removing one absolute path leaves another file with the same name. They also load a legacy bare-name row: re-indexing the same handout drops that row, and Remove drops it too. `FolioPanelTest` locks the button gate, empty Save, the badge text, the scaled hint width, cancellation, and that Write copies a preview only after it succeeded. A prose reply leaves Write off. Error text that contains `class ` or `org.junit` does not enable Write either. `CourseFileParserTest` checks page and slide order and that a chosen source id is stored. The UI tests do not construct a `Project`, so they do not click the confirmation dialog or the live tool window.

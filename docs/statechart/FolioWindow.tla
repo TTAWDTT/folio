@@ -1,10 +1,14 @@
 ---- MODULE FolioWindow ----
 \* Folio tool window as a path the user walks.
 \* Setup, then course files, then Ask, Test, and Commit as separate steps.
-\* One activity at a time. Editor and VCS actions are not in this model.
+\* One activity at a time. The panel uses a busy counter, so two calls can
+\* overlap and the spinner stays up until both finish. This model does not.
+\* Editor and VCS actions are not in this model.
 \* A key is not cleared while a call is running. The window does allow that;
 \* the in-flight call still finishes. Keeping the key lets CallNeedsKey fail
 \* when the call guard is removed.
+\* A preview that returns prose is not a test. Write stays off. The reply is
+\* still the transcript.
 \* Indexing here starts only after a key is stored. The Index files button
 \* does not need a key; that path is left out.
 \* Starting Ask, Preview, or Draft clears the test transcript. The panel
@@ -20,9 +24,9 @@ VARIABLES
   llmButtons, \* TRUE when Ask, Preview test, and Draft commit are enabled
   call,       \* "idle" | "running" | "answered" | "failed"
   purpose,    \* "idle" | "ask" | "preview" | "draft"
-  preview,    \* "empty" | "test" | "error"  (the Test transcript)
-  previewOk,  \* TRUE only after the last preview returned a test
-  written     \* "empty" | "test" | "error"  (the file Write last copied)
+  preview,    \* "empty" | "test" | "error" | "prose"  (the Test transcript)
+  previewOk,  \* TRUE only after the last preview returned test-like text
+  written     \* "empty" | "test" | "error" | "prose"  (the file Write last copied)
 
 vars == <<screen, key, index, secret, spinning, llmButtons, call, purpose, preview, previewOk, written>>
 
@@ -31,14 +35,14 @@ Screens == {
   "filesNoKey", "typedFiles", "savedFiles",
   "indexing",
   "asking", "askCited", "askFailed",
-  "generating", "previewShown", "previewFailed", "writtenFile",
+  "generating", "previewShown", "previewFailed", "previewNotATest", "writtenFile",
   "drafting", "commitPlaced", "commitFailed"
   }
 Keys == {"none", "typed", "stored"}
 Indexes == {"empty", "indexing", "ready"}
 Calls == {"idle", "running", "answered", "failed"}
 Purposes == {"idle", "ask", "preview", "draft"}
-Texts == {"empty", "test", "error"}
+Texts == {"empty", "test", "error", "prose"}
 
 TypeOK ==
   /\ screen \in Screens
@@ -65,8 +69,8 @@ SpinnerMatchesWork == spinning <=> (call = "running" \/ index = "indexing")
 \* A stored badge means a key is in PasswordSafe. Empty Save does not change `secret`.
 EmptySaveKeepsKey == secret <=> (key = "stored")
 
-\* Write copies the transcript. It may run only after a preview succeeded, so the
-\* file is never the error text a failed preview left behind.
+\* Write copies the transcript. It may run only after a preview returned a test,
+\* so the file is never error text or a prose reply.
 WriteMatchesPreview == written \in {"empty", "test"}
 
 \* A feature purpose is set only while that call is running.
@@ -76,13 +80,18 @@ atHub == screen \in {
   "noKey", "typed", "saved",
   "filesNoKey", "typedFiles", "savedFiles",
   "askCited", "askFailed",
-  "previewShown", "previewFailed", "writtenFile",
+  "previewShown", "previewFailed", "previewNotATest", "writtenFile",
   "commitPlaced", "commitFailed"
   }
 
 \* The guard a mutation removes. Ask, Preview, and Draft all use it.
 MayCall == key # "none" /\ atHub
 
+\* `rest` ends any in-progress call: call and purpose go idle and the spinner
+\* stops. YouClearKey may run only at a hub, so a running call cannot be
+\* cleared here. The window does let you edit the key during a call, and that
+\* call still finishes. If clear were allowed mid-call, `rest` would end the
+\* call and TLC would not report it.
 rest ==
   /\ call' = "idle"
   /\ purpose' = "idle"
@@ -224,11 +233,22 @@ TheCallAnswers ==
   /\ call' = "answered"
   /\ purpose' = "idle"
   /\ spinning' = FALSE
-  /\ screen' = CASE purpose = "ask" -> "askCited"
-                 [] purpose = "preview" -> "previewShown"
-                 [] OTHER -> "commitPlaced"
-  /\ preview' = IF purpose = "preview" THEN "test" ELSE "empty"
-  /\ previewOk' = (purpose = "preview")
+  /\ \/ /\ purpose = "ask"
+        /\ screen' = "askCited"
+        /\ preview' = "empty"
+        /\ previewOk' = FALSE
+     \/ /\ purpose = "draft"
+        /\ screen' = "commitPlaced"
+        /\ preview' = "empty"
+        /\ previewOk' = FALSE
+     \/ /\ purpose = "preview"
+        /\ screen' = "previewShown"
+        /\ preview' = "test"
+        /\ previewOk' = TRUE
+     \/ /\ purpose = "preview"
+        /\ screen' = "previewNotATest"
+        /\ preview' = "prose"
+        /\ previewOk' = FALSE
   /\ UNCHANGED <<key, index, secret, llmButtons, written>>
 
 \* A failed preview leaves error text in the transcript and clears the success flag.
@@ -246,10 +266,10 @@ TheCallFails ==
   /\ UNCHANGED <<key, index, secret, llmButtons, written>>
 
 \* Write copies whatever the transcript currently shows. The only guard is that
-\* the last preview succeeded. The failed-preview screen is included so that
-\* removing the guard lets error text be saved.
+\* the last preview was a test. The failed and not-a-test screens are included
+\* so that removing the guard lets error text or prose be saved.
 YouWrite ==
-  /\ screen \in {"previewShown", "previewFailed", "writtenFile"}
+  /\ screen \in {"previewShown", "previewFailed", "previewNotATest", "writtenFile"}
   /\ previewOk
   /\ written' = preview
   /\ screen' = "writtenFile"

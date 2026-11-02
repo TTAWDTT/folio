@@ -14,6 +14,7 @@ const place = {
   generating: ["Test", "Generating the preview"],
   previewShown: ["Test", "Preview shown"],
   previewFailed: ["Test", "Finished", "Preview failed"],
+  previewNotATest: ["Test", "Finished", "Not a test"],
   writtenFile: ["Test", "Finished", "Test file written"],
   drafting: ["Commit", "Drafting a message"],
   commitPlaced: ["Commit", "Finished", "Message in the commit box"],
@@ -33,7 +34,12 @@ export const group = (v) => {
     name === "Drafting a message"
   )
     return "Working";
-  if (name === "The ask failed" || name === "Preview failed" || name === "The draft failed")
+  if (
+    name === "The ask failed" ||
+    name === "Preview failed" ||
+    name === "Not a test" ||
+    name === "The draft failed"
+  )
     return "Error";
   if (
     name === "No API key" ||
@@ -58,6 +64,7 @@ const answerLabel = {
   commitPlaced: "the message is in the commit box",
   askFailed: "the ask fails",
   previewFailed: "the preview fails",
+  previewNotATest: "the reply is not a test",
   commitFailed: "the draft fails",
 };
 
@@ -71,7 +78,11 @@ function beginLabel(screen) {
 function showBegin(from, to) {
   if (from === "saved" || from === "savedFiles" || from === "noKey") return true;
   if ((from === "askCited" || from === "askFailed") && to === "asking") return true;
-  if ((from === "previewFailed" || from === "writtenFile") && to === "generating") return true;
+  if (
+    (from === "previewFailed" || from === "previewNotATest" || from === "writtenFile") &&
+    to === "generating"
+  )
+    return true;
   if ((from === "commitPlaced" || from === "commitFailed") && to === "drafting") return true;
   return false;
 }

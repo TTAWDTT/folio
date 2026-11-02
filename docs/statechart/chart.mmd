@@ -38,12 +38,13 @@ stateDiagram-v2
     s17: Generating the preview
     state "Finished" as s18 {
       s19: Preview failed
-      s20: Test file written
+      s20: Not a test
+      s21: Test file written
     }
-    s21: Preview shown
+    s22: Preview shown
   }
-  state "Course files" as s22 {
-    s23: Indexing
+  state "Course files" as s23 {
+    s24: Indexing
   }
   [*] --> s1
   [*] --> s4
@@ -57,14 +58,15 @@ stateDiagram-v2
   s2 --> s1: you clear the field
   s2 --> s4: you save settings
   s17 --> s19: the preview fails
-  s17 --> s21: the model shows a preview
-  s23 --> s4: the index is empty
-  s23 --> s5: indexing finishes
-  s21 --> s20: you click Write test file
+  s17 --> s20: the reply is not a test
+  s17 --> s22: the model shows a preview
+  s24 --> s4: the index is empty
+  s24 --> s5: indexing finishes
+  s22 --> s21: you click Write test file
   s3 --> s7: you click Ask
   s3 --> s12: you click Draft commit messages
   s3 --> s17: you click Preview test
-  s3 --> s23: you index files
+  s3 --> s24: you index files
   s8 --> s7: you click Ask
   s13 --> s12: you click Draft commit messages
   s18 --> s17: you click Preview test
@@ -80,6 +82,7 @@ stateDiagram-v2
   class s15 teal
   class s17 orange
   class s19 pink
-  class s20 teal
+  class s20 pink
   class s21 teal
-  class s23 orange
+  class s22 teal
+  class s24 orange
