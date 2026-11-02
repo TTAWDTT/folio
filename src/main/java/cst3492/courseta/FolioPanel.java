@@ -932,11 +932,20 @@ public final class FolioPanel extends JPanel {
             boolean follow = chatNearBottom();
             card.showAnswer(text, held[0]);
             scrollChat(follow);
-        }, () -> {
-            question.setText(asked);
-            fitComposer();
-            question.requestFocusInWindow();
-        });
+        }, () -> restoreQuestionIfBlank(asked));
+    }
+
+    /**
+     * A failed request puts the question back only when the composer is still empty.
+     * Text the user typed while the call was in flight stays.
+     */
+    void restoreQuestionIfBlank(String asked) {
+        if (question.getText() != null && !question.getText().isBlank()) {
+            return;
+        }
+        question.setText(asked == null ? "" : asked);
+        fitComposer();
+        question.requestFocusInWindow();
     }
 
     private FolioChrome.AnswerCard addAnswerCard() {

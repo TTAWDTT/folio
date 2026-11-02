@@ -30,8 +30,12 @@ import javax.swing.plaf.basic.BasicButtonUI;
 import javax.swing.plaf.basic.BasicTextAreaUI;
 import java.awt.Component;
 import java.awt.Container;
+import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Rectangle;
+import java.awt.font.TextHitInfo;
+import java.awt.im.InputMethodRequests;
+import java.text.AttributedCharacterIterator;
 import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
@@ -283,7 +287,7 @@ class FolioPanelTest {
     @Test
     void narrowHeaderAndTabsDoNotCoverEachOther() {
         FolioChrome.TitleBlock titles = FolioChrome.TitleBlock.of("Folio", "Course assistant");
-        FolioChrome.ChipButton badge = new FolioChrome.ChipButton("Key ready · deepseek-flash", null);
+        FolioChrome.ChipButton badge = new FolioChrome.ChipButton("Key ready · test-model", null);
         JButton gear = FolioChrome.gear(null);
         FolioChrome.HeaderBar header = new FolioChrome.HeaderBar(titles, badge, gear);
         header.setSize(220, 160);
@@ -302,7 +306,7 @@ class FolioPanelTest {
 
         header.setSize(720, 80);
         header.doLayout();
-        assertEquals("Key ready · deepseek-flash", badge.getText());
+        assertEquals("Key ready · test-model", badge.getText());
 
         JButton[] tabs = {
                 FolioChrome.segment("Ask", null),
@@ -342,6 +346,26 @@ class FolioPanelTest {
         }
     }
 
+    /** Deleting {@code question.setText(asked)} leaves a failed request's composer empty. */
+    @Test
+    void failedRequestRestoresABlankComposer() {
+        FolioPanel panel = new FolioPanel(null);
+        FolioChrome.PromptArea question = composer(panel);
+        question.setText("");
+        panel.restoreQuestionIfBlank("What is a servlet?");
+        assertEquals("What is a servlet?", question.getText());
+    }
+
+    /** Text typed while the request was in flight is not replaced by the failed question. */
+    @Test
+    void failedRequestKeepsTextTypedWhileWaiting() {
+        FolioPanel panel = new FolioPanel(null);
+        FolioChrome.PromptArea question = composer(panel);
+        question.setText("a new question");
+        panel.restoreQuestionIfBlank("What is a servlet?");
+        assertEquals("a new question", question.getText());
+    }
+
     /** Reverting the chat pane's own updateUI leaves the viewport transparent after a theme refresh. */
     @Test
     void chatSurfaceStaysOpaqueAfterThemeRefresh() {
@@ -351,6 +375,69 @@ class FolioPanelTest {
         assertTrue(chat.getViewport().isOpaque());
         assertEquals(panel.getBackground(), chat.getViewport().getBackground());
         assertEquals(panel.getBackground(), chat.getBackground());
+    }
+
+    /**
+     * Theme refresh of the chat pane itself must repaint from {@code applyChatSurface}.
+     * The panel's {@code updateUI} is not part of this call, so deleting the pane's own call
+     * leaves the viewport on the colour from before the refresh.
+     */
+    @Test
+    void chatScrollUpdateUiFollowsThePanelSurface() {
+        FolioPanel panel = new FolioPanel(null);
+        JScrollPane chat = chatPane(panel);
+        java.awt.Color surface = new java.awt.Color(0x0A1B2C);
+        panel.setBackground(surface);
+        chat.getViewport().setOpaque(false);
+        chat.getViewport().setBackground(java.awt.Color.MAGENTA);
+        chat.setBackground(java.awt.Color.MAGENTA);
+        chat.updateUI();
+        assertTrue(chat.getViewport().isOpaque());
+        assertEquals(surface, chat.getViewport().getBackground());
+        assertEquals(surface, chat.getBackground());
+    }
+
+    /**
+     * Enter goes through {@code imeComposing}. A field whose input method still has
+     * uncommitted text must not send. Passing {@code false} instead sends.
+     */
+    @Test
+    void enterDoesNotSendWhileAnInputMethodIsComposing() {
+        AtomicInteger sent = new AtomicInteger();
+        ComposingField area = new ComposingField();
+        area.setText("ka");
+        assertTrue(FolioPanel.imeComposing(area));
+        FolioPanel.installComposerKeys(area, sent::incrementAndGet, () -> true);
+        Action send = area.getActionMap().get("folio-send");
+        send.actionPerformed(new ActionEvent(area, ActionEvent.ACTION_PERFORMED, ""));
+        assertEquals(0, sent.get());
+    }
+
+    /** Preferred and minimum size must not clear labels, and a narrow bar must not stack the buttons. */
+    @Test
+    void segmentMeasurementDoesNotMutateButtonsOrOverlap() {
+        JButton[] tabs = {
+                FolioChrome.segment("Ask", null),
+                FolioChrome.segment("Files", null),
+                FolioChrome.segment("Test", null),
+                FolioChrome.segment("Commit", null)
+        };
+        FolioChrome.SegmentBar bar = new FolioChrome.SegmentBar(tabs);
+        Dimension preferred = bar.getPreferredSize();
+        Dimension minimum = bar.getMinimumSize();
+        assertTrue(preferred.width > 0);
+        assertTrue(minimum.width > 0);
+        assertEquals("Ask", tabs[0].getText());
+        assertEquals("Commit", tabs[3].getText());
+        bar.setSize(Math.max(32, preferred.width / 4), Math.max(36, minimum.height));
+        bar.doLayout();
+        for (int i = 0; i < tabs.length; i++) {
+            assertTrue(tabs[i].getWidth() > 0);
+            for (int j = i + 1; j < tabs.length; j++) {
+                assertFalse(tabs[i].getBounds().intersects(tabs[j].getBounds()),
+                        tabs[i].getBounds() + " overlaps " + tabs[j].getBounds());
+            }
+        }
     }
 
     /** A blank composer must not send. Reverting the blank check calls the model with "(empty question)". */
@@ -544,6 +631,51 @@ class FolioPanelTest {
             }
         }
         return false;
+    }
+
+    /** Document text is still uncommitted, so {@link FolioPanel#imeComposing} is true. */
+    private static final class ComposingField extends JBTextArea {
+        @Override
+        public InputMethodRequests getInputMethodRequests() {
+            return new InputMethodRequests() {
+                @Override
+                public Rectangle getTextLocation(TextHitInfo offset) {
+                    return new Rectangle();
+                }
+
+                @Override
+                public TextHitInfo getLocationOffset(int x, int y) {
+                    return null;
+                }
+
+                @Override
+                public int getInsertPositionOffset() {
+                    return 0;
+                }
+
+                @Override
+                public AttributedCharacterIterator getCommittedText(int beginIndex, int endIndex,
+                                                                    AttributedCharacterIterator.Attribute[] attributes) {
+                    return null;
+                }
+
+                @Override
+                public int getCommittedTextLength() {
+                    return 0;
+                }
+
+                @Override
+                public AttributedCharacterIterator cancelLatestCommittedText(
+                        AttributedCharacterIterator.Attribute[] attributes) {
+                    return null;
+                }
+
+                @Override
+                public AttributedCharacterIterator getSelectedText(AttributedCharacterIterator.Attribute[] attributes) {
+                    return null;
+                }
+            };
+        }
     }
 
     private static final class Cancel extends RuntimeException implements ControlFlowException {
