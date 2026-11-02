@@ -123,8 +123,8 @@ Re-read the execution playbook from trunk. Audit the operation against it and fi
 
 **审阅门。** 合并前由操作者审阅。
 
-- [ ] 把通道 2 的截图复制到 `/cursor/stores/self/docs/media/pr-1-review-window.png`。
-- [ ] 在通道虚拟机上录 30 到 60 秒，内容是打开工具窗口和设置页。存为 `/cursor/stores/self/docs/media/pr-1-review.mp4`。
+- [ ] 把通道 2 的截图复制下来，文件名为 pr-1-review-window.png。
+- [ ] 在通道虚拟机上录 30 到 60 秒，内容是打开工具窗口和设置页。存为 pr-1-review.mp4。
 - [ ] 把截图和录像发到对话里。停在可合并。等待操作者审阅。
 
 **合并。**
@@ -187,8 +187,8 @@ Re-read the execution playbook from trunk. Audit the operation against it and fi
 
 **审阅门。** 合并前由操作者审阅。
 
-- [ ] 把通道 2 的截图复制到 `/cursor/stores/self/docs/media/pr-2-review-rows.png`。
-- [ ] 在通道虚拟机上录 30 到 60 秒，内容是索引夹具并做中文查询。存为 `/cursor/stores/self/docs/media/pr-2-review.mp4`。
+- [ ] 把通道 2 的截图复制下来，文件名为 pr-2-review-rows.png。
+- [ ] 在通道虚拟机上录 30 到 60 秒，内容是索引夹具并做中文查询。存为 pr-2-review.mp4。
 - [ ] 把截图和录像发到对话里。停在可合并。等待操作者审阅。
 
 **合并。**
@@ -250,8 +250,8 @@ Re-read the execution playbook from trunk. Audit the operation against it and fi
 
 **审阅门。** 合并前由操作者审阅。
 
-- [ ] 把通道 2 的截图复制到 `/cursor/stores/self/docs/media/pr-3-review-citation.png`。
-- [ ] 在通道虚拟机上录 30 到 60 秒，内容是一次右键提问和一次没有命中的提问。存为 `/cursor/stores/self/docs/media/pr-3-review.mp4`。
+- [ ] 把通道 2 的截图复制下来，文件名为 pr-3-review-citation.png。
+- [ ] 在通道虚拟机上录 30 到 60 秒，内容是一次右键提问和一次没有命中的提问。存为 pr-3-review.mp4。
 - [ ] 把截图和录像发到对话里。停在可合并。等待操作者审阅。
 
 **合并。**
@@ -310,8 +310,8 @@ Re-read the execution playbook from trunk. Audit the operation against it and fi
 
 **审阅门。** 合并前由操作者审阅。
 
-- [ ] 把通道 4 的截图复制到 `/cursor/stores/self/docs/media/pr-4-review-preview.png`。
-- [ ] 在通道虚拟机上录 30 到 60 秒，内容是场景、预览和 Insert。存为 `/cursor/stores/self/docs/media/pr-4-review.mp4`。
+- [ ] 把通道 4 的截图复制下来，文件名为 pr-4-review-preview.png。
+- [ ] 在通道虚拟机上录 30 到 60 秒，内容是场景、预览和 Insert。存为 pr-4-review.mp4。
 - [ ] 把截图和录像发到对话里。停在可合并。等待操作者审阅。
 
 **合并。**
@@ -371,8 +371,8 @@ Re-read the execution playbook from trunk. Audit the operation against it and fi
 
 **审阅门。** 合并前由操作者审阅。
 
-- [ ] 把通道 2 的截图复制到 `/cursor/stores/self/docs/media/pr-5-review-messages.png`。
-- [ ] 在通道虚拟机上录 30 到 60 秒，内容是一次暂存编辑、三条候选，以及文件仍然暂存。存为 `/cursor/stores/self/docs/media/pr-5-review.mp4`。
+- [ ] 把通道 2 的截图复制下来，文件名为 pr-5-review-messages.png。
+- [ ] 在通道虚拟机上录 30 到 60 秒，内容是一次暂存编辑、三条候选，以及文件仍然暂存。存为 pr-5-review.mp4。
 - [ ] 把截图和录像发到对话里。停在可合并。等待操作者审阅。
 
 **合并。**
@@ -431,8 +431,8 @@ Re-read the execution playbook from trunk. Audit the operation against it and fi
 
 **审阅门。** 合并前由操作者审阅。
 
-- [ ] 把通道 2 的截图复制到 `/cursor/stores/self/docs/media/pr-6-review-questions.png`。
-- [ ] 在通道虚拟机上录 30 到 60 秒，内容是一次选区、三个问题，以及编辑器未改。存为 `/cursor/stores/self/docs/media/pr-6-review.mp4`。
+- [ ] 把通道 2 的截图复制下来，文件名为 pr-6-review-questions.png。
+- [ ] 在通道虚拟机上录 30 到 60 秒，内容是一次选区、三个问题，以及编辑器未改。存为 pr-6-review.mp4。
 - [ ] 把截图和录像发到对话里。停在可合并。等待操作者审阅。
 
 **合并。**

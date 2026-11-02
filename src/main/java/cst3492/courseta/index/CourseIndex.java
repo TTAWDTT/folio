@@ -9,6 +9,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -18,8 +19,12 @@ import java.util.Set;
 public final class CourseIndex {
     private static final double K1 = 1.2;
     private static final double B = 0.75;
-    // One distinctive term in a single-chunk index scores about 0.29. Overlap below this is not a hit.
-    private static final double MIN_SCORE = 0.2;
+    // A chunk must cover at least half of the question's coverage units. For Chinese that
+    // unit is a run of content Han characters, not each bigram. One shared word in a longer
+    // question is not a hit, at any document frequency.
+    static final double MIN_COVERAGE = 0.5;
+    // Among chunks that clear that bar, drop scores below this fraction of the best score.
+    static final double RELATIVE_KEEP = 0.25;
 
     private final Map<String, CourseChunk> byId = new LinkedHashMap<>();
     private final Map<String, Map<String, Integer>> termFreq = new HashMap<>();
@@ -56,7 +61,8 @@ public final class CourseIndex {
             return List.of();
         }
         Set<String> queryTerms = new LinkedHashSet<>(Tokens.terms(query));
-        if (queryTerms.isEmpty() || totalTerms == 0) {
+        List<List<String>> coverageGroups = Tokens.coverageGroups(query);
+        if (queryTerms.isEmpty() || coverageGroups.isEmpty() || totalTerms == 0) {
             return List.of();
         }
         double avgdl = (double) totalTerms / byId.size();
@@ -80,25 +86,51 @@ public final class CourseIndex {
                 scores.merge(entry.getKey(), contribution, Double::sum);
             }
         }
+        Map<String, Integer> covered = new HashMap<>();
+        for (List<String> group : coverageGroups) {
+            Set<String> seen = new HashSet<>();
+            for (String term : group) {
+                Map<String, Integer> posting = termFreq.get(term);
+                if (posting == null) {
+                    continue;
+                }
+                for (String id : posting.keySet()) {
+                    if (seen.add(id)) {
+                        covered.merge(id, 1, Integer::sum);
+                    }
+                }
+            }
+        }
         List<Scored> scored = new ArrayList<>();
+        double best = 0;
         for (Map.Entry<String, Double> entry : scores.entrySet()) {
-            if (entry.getValue() < MIN_SCORE) {
+            int matched = covered.getOrDefault(entry.getKey(), 0);
+            if (!enoughCoverage(matched, coverageGroups.size()) || entry.getValue() <= 0) {
                 continue;
             }
             CourseChunk chunk = byId.get(entry.getKey());
             if (chunk != null) {
+                best = Math.max(best, entry.getValue());
                 scored.add(new Scored(entry.getValue(), chunk));
             }
         }
+        if (scored.isEmpty()) {
+            return List.of();
+        }
+        double cutoff = best * RELATIVE_KEEP;
         scored.sort(Comparator.comparingDouble(Scored::score).reversed().thenComparing(s -> s.chunk().id()));
         List<CourseChunk> out = new ArrayList<>();
         for (Scored item : scored) {
-            if (out.size() == limit) {
+            if (item.score() < cutoff || out.size() == limit) {
                 break;
             }
             out.add(item.chunk());
         }
         return out;
+    }
+
+    static boolean enoughCoverage(int matchedTerms, int queryTerms) {
+        return queryTerms > 0 && matchedTerms >= queryTerms * MIN_COVERAGE;
     }
 
     public synchronized void save(Path file) throws IOException {
