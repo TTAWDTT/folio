@@ -518,19 +518,27 @@ final class FolioChrome {
             bannerSlot.removeAll();
             sources.removeAll();
             String value = text == null ? "" : text;
-            boolean ungrounded = value.startsWith(Answer.GENERAL_SENTENCE);
             List<CourseChunk> hits = answer == null || answer.citations() == null ? List.of() : answer.citations();
-            boolean noValidCite = answer != null && answer.calledModel() && !ungrounded && hits.isEmpty();
-            if (ungrounded) {
-                value = value.substring(Answer.GENERAL_SENTENCE.length()).stripLeading();
-                bannerSlot.add(banner(Answer.UNGROUNDED, Tone.WARNING), BorderLayout.CENTER);
-            } else if (noValidCite) {
-                bannerSlot.add(banner(Asker.NO_VALID_CITE, Tone.INFO), BorderLayout.CENTER);
+            if (answer != null) {
+                switch (answer.evidence()) {
+                    case GENERAL -> {
+                        if (value.startsWith(Answer.GENERAL_SENTENCE)) {
+                            value = value.substring(Answer.GENERAL_SENTENCE.length()).stripLeading();
+                        }
+                        bannerSlot.add(banner(Answer.UNGROUNDED, Tone.WARNING), BorderLayout.CENTER);
+                    }
+                    case RETRIEVED -> bannerSlot.add(banner("Course material was retrieved. The reply has no mapped source citation.", Tone.INFO), BorderLayout.CENTER);
+                    case INVALID -> bannerSlot.add(banner("Some source markers are invalid. Cards show retrieved material.", Tone.WARNING), BorderLayout.CENTER);
+                    case AMBIGUOUS -> bannerSlot.add(banner("Source markers are ambiguous. Cards show retrieved material.", Tone.WARNING), BorderLayout.CENTER);
+                    case CONFIGURATION -> bannerSlot.add(banner("Model configuration is needed. Local course matches remain available below.", Tone.INFO), BorderLayout.CENTER);
+                    case INLINE -> { }
+                }
             }
             body.setBody(value);
             body.setVisible(!value.isBlank());
             if (!hits.isEmpty()) {
-                addSourceRow(mutedHeading("Sources"), 0, JBUI.insets(2, 0, 4, 0));
+                addSourceRow(mutedHeading(answer != null && answer.evidence() == Answer.Evidence.INLINE
+                        ? "Sources cited in the reply" : "Retrieved material"), 0, JBUI.insets(2, 0, 4, 0));
                 for (int i = 0; i < hits.size(); i++) {
                     CourseChunk chunk = hits.get(i);
                     JComponent card = sourceCard(i + 1, chunk);

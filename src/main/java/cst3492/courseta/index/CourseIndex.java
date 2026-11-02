@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-public final class CourseIndex {
+public final class CourseIndex implements CourseSearch {
     private static final double K1 = 1.2;
     private static final double B = 0.75;
     // A chunk must cover at least half of the question's coverage units. For Chinese that
@@ -31,7 +31,7 @@ public final class CourseIndex {
     private final Map<String, Integer> docLength = new HashMap<>();
     private int totalTerms;
 
-    public int size() {
+    public synchronized int size() {
         return byId.size();
     }
 
@@ -86,7 +86,7 @@ public final class CourseIndex {
     }
 
     public synchronized List<CourseChunk> top(String query, int limit) {
-        if (byId.isEmpty() || limit == 0) {
+        if (byId.isEmpty() || limit <= 0) {
             return List.of();
         }
         Set<String> queryTerms = new LinkedHashSet<>(Tokens.terms(query));

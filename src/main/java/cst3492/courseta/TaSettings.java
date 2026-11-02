@@ -15,17 +15,41 @@ public final class TaSettings implements PersistentStateComponent<TaSettings.Sta
     public static final class State {
         public String baseUrl = DEFAULT_BASE_URL;
         public String modelName = DEFAULT_MODEL;
+        public String credentialOrigin = "";
     }
 
     private State state = new State();
 
-    @Override
-    public State getState() {
-        return state;
+    public record Values(String baseUrl, String modelName, String credentialOrigin) {
+        @Override
+        public String toString() {
+            return "SettingsValues[redacted]";
+        }
     }
 
     @Override
-    public void loadState(@NotNull State state) {
-        this.state = state;
+    public synchronized State getState() {
+        State copy = new State();
+        copy.baseUrl = state.baseUrl;
+        copy.modelName = state.modelName;
+        copy.credentialOrigin = state.credentialOrigin;
+        return copy;
+    }
+
+    @Override
+    public synchronized void loadState(@NotNull State state) {
+        replace(new Values(state.baseUrl, state.modelName, state.credentialOrigin));
+    }
+
+    public synchronized Values snapshot() {
+        return new Values(state.baseUrl, state.modelName, state.credentialOrigin);
+    }
+
+    public synchronized void replace(Values values) {
+        State next = new State();
+        next.baseUrl = values.baseUrl() == null ? DEFAULT_BASE_URL : values.baseUrl();
+        next.modelName = values.modelName() == null ? DEFAULT_MODEL : values.modelName();
+        next.credentialOrigin = values.credentialOrigin() == null ? "" : values.credentialOrigin();
+        state = next;
     }
 }

@@ -78,21 +78,19 @@ class CommitMessageActionTest {
     }
 
     @Test
-    void largeDiffIsTruncatedAndTheModelIsTold() throws Exception {
+    void largeDiffIsProcessedInFullBeforeCandidatesAreSynthesized() throws Exception {
         String diff = "x".repeat(20_000);
-        AtomicReference<String> seen = new AtomicReference<>();
+        java.util.ArrayList<String> seen = new java.util.ArrayList<>();
         ChatClient chat = (base, key, model, system, user) -> {
-            seen.set(user);
+            seen.add(user);
             return "feat: a\n---\nfix: b";
         };
         List<String> messages = CommitDraft.draft(true, diff, chat, "http://localhost", "key", "m");
-        String sent = seen.get();
-        assertTrue(sent.length() <= CommitDraft.MAX_DIFF_CHARS);
-        assertTrue(sent.length() < diff.length());
-        assertTrue(sent.startsWith("x".repeat(100)));
-        assertTrue(sent.contains("truncated"));
-        assertTrue(sent.contains("20000"));
-        assertEquals(sent, CommitDraft.bound(sent));
+        assertEquals(3, seen.size());
+        assertEquals("x".repeat(CommitDraft.MAX_DIFF_CHARS), seen.getFirst());
+        assertTrue(seen.get(1).endsWith("x".repeat(8_000)));
+        assertTrue(seen.get(2).contains("Batch 1 of 2"));
+        assertTrue(seen.get(2).contains("Batch 2 of 2"));
         assertEquals(2, messages.size());
     }
 

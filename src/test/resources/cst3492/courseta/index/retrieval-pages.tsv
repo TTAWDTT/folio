@@ -1,0 +1,4 @@
+java-session.pdf	36	Java programs make HTTP requests. A servlet can get session attributes, set a cookie, take a request and put a value in the session. Session management keeps a user's login state.
+java-session.pdf	40	JUnit tests create objects and check expected behavior. Tests can make assertions, return values, add cases, remove fixtures and write reports. Validation rejects invalid input at a boundary.
+java-oop.pdf	12	Inheritance lets a subclass override a superclass method. An interface specifies a contract. Polymorphism lets different implementations handle the same call.
+java-io.pdf	7	An InputStream can read bytes from a file. An OutputStream can write bytes to a file. IOException reports an input or output failure.
