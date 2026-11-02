@@ -452,14 +452,15 @@ final class FolioChrome {
                 return fallback;
             }
             int width = getWidth();
-            if (width <= 20) {
+            int narrow = JBUI.scale(20);
+            if (width <= narrow) {
                 Container parent = getParent();
-                while (parent != null && width <= 20) {
+                while (parent != null && width <= narrow) {
                     width = parent.getWidth() - parent.getInsets().left - parent.getInsets().right;
                     parent = parent.getParent();
                 }
             }
-            if (width <= 20) {
+            if (width <= narrow) {
                 width = JBUI.scale(280);
             }
             View root = getUI().getRootView(this);
@@ -506,7 +507,7 @@ final class FolioChrome {
         @Override
         public Dimension getPreferredSize() {
             int width = getWidth();
-            if (width > 20) {
+            if (width > JBUI.scale(20)) {
                 Insets insets = getInsets();
                 body.setSize(Math.max(1, width - insets.left - insets.right), 1);
             }
@@ -884,11 +885,8 @@ final class FolioChrome {
                 int width = gap * Math.max(0, buttons.length - 1);
                 int height = 0;
                 for (JButton button : buttons) {
-                    if (!icons && button instanceof SegmentButton segment) {
-                        segment.setIconOnly(false);
-                    }
                     Dimension size = button.getPreferredSize();
-                    width += icons ? iconWidth(button) : Math.max(size.width, labelWidth(button));
+                    width += icons ? iconWidth(button) : labelWidth(button);
                     height = Math.max(height, size.height);
                 }
                 Insets insets = getInsets();

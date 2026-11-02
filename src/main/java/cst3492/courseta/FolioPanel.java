@@ -23,6 +23,7 @@ import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.components.JBPanel;
 import com.intellij.ui.components.JBPasswordField;
 import com.intellij.ui.components.JBTextArea;
+import com.intellij.ui.components.JBScrollPane;
 import com.intellij.ui.components.JBTextField;
 import com.intellij.util.ExceptionUtilRt;
 import com.intellij.util.ui.JBUI;
@@ -49,6 +50,7 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
+import javax.swing.text.JTextComponent;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.event.DocumentEvent;
@@ -68,6 +70,7 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.event.InputEvent;
+import java.awt.im.InputMethodRequests;
 import java.awt.event.KeyEvent;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -120,7 +123,7 @@ public final class FolioPanel extends JPanel {
     private final JPanel fileToolbar = new JBPanel<>(new FlowLayout(FlowLayout.LEFT, JBUI.scale(8), 0));
     private final JBLabel previewHint = FolioChrome.muted("Preview a test before writing a file.");
     private final FolioChrome.WrapText filesReport = new FolioChrome.WrapText("");
-    private final JScrollPane chatScroll = FolioChrome.scroll(chatColumn);
+    private final JScrollPane chatScroll = createChatScroll();
     private boolean settingsOpen;
     private boolean storedKey;
     private int busy;
@@ -150,7 +153,7 @@ public final class FolioPanel extends JPanel {
         question.setBorder(JBUI.Borders.empty(2, 0));
         question.setBackground(FolioChrome.answerFill());
         question.setRows(1);
-        installComposerKeys(question, () -> runAsk(null), () -> askButton.isEnabled());
+        installComposerKeys(question, () -> runAsk(null), this::canSend);
         question.getDocument().addDocumentListener(new DocumentListener() {
             @Override
             public void insertUpdate(DocumentEvent event) {
@@ -398,15 +401,16 @@ public final class FolioPanel extends JPanel {
         chatColumn.addRow(userCard(label));
         hideChatEmpty();
         FolioChrome.AnswerCard card = addAnswerCard();
-        scrollChat();
+        scrollChat(true);
         Answer[] held = new Answer[1];
         run(() -> {
             Answer answer = Drill.questions(index, new HttpChatClient(), baseUrl.getText().strip(), readKey(), model.getText().strip(), selection);
             held[0] = answer;
             return answer.text();
         }, text -> {
+            boolean follow = chatNearBottom();
             card.showAnswer(text, held[0]);
-            scrollChat();
+            scrollChat(follow);
         });
     }
 
@@ -556,20 +560,42 @@ public final class FolioPanel extends JPanel {
         }
     }
 
+    /**
+     * The chat list is one surface with the tool window. {@code updateComponentTreeUI} refreshes
+     * the parent before the child, and a plain scroll pane then clears the viewport, so the colour
+     * is applied again from this pane's own {@code updateUI}.
+     */
+    private JScrollPane createChatScroll() {
+        JScrollPane pane = new JBScrollPane(chatColumn) {
+            @Override
+            public void updateUI() {
+                super.updateUI();
+                setBorder(JBUI.Borders.empty());
+                applyChatSurface(this);
+            }
+        };
+        pane.setBorder(JBUI.Borders.empty());
+        applyChatSurface(pane);
+        return pane;
+    }
+
     @Override
     public void updateUI() {
         super.updateUI();
-        if (chatScroll != null) {
-            paintChatSurface();
-        }
+        applyChatSurface(chatScroll);
     }
 
-    private void paintChatSurface() {
+    private void applyChatSurface(JScrollPane pane) {
+        if (pane == null) {
+            return;
+        }
         Color background = getBackground() != null ? getBackground() : UIUtil.getPanelBackground();
-        chatScroll.setOpaque(true);
-        chatScroll.setBackground(background);
-        chatScroll.getViewport().setOpaque(true);
-        chatScroll.getViewport().setBackground(background);
+        pane.setOpaque(true);
+        pane.setBackground(background);
+        if (pane.getViewport() != null) {
+            pane.getViewport().setOpaque(true);
+            pane.getViewport().setBackground(background);
+        }
     }
 
     private JPanel askTab() {
@@ -577,7 +603,7 @@ public final class FolioPanel extends JPanel {
         panel.setOpaque(false);
         panel.setBorder(JBUI.Borders.emptyTop(8));
         panel.add(chatScroll, BorderLayout.CENTER);
-        paintChatSurface();
+        applyChatSurface(chatScroll);
         chatColumn.addRow(chatEmpty);
         panel.add(FolioChrome.composer(question, askButton), BorderLayout.SOUTH);
         return panel;
@@ -888,7 +914,7 @@ public final class FolioPanel extends JPanel {
             bubble = bubble.isEmpty() ? "Selected code" : bubble + "\n\n(includes selected code)";
         }
         if (bubble.isEmpty()) {
-            bubble = "(empty question)";
+            return;
         }
         question.setText("");
         fitComposer();
@@ -896,15 +922,20 @@ public final class FolioPanel extends JPanel {
         chatColumn.addRow(userCard(bubble));
         hideChatEmpty();
         FolioChrome.AnswerCard card = addAnswerCard();
-        scrollChat();
+        scrollChat(true);
         Answer[] held = new Answer[1];
         run(() -> {
             Answer answer = Asker.ask(index, new HttpChatClient(), baseUrl.getText().strip(), readKey(), model.getText().strip(), asked, selection);
             held[0] = answer;
             return answer.text();
         }, text -> {
+            boolean follow = chatNearBottom();
             card.showAnswer(text, held[0]);
-            scrollChat();
+            scrollChat(follow);
+        }, () -> {
+            question.setText(asked);
+            fitComposer();
+            question.requestFocusInWindow();
         });
     }
 
@@ -1081,20 +1112,35 @@ public final class FolioPanel extends JPanel {
     }
 
     private void run(Work work, Consumer<String> sink) {
+        run(work, sink, null);
+    }
+
+    private void run(Work work, Consumer<String> sink, Runnable onFailure) {
         setBusy(true);
         ApplicationManager.getApplication().executeOnPooledThread(() -> {
             String text;
+            boolean failed = false;
             try {
                 text = work.get();
             } catch (Throwable ex) {
+                failed = true;
                 if (ex instanceof ControlFlowException) {
-                    SwingUtilities.invokeLater(() -> setBusy(false));
+                    SwingUtilities.invokeLater(() -> {
+                        if (onFailure != null) {
+                            onFailure.run();
+                        }
+                        setBusy(false);
+                    });
                 }
                 text = failureText(ex);
             }
+            boolean failedCall = failed;
             String result = text;
             SwingUtilities.invokeLater(() -> {
                 try {
+                    if (failedCall && onFailure != null) {
+                        onFailure.run();
+                    }
                     sink.accept(result);
                 } finally {
                     setBusy(false);
@@ -1103,10 +1149,34 @@ public final class FolioPanel extends JPanel {
         });
     }
 
-    private void scrollChat() {
+    /** Scroll when the user just sent, or when they were already reading the latest line. */
+    void scrollChat(boolean userJustSent) {
+        javax.swing.BoundedRangeModel model = chatScroll.getVerticalScrollBar().getModel();
+        boolean follow = followChatTail(userJustSent, model.getValue(), model.getExtent(), model.getMaximum(), JBUI.scale(32));
+        if (!follow) {
+            return;
+        }
         SwingUtilities.invokeLater(() -> {
-            chatScroll.getVerticalScrollBar().setValue(chatScroll.getVerticalScrollBar().getMaximum());
+            javax.swing.BoundedRangeModel latest = chatScroll.getVerticalScrollBar().getModel();
+            latest.setValue(latest.getMaximum());
         });
+    }
+
+    private boolean chatNearBottom() {
+        javax.swing.BoundedRangeModel model = chatScroll.getVerticalScrollBar().getModel();
+        return followChatTail(false, model.getValue(), model.getExtent(), model.getMaximum(), JBUI.scale(32));
+    }
+
+    /** {@code userJustSent} always follows. Otherwise follow only within {@code slack} of the tail. */
+    static boolean followChatTail(boolean userJustSent, int value, int extent, int maximum, int slack) {
+        if (userJustSent) {
+            return true;
+        }
+        int room = maximum - extent;
+        if (room <= 0) {
+            return true;
+        }
+        return value >= room - Math.max(slack, 0);
     }
 
     private String readKey() {
@@ -1147,7 +1217,7 @@ public final class FolioPanel extends JPanel {
         writeButton.setToolTipText(previewReady ? null : "Preview a test before writing a file.");
     }
 
-    private void setBusy(boolean on) {
+    void setBusy(boolean on) {
         busy += on ? 1 : -1;
         if (busy < 0) {
             busy = 0;
@@ -1158,15 +1228,25 @@ public final class FolioPanel extends JPanel {
         refreshAskButton();
     }
 
+    private boolean canSend() {
+        String typed = question.getText();
+        return llmActionsEnabled(storedKey, apiKey.getPassword().length)
+                && busy == 0
+                && typed != null
+                && !typed.isBlank();
+    }
+
     private void refreshAskButton() {
-        boolean canSend = llmActionsEnabled(storedKey, apiKey.getPassword().length) && busy == 0;
-        askButton.setEnabled(canSend);
+        boolean send = canSend();
+        askButton.setEnabled(send);
         if (busy > 0) {
             askButton.setIcon(AnimatedIcon.Default.INSTANCE);
+            askButton.setDisabledIcon(AnimatedIcon.Default.INSTANCE);
             askButton.setToolTipText("Working…");
         } else {
             askButton.setIcon(AllIcons.Actions.Execute);
-            askButton.setToolTipText(canSend ? "Send" : Asker.MISSING_KEY);
+            askButton.setDisabledIcon(null);
+            askButton.setToolTipText(send ? "Send" : Asker.MISSING_KEY);
         }
     }
 
@@ -1176,6 +1256,7 @@ public final class FolioPanel extends JPanel {
             question.setRows(shown);
             question.revalidate();
         }
+        refreshAskButton();
     }
 
     private void showTab(int index) {
@@ -1199,13 +1280,33 @@ public final class FolioPanel extends JPanel {
     public static final int COMPOSER_MAX_ROWS = 6;
 
     public static ComposerAction composerAction(int keyCode, boolean shiftDown, boolean canSend) {
+        return composerAction(keyCode, shiftDown, canSend, false);
+    }
+
+    /** Enter sends only when the composer can send and an input method is not composing. */
+    public static ComposerAction composerAction(int keyCode, boolean shiftDown, boolean canSend, boolean composing) {
         if (keyCode != KeyEvent.VK_ENTER) {
             return ComposerAction.PASS;
         }
         if (shiftDown) {
             return ComposerAction.NEWLINE;
         }
-        return canSend ? ComposerAction.SEND : ComposerAction.PASS;
+        if (composing || !canSend) {
+            return ComposerAction.PASS;
+        }
+        return ComposerAction.SEND;
+    }
+
+    /** True while an input method still has uncommitted text in the field. */
+    static boolean imeComposing(JTextComponent area) {
+        if (area == null || area.getDocument() == null) {
+            return false;
+        }
+        InputMethodRequests requests = area.getInputMethodRequests();
+        if (requests == null) {
+            return false;
+        }
+        return requests.getCommittedTextLength() < area.getDocument().getLength();
     }
 
     static void installComposerKeys(JTextArea area, Runnable send, BooleanSupplier canSend) {
@@ -1214,7 +1315,8 @@ public final class FolioPanel extends JPanel {
         area.getActionMap().put("folio-send", new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent event) {
-                if (composerAction(KeyEvent.VK_ENTER, false, canSend.getAsBoolean()) == ComposerAction.SEND) {
+                if (composerAction(KeyEvent.VK_ENTER, false, canSend.getAsBoolean(), imeComposing(area))
+                        == ComposerAction.SEND) {
                     send.run();
                 }
             }
@@ -1242,15 +1344,6 @@ public final class FolioPanel extends JPanel {
             return 1;
         }
         return Math.min(contentRows, cap);
-    }
-
-    public static boolean composerScrolls(int contentRows, int maxRows) {
-        return contentRows > composerRows(contentRows, maxRows);
-    }
-
-    /** Pixel height from an already scaled line height and vertical insets. */
-    public static int composerHeight(int contentRows, int lineHeight, int verticalInsets, int maxRows) {
-        return composerRows(contentRows, maxRows) * Math.max(lineHeight, 1) + Math.max(verticalInsets, 0);
     }
 
     /** Wrapped rows when the area has a width, otherwise the hard line breaks. */

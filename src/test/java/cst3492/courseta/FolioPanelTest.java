@@ -18,12 +18,18 @@ import javax.swing.AbstractButton;
 import javax.swing.Action;
 import javax.swing.JButton;
 import javax.swing.JComponent;
+import javax.swing.JScrollPane;
+import javax.swing.JTextArea;
+import javax.swing.JTextField;
 import javax.swing.KeyStroke;
+import javax.swing.text.JTextComponent;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import javax.swing.plaf.ComponentUI;
 import javax.swing.plaf.basic.BasicButtonUI;
 import javax.swing.plaf.basic.BasicTextAreaUI;
+import java.awt.Component;
+import java.awt.Container;
 import java.awt.Font;
 import java.awt.Rectangle;
 import java.awt.event.ActionEvent;
@@ -39,6 +45,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -227,6 +234,7 @@ class FolioPanelTest {
         assertEquals(FolioPanel.ComposerAction.PASS, FolioPanel.composerAction(KeyEvent.VK_ENTER, false, false));
         assertEquals(FolioPanel.ComposerAction.NEWLINE, FolioPanel.composerAction(KeyEvent.VK_ENTER, true, false));
         assertEquals(FolioPanel.ComposerAction.PASS, FolioPanel.composerAction(KeyEvent.VK_A, false, true));
+        assertEquals(FolioPanel.ComposerAction.PASS, FolioPanel.composerAction(KeyEvent.VK_ENTER, false, true, true));
 
         AtomicInteger sent = new AtomicInteger();
         AtomicBoolean enabled = new AtomicBoolean(true);
@@ -260,17 +268,6 @@ class FolioPanelTest {
         assertEquals(1, FolioPanel.composerRows(1, FolioPanel.COMPOSER_MAX_ROWS));
         assertEquals(6, FolioPanel.composerRows(6, FolioPanel.COMPOSER_MAX_ROWS));
         assertEquals(6, FolioPanel.composerRows(9, FolioPanel.COMPOSER_MAX_ROWS));
-        assertFalse(FolioPanel.composerScrolls(6, FolioPanel.COMPOSER_MAX_ROWS));
-        assertTrue(FolioPanel.composerScrolls(7, FolioPanel.COMPOSER_MAX_ROWS));
-        int line = 16;
-        int insets = 12;
-        int one = FolioPanel.composerHeight(1, line, insets, FolioPanel.COMPOSER_MAX_ROWS);
-        int six = FolioPanel.composerHeight(6, line, insets, FolioPanel.COMPOSER_MAX_ROWS);
-        int nine = FolioPanel.composerHeight(9, line, insets, FolioPanel.COMPOSER_MAX_ROWS);
-        assertTrue(one < six);
-        assertEquals(six, nine);
-        assertEquals(6 * line + insets, six);
-
         JBTextArea area = new JBTextArea();
         area.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 14));
         area.setLineWrap(true);
@@ -296,6 +293,12 @@ class FolioPanelTest {
         assertFalse(gear.getBounds().intersects(subtitle));
         assertTrue(badge.getWidth() > 0);
         assertTrue(subtitle.width > 0);
+        boolean collapsed = badge.getText() == null || badge.getText().isEmpty();
+        Rectangle brand = titles.getBounds();
+        boolean onNextLine = badge.getY() >= brand.y + brand.height;
+        assertTrue(collapsed || onNextLine,
+                "badge at 220 should collapse or wrap, text='" + badge.getText()
+                        + "' badge=" + badge.getBounds() + " brand=" + brand);
 
         header.setSize(720, 80);
         header.doLayout();
@@ -337,6 +340,210 @@ class FolioPanelTest {
         } finally {
             JBUIScale.setUserScaleFactorForTest(1f);
         }
+    }
+
+    /** Reverting the chat pane's own updateUI leaves the viewport transparent after a theme refresh. */
+    @Test
+    void chatSurfaceStaysOpaqueAfterThemeRefresh() {
+        FolioPanel panel = new FolioPanel(null);
+        JScrollPane chat = chatPane(panel);
+        SwingUtilities.updateComponentTreeUI(panel);
+        assertTrue(chat.getViewport().isOpaque());
+        assertEquals(panel.getBackground(), chat.getViewport().getBackground());
+        assertEquals(panel.getBackground(), chat.getBackground());
+    }
+
+    /** A blank composer must not send. Reverting the blank check calls the model with "(empty question)". */
+    @Test
+    void blankComposerDoesNotSend() {
+        FolioPanel panel = panelWithKey();
+        FolioChrome.PromptArea question = composer(panel);
+        JButton send = sendButton(question);
+        question.setText("   ");
+        assertFalse(send.isEnabled());
+        fireSend(question);
+        assertFalse(containsText(panel, "(empty question)"));
+        assertTrue(question.getText().isBlank());
+
+        question.setText("What is a servlet?");
+        assertTrue(send.isEnabled());
+    }
+
+    /**
+     * While a request is in flight the button stays disabled, so Enter does not send,
+     * and the disabled icon is the spinner. A grey generated icon means the spinner never paints.
+     */
+    @Test
+    void busyDisablesEnterAndShowsTheSpinner() {
+        FolioPanel panel = panelWithKey();
+        FolioChrome.PromptArea question = composer(panel);
+        question.setText("What is a servlet?");
+        JButton send = sendButton(question);
+        assertTrue(send.isEnabled());
+        panel.setBusy(true);
+        assertFalse(send.isEnabled());
+        assertSame(com.intellij.ui.AnimatedIcon.Default.INSTANCE, send.getDisabledIcon());
+        fireSend(question);
+        assertEquals("What is a servlet?", question.getText());
+        assertFalse(containsText(panel, "(empty question)"));
+        panel.setBusy(false);
+        assertTrue(send.isEnabled());
+        assertNull(send.getDisabledIcon());
+    }
+
+    /** Typing ten lines on the real field stops at six. The static cap alone does not lock this. */
+    @Test
+    void composerFieldStopsAtSixRows() {
+        FolioPanel panel = new FolioPanel(null);
+        FolioChrome.PromptArea question = composer(panel);
+        question.setText(String.join("\n", java.util.Collections.nCopies(10, "line")));
+        assertEquals(10, FolioPanel.contentRows(question.getText()));
+        assertEquals(FolioPanel.COMPOSER_MAX_ROWS, question.getRows());
+    }
+
+    /** A reply scrolls only when the user just sent or the viewport was already at the tail. */
+    @Test
+    void chatFollowsTheTailOnlyWhenAlreadyThere() {
+        assertTrue(FolioPanel.followChatTail(true, 0, 10, 100, 8));
+        assertFalse(FolioPanel.followChatTail(false, 0, 10, 100, 8));
+        assertTrue(FolioPanel.followChatTail(false, 85, 10, 100, 8));
+        assertTrue(FolioPanel.followChatTail(false, 0, 100, 100, 8));
+
+        FolioPanel panel = new FolioPanel(null);
+        javax.swing.BoundedRangeModel bar = chatPane(panel).getVerticalScrollBar().getModel();
+        bar.setRangeProperties(0, 100, 0, 1000, false);
+        panel.scrollChat(false);
+        flushEdt();
+        assertEquals(0, bar.getValue());
+
+        bar.setRangeProperties(900, 100, 0, 1000, false);
+        panel.scrollChat(false);
+        flushEdt();
+        assertTrue(bar.getValue() + bar.getExtent() >= bar.getMaximum());
+
+        bar.setRangeProperties(0, 100, 0, 1000, false);
+        panel.scrollChat(true);
+        flushEdt();
+        assertTrue(bar.getValue() + bar.getExtent() >= bar.getMaximum());
+    }
+
+    private static FolioPanel panelWithKey() {
+        FolioPanel panel = new FolioPanel(null);
+        JTextField model = findModel(panel);
+        if (model != null) {
+            model.setText("test-model");
+        }
+        JTextField key = findPassword(panel);
+        key.setText("test-key");
+        return panel;
+    }
+
+    private static void fireSend(JTextArea area) {
+        Action send = area.getActionMap().get("folio-send");
+        try {
+            send.actionPerformed(new ActionEvent(area, ActionEvent.ACTION_PERFORMED, ""));
+        } catch (RuntimeException ex) {
+            // A real send starts background work. The blank and busy paths must not get that far.
+        }
+    }
+
+    private static void flushEdt() {
+        try {
+            SwingUtilities.invokeAndWait(() -> {
+            });
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
+    }
+
+    private static FolioChrome.PromptArea composer(Component component) {
+        if (component instanceof FolioChrome.PromptArea area) {
+            return area;
+        }
+        if (component instanceof Container container) {
+            for (Component child : container.getComponents()) {
+                FolioChrome.PromptArea found = composer(child);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static JButton sendButton(JTextArea area) {
+        Container scroll = area.getParent().getParent();
+        Container box = scroll.getParent();
+        for (Component child : box.getComponents()) {
+            if (child instanceof JButton button) {
+                return button;
+            }
+        }
+        return null;
+    }
+
+    private static JScrollPane chatPane(Component component) {
+        if (component instanceof JScrollPane pane && containsText(pane.getViewport().getView(), "Ask the course")) {
+            return pane;
+        }
+        if (component instanceof Container container) {
+            for (Component child : container.getComponents()) {
+                JScrollPane found = chatPane(child);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static JTextField findPassword(Component component) {
+        if (component instanceof com.intellij.ui.components.JBPasswordField field) {
+            return field;
+        }
+        if (component instanceof Container container) {
+            for (Component child : container.getComponents()) {
+                JTextField found = findPassword(child);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static JTextField findModel(Component component) {
+        if (component instanceof JTextField field
+                && !(component instanceof com.intellij.ui.components.JBPasswordField)
+                && TaSettings.DEFAULT_MODEL.equals(field.getText() == null ? "" : field.getText().strip())) {
+            return field;
+        }
+        if (component instanceof Container container) {
+            for (Component child : container.getComponents()) {
+                JTextField found = findModel(child);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static boolean containsText(Component component, String needle) {
+        if (component instanceof JTextComponent text && text.getText() != null && text.getText().contains(needle)) {
+            return true;
+        }
+        if (component instanceof javax.swing.JLabel label && label.getText() != null && label.getText().contains(needle)) {
+            return true;
+        }
+        if (component instanceof Container container) {
+            for (Component child : container.getComponents()) {
+                if (containsText(child, needle)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private static final class Cancel extends RuntimeException implements ControlFlowException {
