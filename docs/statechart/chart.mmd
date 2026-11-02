@@ -1,0 +1,50 @@
+---
+title: "Folio tool window"
+---
+stateDiagram-v2
+  direction LR
+  state "Legend" as legend {
+    lg0: Working
+  }
+  class lg0 orange
+  state "At the same time" as all {
+    state "API key" as r0 {
+      s0: No API key
+      s1: Key typed, not saved
+      s2: Key ready
+      [*] --> s0
+      s0 --> s1: you type an API key
+      s0 --> s2: the window restores a saved key or the window restores a saved key and indexed files [when Course files is No files and Model call is Idle]
+      s1 --> s0: you clear the field
+      s1 --> s2: you save settings
+      s2 --> s0: you clear the API key
+    }
+    --
+    state "Course files" as r1 {
+      s3: No files
+      s4: Indexing
+      s5: Files ready
+      [*] --> s3
+      s3 --> s4: you index files [when Model call is not Working]
+      s3 --> s5: the window restores indexed files or the window restores a saved key and indexed files [when API key is No API key and Model call is Idle]
+      s4 --> s3: the index is empty
+      s4 --> s5: indexing finishes
+      s5 --> s4: you index files or you remove a file [when Model call is not Working]
+    }
+    --
+    state "Model call" as r2 {
+      s6: Idle
+      s7: Working
+      s8: Answered
+      s9: Failed
+      [*] --> s6
+      s6 --> s7: you ask, preview, or draft [when API key is not No API key and Course files is not Indexing]
+      s7 --> s6: the call is canceled
+      s7 --> s8: the model answers
+      s7 --> s9: the call fails
+      s8 --> s7: you ask, preview, or draft [when API key is not No API key and Course files is not Indexing]
+      s9 --> s7: you ask, preview, or draft [when API key is not No API key and Course files is not Indexing]
+    }
+  }
+  class s4 orange
+  class s7 orange
