@@ -1,6 +1,6 @@
 # Folio
 
-Folio is an IntelliJ IDEA plugin for CST3492 Group B. It sits in a tool window and answers questions from the course files the lecturer has indexed. When a chunk of a PDF page or a slide is relevant, the answer cites that file and that page or slide. When nothing in the index is relevant, the answer says so and does not invent a citation.
+Folio is an IntelliJ IDEA plugin for CST3492 Group B. It sits in a tool window and answers questions from the course files the lecturer has indexed. When a retrieved chunk is used, the answer cites it inline as [1], [2] and lists that chunk under the answer. When nothing in the index is relevant, the answer says it is not grounded in course files and does not invent a citation.
 
 Group B covers answering from course material and the IDE actions around it: generate a JUnit test, draft a commit message, and run a short course drill. It does not edit the student's code or drive the built-in diff viewer.
 
@@ -13,7 +13,7 @@ A twenty-minute demo in a course project:
 1. Open **Folio**. The header reads Folio / Course assistant. With no key stored, the badge says **No API key**, and Ask, Preview test, and Draft commit messages are disabled.
 2. Open the gear. Set the base URL and model if needed, paste an API key, and choose **Save settings**. The field clears and the badge becomes **Key ready · deepseek-flash**. An empty Save after that keeps the stored key.
 3. On **Files**, choose **Index files** and pick a lecture PDF and a slide deck. Each row shows the file name, the directory, and the page or slide count. **Remove** asks before deleting that path. Re-index and Remove also drop a legacy row stored under the bare file name.
-4. On **Ask**, type a question about the lecture. Folio shows the question, then citation chips (`lecture-servlet.pdf page 1`, or a slide number for a deck), then the answer. A chip copies the citation. A question that does not match the course shows the general-knowledge sentence and no chips.
+4. On **Ask**, type a question about the lecture. Folio shows the question, then the answer. Under the answer, each source card is a retrieved chunk the reply cited: the file name, the page or slide (and part, when a page was split), and a short excerpt. The numbers match the [1], [2] marks in the answer. Clicking a card opens a text file in the editor at that excerpt, or a preview when the file is a PDF, a slide deck, or not on disk. A question that matches nothing says the answer is not grounded in course files and shows no source cards.
 5. Put the caret on a method and run **Generate JUnit From Scenario** from the editor menu. The dialog is prefilled with the scenario already in the tool window. **Preview test** fills the preview. **Write test file** stays off until that preview returns a test, then writes it next to the class. A failed preview, or a reply that is not a test, leaves a note in the preview and does not enable Write.
 6. Stage a change and run **Draft Folio Commit Messages** from the commit dialog. Folio drafts three messages, copies the first, and, when the action was started from the commit box, places that first message in the box.
 
@@ -23,15 +23,22 @@ The tool window follows the IDE theme. Cards, the section bar, status banners, a
 
 ## Features
 
-### Ask, with cited pages and slides
+### Ask, with sources
 
-The Ask section is a short chat. An empty window shows a one-line hint. Each question is a card; each answer is a card under it. Citation chips are the file name plus `page N` or `slide N`. Clicking a chip copies that line.
+The Ask section is a short chat. An empty window shows a one-line hint. Each question is a card; each answer is a card under it. Source cards sit under the answer. A card shows `[n]`, the file name, `page N` or `slide N` (plus `part N` when that page or slide was split), and a short excerpt of the chunk.
 
-Retrieval runs before the model call, and the chips appear as soon as the hits are known. The model then sees those chunks and is told to repeat the path and scope number it uses. At most four chunks are sent.
+Retrieval still runs before the model call. At most four chunks are sent. Each one is numbered in the prompt. The model is told to cite those numbers inline as [1], [2], with a space before the bracket, and not to invent a number. Folio then checks the reply:
 
-If the key is missing, Ask does not call the model. The card shows: "No API key is configured. Add an API key in the Folio tool window and save settings." If there were hits, they stay on the card.
+- A marker is kept only when its number names one of those retrieved chunks. Markers are rewritten so [1], [2] follow the source list under the answer.
+- A number that was not retrieved is removed from the text and never becomes a card. An index such as `args[0]` is left alone.
+- If the reply contains no markers, the source list is the retrieved chunks. The model was given only those chunks and did not name a subset.
+- If every marker is out of range, there are no source cards. The card says: "The reply did not cite a retrieved course chunk."
 
-If the key is present and there are no hits, the answer starts with: "Response is based on general knowledge; no specific course material is referenced." There are no chips.
+Clicking a source opens that course file. A text file on disk opens in the editor with the caret at the excerpt. A PDF, a slide deck, another non-text file, or a path that is not on disk opens a preview of the indexed chunk instead.
+
+If the key is missing, Ask does not call the model. The card shows: "No API key is configured. Add an API key in the Folio tool window and save settings." If there were hits, those retrieved chunks stay on the card as sources.
+
+If the key is present and no chunk passes the cutoff, the answer starts with: "Response is based on general knowledge; no specific course material is referenced." The card states: "This answer isn't grounded in course files." There are no source cards, and a [n] the model invents is removed.
 
 **Ask Folio** on the editor popup asks "Explain the selected code." or, with no selection, "Explain this." **Folio Course Drill** asks the model for three short questions about the selection and still cites chunks. With no selection the drill says "Select some code first." and does not call the model.
 
@@ -389,42 +396,42 @@ Source files: `docs/statechart/FolioWindow.tla`, `FolioWindow.cfg`, `view.mjs`, 
 sequenceDiagram
   participant User
   participant Panel as FolioPanel
-  participant Index as CourseIndex
   participant Asker
+  participant Index as CourseIndex
   participant HTTP as HttpChatClient
   User->>Panel: Ask, or Ask Folio from the editor
   Panel->>Panel: show the question card and start the spinner
-  Panel->>Index: top of the question plus any selection, limit 4
-  Index-->>Panel: citation chips, or none
-  Panel->>Asker: ask with the same index, key, and model
+  Panel->>Asker: ask with the index, key, and model
+  Asker->>Index: top of the question plus any selection, limit 4
   alt no key
-    Asker-->>Panel: missing-key text, no HTTP call
+    Asker-->>Panel: missing-key text and the retrieved chunks, no HTTP call
   else hits
-    Asker->>HTTP: chat completion with those chunks
+    Asker->>HTTP: chat completion, chunks numbered [1], [2]
     HTTP-->>Asker: answer text
-    Asker-->>Panel: cited answer
+    Asker->>Asker: keep only [n] markers that name a retrieved chunk
+    Asker-->>Panel: answer text and the validated sources
   else no hits
     Asker->>HTTP: general-knowledge prompt
     HTTP-->>Asker: answer text
-    Asker-->>Panel: general-knowledge sentence plus the text
+    Asker-->>Panel: the answer is not grounded in course files
   end
-  Panel->>Panel: show the body and stop the spinner
+  Panel->>Panel: show the answer, then the source cards, and stop the spinner
 ```
 
-`Asker.ask` calls `CourseIndex.top` again with the same limit. The chips and the prompt therefore come from two lookups of the same index. The HTTP client posts JSON to `{baseUrl}/chat/completions` (or to the base URL itself when it already ends in `/chat/completions`) with a bearer token. Timeouts are 20 seconds to connect and 60 seconds for the response. The message content must be a JSON string. A non-2xx status becomes an `IOException` that includes a short piece of the error body. That failure is shown as the answer text, and the spinner stops.
+`Asker.ask` calls `CourseIndex.top` once. The prompt and the source cards come from that lookup, after citation markers are checked. The HTTP client posts JSON to `{baseUrl}/chat/completions` (or to the base URL itself when it already ends in `/chat/completions`) with a bearer token. Timeouts are 20 seconds to connect and 60 seconds for the response. The message content must be a JSON string. A non-2xx status becomes an `IOException` that includes a short piece of the error body. That failure is shown as the answer text, and the spinner stops.
 
 Anything that uses `FolioPanel.run` (Ask, drill, preview, commit draft, index, remove) increments a busy counter on the calling thread and decrements it when the result is delivered. A platform cancellation (`ControlFlowException`, including `ProcessCanceledException`) schedules the same decrement and is rethrown, so the spinner does not stay up.
 
 ## Limitations and what was not verified
 
-- No live model call was made for this write-up. Citation chips were not clicked in a running IDE, and the commit box was not filled in a running IDE. The Islands screenshots are from an earlier `runIde` session, before the theme. A headless paint of the themed panel exists for Ask, Files, Test, and Setup in light and dark. Icon glyphs do not draw in that paint.
+- No live model call was made for this write-up. Source cards were not clicked in a running IDE, and the commit box was not filled in a running IDE. The Islands screenshots are from an earlier `runIde` session, before the theme. A headless paint of the themed panel exists for Ask, Files, Test, and Setup in light and dark, and a headless paint of an answer with source cards. Icon glyphs do not draw in that paint.
 - There is no Islands screenshot of Commit, and no Islands dark screenshot of Files or Test.
 - The chat keeps every card. There is no clear button and no cap.
 - Ask, Preview, and Draft in the tool window are disabled with no key. The editor and VCS actions are not. They still open the tool window and call the panel. With no key, Ask, preview, and the commit draft return the missing-key sentence and do not call HTTP. The spinner still runs for that path and then stops.
 - **Write test file** turns on only when the last preview call succeeded and the reply contains `org.junit` or `class `. That check is only on the model reply. Failure text is shown as it is and does not enable Write, even when it contains those words. A reply that is not a test is shown with the note "The reply was not a JUnit test." and Write stays off. The no-directory sentence is a status line. It does not replace the preview, so it is not written.
 - Two `run` calls can overlap. The spinner is a counter, so it stays up until both finish. The statechart serializes them.
 - Saving a new key sets the badge to **Key ready** and then writes the Password Safe on a background thread. If that write fails, the badge still says **Key ready**. An empty Save does not take that path.
-- Indexed files may lie outside the project. Folio does not open them from a citation chip.
+- A source card opens a text file that is on disk in the editor, at the excerpt. A PDF, a slide deck, or a path that is not on disk opens a preview of the indexed chunk. That open path was not exercised in a running IDE.
 - Retrieval is lexical BM25 over the indexed files. It is not a web search and not a vector index.
 - The course plan in `docs/course-ta-plugin-plan.md` describes a larger program. This tree is the plugin that program built for Group B, not that program's process.
 

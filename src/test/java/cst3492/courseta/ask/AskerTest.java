@@ -119,10 +119,144 @@ class AskerTest {
     }
 
     @Test
+    void citedMarkersMapOntoRetrievedChunksInAppearanceOrder() {
+        CourseChunk first = page("lecture-servlet.pdf", 1, "A servlet extends HttpServlet and overrides doGet.");
+        CourseChunk second = page("lecture-jpa.pdf", 2, "一对多关系使用 @OneToMany。");
+        Asker.CitationMap mapped = Asker.mapCitations(List.of(first, second),
+                "Override doGet [1]. The mapping is [2].");
+        assertEquals(List.of(first, second), mapped.sources());
+        assertEquals("Override doGet [1]. The mapping is [2].", mapped.text());
+    }
+
+    @Test
+    void markersAreRenumberedSoTheListMatchesTheAnswer() {
+        CourseChunk first = page("lecture-servlet.pdf", 1, "doGet");
+        CourseChunk second = page("lecture-jpa.pdf", 2, "OneToMany");
+        Asker.CitationMap mapped = Asker.mapCitations(List.of(first, second), "Start with [2], then [1].");
+        assertEquals(List.of(second, first), mapped.sources());
+        assertEquals("Start with [1], then [2].", mapped.text());
+    }
+
+    @Test
+    void outOfRangeMarkerIsDroppedAndDoesNotBecomeASource() {
+        CourseChunk first = page("lecture-servlet.pdf", 1, "doGet");
+        CourseChunk second = page("lecture-jpa.pdf", 2, "OneToMany");
+        Asker.CitationMap mapped = Asker.mapCitations(List.of(first, second), "See [1] and also [9]. Call args[0].");
+        assertEquals(List.of(first), mapped.sources());
+        assertTrue(mapped.text().contains("[1]"));
+        assertFalse(mapped.text().contains("[9]"));
+        assertTrue(mapped.text().contains("args[0]"));
+        for (CourseChunk source : mapped.sources()) {
+            assertTrue(source == first || source == second);
+        }
+    }
+
+    @Test
+    void groupedMarkerDropsUnknownNumbersAndDuplicateCitesStayOneSource() {
+        CourseChunk first = page("lecture-servlet.pdf", 1, "doGet");
+        CourseChunk second = page("lecture-jpa.pdf", 2, "OneToMany");
+        Asker.CitationMap grouped = Asker.mapCitations(List.of(first, second), "See [1, 9].");
+        assertEquals(List.of(first), grouped.sources());
+        assertEquals("See [1].", grouped.text());
+
+        Asker.CitationMap duplicate = Asker.mapCitations(List.of(first, second), "See [1] and again [1].");
+        assertEquals(List.of(first), duplicate.sources());
+        assertEquals("See [1] and again [1].", duplicate.text());
+    }
+
+    @Test
+    void onlyInvalidMarkersLeaveNoSource() {
+        CourseChunk first = page("lecture-servlet.pdf", 1, "doGet");
+        Asker.CitationMap mapped = Asker.mapCitations(List.of(first), "See [8].");
+        assertTrue(mapped.sources().isEmpty());
+        assertFalse(mapped.text().contains("["));
+        assertEquals("See.", mapped.text());
+    }
+
+    @Test
+    void replyWithoutMarkersKeepsTheRetrievedChunks() {
+        CourseChunk first = page("lecture-servlet.pdf", 1, "doGet");
+        Asker.CitationMap mapped = Asker.mapCitations(List.of(first), "Override doGet on HttpServlet.");
+        assertEquals(List.of(first), mapped.sources());
+        assertEquals("Override doGet on HttpServlet.", mapped.text());
+    }
+
+    @Test
+    void noChunkPassesTheCutoffSaysTheAnswerIsNotGrounded() throws Exception {
+        AtomicReference<String> systemPrompt = new AtomicReference<>();
+        ChatClient chat = (base, key, model, system, user) -> {
+            systemPrompt.set(system);
+            return "Paris is the capital [1].";
+        };
+        Answer answer = Asker.ask(new CourseIndex(), chat, "https://api.deepseek.com", "key", "deepseek-flash",
+                "What is the capital of France?", null);
+        assertEquals(Answer.Kind.GENERAL, answer.kind());
+        assertTrue(answer.text().startsWith(Answer.GENERAL_SENTENCE));
+        assertTrue(answer.citations().isEmpty());
+        assertFalse(answer.text().contains("[1]"));
+        assertFalse(answer.text().contains("lecture-"));
+        assertTrue(systemPrompt.get().contains("general knowledge"));
+        assertTrue(Answer.UNGROUNDED.contains("isn't grounded in course files"));
+        assertTrue(Answer.UNGROUNDED.contains(Answer.GENERAL_SENTENCE));
+    }
+
+    @Test
+    void modelCitationIsValidatedBeforeItIsShown() throws Exception {
+        AtomicReference<String> userPrompt = new AtomicReference<>();
+        AtomicReference<String> systemPrompt = new AtomicReference<>();
+        ChatClient chat = (base, key, model, system, user) -> {
+            systemPrompt.set(system);
+            userPrompt.set(user);
+            return "Override doGet [1]. Also see [4].";
+        };
+        Answer answer = Asker.ask(course(), chat, "https://api.deepseek.com", "key", "deepseek-flash",
+                "How does a servlet override doGet?", null);
+        assertEquals(Answer.Kind.CITED, answer.kind());
+        assertEquals(1, answer.citations().size());
+        assertEquals("lecture-servlet.pdf#PAGE#1", answer.citations().get(0).id());
+        assertTrue(answer.text().contains("[1]"));
+        assertFalse(answer.text().contains("[4]"));
+        assertTrue(userPrompt.get().contains("[1] lecture-servlet.pdf page 1"));
+        assertFalse(userPrompt.get().contains("lecture-jpa.pdf"));
+        assertTrue(systemPrompt.get().contains("[n]"));
+    }
+
+    @Test
+    void scopePhraseSnippetAndEditorOpenFollowTheChunk() {
+        CourseChunk whole = page("lecture.pdf", 4, "alpha servlet part");
+        CourseChunk part = new CourseChunk("lecture.pdf#PAGE#4#2", "lecture.pdf", ScopeKind.PAGE, 4,
+                "beta servlet part\nthat continues");
+        assertEquals("", Asker.partOf(whole));
+        assertEquals("2", Asker.partOf(part));
+        assertEquals("page 4", Asker.scopePhrase(whole));
+        assertEquals("slide 3", Asker.scopePhrase(new CourseChunk(
+                "deck.pptx#SLIDE#3", "deck.pptx", ScopeKind.SLIDE, 3, "title")));
+        assertEquals("page 4, part 2", Asker.scopePhrase(part));
+        String longText = "x".repeat(180);
+        assertEquals(161, Asker.snippet(new CourseChunk("a.txt#PAGE#1", "a.txt", ScopeKind.PAGE, 1, longText)).length());
+        assertTrue(Asker.snippet(new CourseChunk("a.txt#PAGE#1", "a.txt", ScopeKind.PAGE, 1, longText)).endsWith("…"));
+
+        assertFalse(Asker.editorCanOpen("lecture-servlet.pdf"));
+        assertFalse(Asker.editorCanOpen("/lectures/deck.pptx"));
+        assertFalse(Asker.editorCanOpen(null));
+        assertTrue(Asker.editorCanOpen("Notes.java"));
+        assertTrue(Asker.editorCanOpen("readme.md"));
+        assertTrue(Asker.editorCanOpen("notes.txt"));
+
+        String file = "intro\nA servlet extends HttpServlet and overrides doGet.\n";
+        assertEquals(6, Asker.snippetOffset(file, "A servlet extends HttpServlet and overrides doGet."));
+        assertEquals(0, Asker.snippetOffset(file, "missing excerpt"));
+    }
+
+    @Test
     void repeatedPageCitationsCollapseToOneLine() {
         CourseChunk first = new CourseChunk("lecture.pdf#PAGE#4#1", "lecture.pdf", ScopeKind.PAGE, 4, "alpha servlet part");
         CourseChunk second = new CourseChunk("lecture.pdf#PAGE#4#2", "lecture.pdf", ScopeKind.PAGE, 4, "beta servlet part");
         assertEquals(List.of("lecture.pdf page 4"), Asker.citationLines(List.of(first, second)));
+    }
+
+    private static CourseChunk page(String file, int number, String text) {
+        return new CourseChunk(file + "#PAGE#" + number, file, ScopeKind.PAGE, number, text);
     }
 
     private static CourseIndex course() {

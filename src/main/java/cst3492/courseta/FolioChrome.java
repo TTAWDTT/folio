@@ -26,7 +26,10 @@ import javax.swing.text.View;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Container;
+import java.awt.Cursor;
 import java.awt.Dimension;
+import java.awt.Insets;
 import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
@@ -35,6 +38,9 @@ import java.awt.GridBagLayout;
 import java.awt.GridLayout;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseListener;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -155,14 +161,6 @@ final class FolioChrome {
 
     static Color userFill() {
         return JBColor.namedColor("List.selectionInactiveBackground", new JBColor(0xE6EEF9, 0x35393E));
-    }
-
-    static JButton chip(String line) {
-        JButton button = new JButton(line, com.intellij.icons.AllIcons.General.Copy);
-        button.setToolTipText(line);
-        button.setHorizontalAlignment(SwingConstants.LEFT);
-        button.putClientProperty("JButton.buttonType", "borderless");
-        return button;
     }
 
     static JScrollPane scroll(JComponent view) {
@@ -321,71 +319,157 @@ final class FolioChrome {
     }
 
     static final class AnswerCard extends JBPanel<AnswerCard> {
-        private final JPanel chips = new JPanel(new GridBagLayout());
+        private final JPanel bannerSlot = new JPanel(new BorderLayout());
+        private final JPanel sources = new JPanel(new GridBagLayout());
         private final WrapText body = new WrapText("Looking through the course files…");
-        private final Consumer<String> onCitation;
-        private boolean hitsShown;
-        private boolean general;
+        private final Consumer<CourseChunk> onSource;
 
-        AnswerCard(Consumer<String> onCitation) {
+        AnswerCard(Consumer<CourseChunk> onSource) {
             super(new BorderLayout(0, JBUI.scale(8)));
-            this.onCitation = onCitation;
+            this.onSource = onSource;
             setOpaque(true);
             setBackground(answerFill());
             setBorder(JBUI.Borders.compound(
                     new RoundedLineBorder(JBColor.border(), 1, JBUI.scale(12)),
                     JBUI.Borders.empty(10, 12)));
-            chips.setOpaque(false);
-            add(chips, BorderLayout.NORTH);
+            bannerSlot.setOpaque(false);
+            sources.setOpaque(false);
+            add(bannerSlot, BorderLayout.NORTH);
             JBPanel<?> answer = new JBPanel<>(new BorderLayout(0, JBUI.scale(4)));
             answer.setOpaque(false);
             answer.add(accentLabel("Folio", mark()), BorderLayout.NORTH);
             answer.add(body, BorderLayout.CENTER);
             add(answer, BorderLayout.CENTER);
+            add(sources, BorderLayout.SOUTH);
         }
 
-        void showHits(List<CourseChunk> hits) {
-            chips.removeAll();
-            general = hits == null || hits.isEmpty();
-            if (general) {
-                chips.add(hint(Answer.GENERAL_SENTENCE));
-            } else {
-                int row = 0;
-                for (String line : Asker.citationLines(hits)) {
-                    JButton button = chip(line);
-                    button.addActionListener(event -> onCitation.accept(line));
-                    GridBagConstraints constraints = new GridBagConstraints();
-                    constraints.gridx = 0;
-                    constraints.gridy = row++;
-                    constraints.weightx = 1;
-                    constraints.fill = GridBagConstraints.HORIZONTAL;
-                    constraints.anchor = GridBagConstraints.WEST;
-                    chips.add(button, constraints);
-                }
-            }
-            hitsShown = true;
-            if (body.getText().startsWith("Looking through")) {
-                body.setBody("Writing an answer…");
-            }
-            refresh();
-        }
-
-        void showBody(String text) {
+        void showAnswer(String text, Answer answer) {
+            bannerSlot.removeAll();
+            sources.removeAll();
             String value = text == null ? "" : text;
-            if (!hitsShown) {
-                chips.removeAll();
-            } else if (general && value.startsWith(Answer.GENERAL_SENTENCE)) {
-                value = value.substring(Answer.GENERAL_SENTENCE.length()).strip();
+            boolean ungrounded = value.startsWith(Answer.GENERAL_SENTENCE);
+            List<CourseChunk> hits = answer == null || answer.citations() == null ? List.of() : answer.citations();
+            boolean noValidCite = answer != null && answer.calledModel() && !ungrounded && hits.isEmpty();
+            if (ungrounded) {
+                value = value.substring(Answer.GENERAL_SENTENCE.length()).stripLeading();
+                bannerSlot.add(banner(Answer.UNGROUNDED, Tone.WARNING), BorderLayout.CENTER);
+            } else if (noValidCite) {
+                bannerSlot.add(banner(Asker.NO_VALID_CITE, Tone.INFO), BorderLayout.CENTER);
             }
             body.setBody(value);
             body.setVisible(!value.isBlank());
+            if (!hits.isEmpty()) {
+                addSourceRow(mutedHeading("Sources"), 0, JBUI.insets(2, 0, 4, 0));
+                for (int i = 0; i < hits.size(); i++) {
+                    CourseChunk chunk = hits.get(i);
+                    JComponent card = sourceCard(i + 1, chunk);
+                    onClick(card, () -> onSource.accept(chunk));
+                    boolean last = i == hits.size() - 1;
+                    addSourceRow(card, i + 1, JBUI.insets(0, 0, last ? 0 : 6, 0));
+                }
+            }
             refresh();
+        }
+
+        private void addSourceRow(Component row, int gridy, Insets insets) {
+            GridBagConstraints constraints = new GridBagConstraints();
+            constraints.gridx = 0;
+            constraints.gridy = gridy;
+            constraints.weightx = 1;
+            constraints.fill = GridBagConstraints.HORIZONTAL;
+            constraints.anchor = GridBagConstraints.WEST;
+            constraints.insets = insets;
+            sources.add(row, constraints);
         }
 
         private void refresh() {
             revalidate();
             repaint();
         }
+    }
+
+    private static JBLabel mutedHeading(String text) {
+        JBLabel label = muted(text);
+        label.setFont(JBFont.small().asBold());
+        return label;
+    }
+
+    private static StatusBanner banner(String text, Tone tone) {
+        StatusBanner banner = new StatusBanner();
+        banner.setMessage(text, tone);
+        return banner;
+    }
+
+    static JComponent sourceCard(int number, CourseChunk chunk) {
+        JBPanel<?> card = new JBPanel<>(new BorderLayout(0, JBUI.scale(2)));
+        card.setOpaque(true);
+        card.setBackground(userFill());
+        card.setBorder(JBUI.Borders.compound(
+                new RoundedLineBorder(JBColor.border(), 1, JBUI.scale(8)),
+                JBUI.Borders.empty(8, 10)));
+        card.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        String file = Asker.citedFile(chunk.sourceDocument());
+        JBLabel title = new JBLabel("[" + number + "]  " + file);
+        title.setFont(JBFont.small().asBold());
+        title.setForeground(JBUI.CurrentTheme.Link.Foreground.ENABLED);
+        card.add(title, BorderLayout.NORTH);
+        JBPanel<?> detail = new JBPanel<>(new BorderLayout(0, JBUI.scale(2)));
+        detail.setOpaque(false);
+        detail.add(muted(Asker.scopePhrase(chunk)), BorderLayout.NORTH);
+        WrapText excerpt = new WrapText(Asker.snippet(chunk));
+        excerpt.setFont(JBFont.small());
+        excerpt.setForeground(JBColor.namedColor("Component.infoForeground", JBColor.GRAY));
+        detail.add(excerpt, BorderLayout.CENTER);
+        card.add(detail, BorderLayout.CENTER);
+        card.setToolTipText("Open " + file + " at " + Asker.scopePhrase(chunk));
+        return card;
+    }
+
+    static void onClick(Component component, Runnable action) {
+        MouseListener listener = new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent event) {
+                action.run();
+            }
+        };
+        listen(component, listener);
+    }
+
+    private static void listen(Component component, MouseListener listener) {
+        component.addMouseListener(listener);
+        component.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        if (component instanceof Container container) {
+            for (Component child : container.getComponents()) {
+                listen(child, listener);
+            }
+        }
+    }
+
+    static JComponent sourcePreview(CourseChunk chunk, boolean missing) {
+        JBPanel<?> panel = new JBPanel<>(new BorderLayout(0, JBUI.scale(8)));
+        panel.setOpaque(true);
+        panel.setBackground(UIUtil.getPanelBackground());
+        panel.setBorder(JBUI.Borders.empty(4, 0));
+        String file = Asker.citedFile(chunk.sourceDocument());
+        panel.add(sectionTitle(file.isEmpty() ? "Course file" : file), BorderLayout.NORTH);
+        JBPanel<?> body = new JBPanel<>(new BorderLayout(0, JBUI.scale(8)));
+        body.setOpaque(false);
+        String note = missing
+                ? "This file is not in the project. The excerpt is the indexed chunk."
+                : "This file does not open as text in the editor. The excerpt is the indexed chunk.";
+        body.add(banner(note, missing ? Tone.WARNING : Tone.INFO), BorderLayout.NORTH);
+        JBPanel<?> excerpt = new JBPanel<>(new BorderLayout(0, JBUI.scale(6)));
+        excerpt.setOpaque(false);
+        excerpt.add(muted(Asker.scopePhrase(chunk)), BorderLayout.NORTH);
+        WrapText text = new WrapText(chunk.text());
+        text.setFont(codeFont(text.getFont().getSize()));
+        JScrollPane scroll = fieldScroll(text);
+        int textHeight = text.getPreferredSize().height + JBUI.scale(12);
+        scroll.setPreferredSize(new Dimension(JBUI.scale(420), Math.min(JBUI.scale(180), Math.max(JBUI.scale(64), textHeight))));
+        excerpt.add(scroll, BorderLayout.CENTER);
+        body.add(excerpt, BorderLayout.CENTER);
+        panel.add(body, BorderLayout.CENTER);
+        return panel;
     }
 
     /** Rounded key chip. Paints its own fill so the button UI does not flatten it. */
@@ -507,23 +591,25 @@ final class FolioChrome {
 
     }
 
-    /** Soft status strip. Colours come from the IDE banner theme. */
+    /** Soft status strip. Colours come from the IDE banner theme. The message wraps to the strip width. */
     static final class StatusBanner extends JBPanel<StatusBanner> {
-        private final JBLabel label = new JBLabel();
+        private final JBLabel mark = new JBLabel();
+        private final WrapText message = new WrapText("");
         private Tone tone = Tone.NEUTRAL;
 
         StatusBanner() {
-            super(new BorderLayout(JBUI.scale(6), 0));
+            super(new BorderLayout(JBUI.scale(8), 0));
             setOpaque(true);
-            label.setFont(JBFont.small());
-            add(label, BorderLayout.CENTER);
+            message.setFont(JBFont.small());
+            mark.setVerticalAlignment(SwingConstants.TOP);
+            add(mark, BorderLayout.WEST);
+            add(message, BorderLayout.CENTER);
             apply();
         }
 
         void setMessage(String text, Tone tone) {
             this.tone = tone == null ? Tone.NEUTRAL : tone;
-            String safe = text == null ? "" : text.replace("&", "&amp;").replace("<", "&lt;");
-            label.setText("<html>" + safe + "</html>");
+            message.setBody(text == null ? "" : text);
             apply();
             revalidate();
             repaint();
@@ -532,7 +618,7 @@ final class FolioChrome {
         @Override
         public void updateUI() {
             super.updateUI();
-            if (label != null) {
+            if (message != null) {
                 apply();
             }
         }
@@ -573,9 +659,8 @@ final class FolioChrome {
             setBorder(JBUI.Borders.compound(
                     new RoundedLineBorder(border, 1, JBUI.scale(8)),
                     JBUI.Borders.empty(6, 8)));
-            label.setForeground(JBUI.CurrentTheme.Banner.FOREGROUND);
-            label.setIcon(icon);
-            label.setIconTextGap(JBUI.scale(6));
+            message.setForeground(JBUI.CurrentTheme.Banner.FOREGROUND);
+            mark.setIcon(icon);
         }
     }
 }

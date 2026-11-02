@@ -5,6 +5,8 @@ import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.PathManager;
 import com.intellij.openapi.command.WriteCommandAction;
 import com.intellij.openapi.diagnostic.ControlFlowException;
+import com.intellij.openapi.fileEditor.FileEditorManager;
+import com.intellij.openapi.fileEditor.OpenFileDescriptor;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.fileTypes.FileTypeManager;
 import com.intellij.openapi.project.Project;
@@ -99,7 +101,7 @@ public final class FolioPanel extends JPanel {
     private final JPanel chatEmpty = FolioChrome.emptyState(
             AllIcons.Actions.Find,
             "Ask the course",
-            "Ask a lecture question. Click a citation to copy the file and page.");
+            "Ask a lecture question. A source under the answer opens that course file.");
     private final JPanel filesEmpty = new JBPanel<>(new BorderLayout(0, JBUI.scale(8)));
     private final JPanel indexRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
     private final JPanel fileToolbar = new JBPanel<>(new FlowLayout(FlowLayout.LEFT, JBUI.scale(8), 0));
@@ -356,11 +358,12 @@ public final class FolioPanel extends JPanel {
         chatColumn.addRow(userCard(label));
         hideChatEmpty();
         FolioChrome.AnswerCard card = addAnswerCard();
+        Answer[] held = new Answer[1];
         run(() -> {
             Answer answer = Drill.questions(index, new HttpChatClient(), baseUrl.getText().strip(), readKey(), model.getText().strip(), selection);
-            SwingUtilities.invokeAndWait(() -> card.showHits(answer.citations()));
+            held[0] = answer;
             return answer.text();
-        }, card::showBody);
+        }, text -> card.showAnswer(text, held[0]));
     }
 
     public void draftCommit() {
@@ -849,24 +852,61 @@ public final class FolioPanel extends JPanel {
         hideChatEmpty();
         FolioChrome.AnswerCard card = addAnswerCard();
         scrollChat();
+        Answer[] held = new Answer[1];
         run(() -> {
-            List<CourseChunk> hits = index.top(selection == null || selection.isBlank() ? asked : asked + "\n" + selection, 4);
-            SwingUtilities.invokeAndWait(() -> card.showHits(hits));
             Answer answer = Asker.ask(index, new HttpChatClient(), baseUrl.getText().strip(), readKey(), model.getText().strip(), asked, selection);
+            held[0] = answer;
             return answer.text();
         }, text -> {
-            card.showBody(text);
+            card.showAnswer(text, held[0]);
             scrollChat();
         });
     }
 
     private FolioChrome.AnswerCard addAnswerCard() {
-        FolioChrome.AnswerCard card = new FolioChrome.AnswerCard(line -> {
-            copy(line);
-            setStatus("Copied " + line, FolioChrome.Tone.SUCCESS);
-        });
+        FolioChrome.AnswerCard card = new FolioChrome.AnswerCard(this::openSource);
         chatColumn.addRow(card);
         return card;
+    }
+
+    private void openSource(CourseChunk chunk) {
+        if (chunk == null) {
+            return;
+        }
+        String path = chunk.sourceDocument();
+        VirtualFile file = path == null || path.isBlank()
+                ? null
+                : LocalFileSystem.getInstance().refreshAndFindFileByPath(path);
+        if (project != null && file != null && editorFile(file)) {
+            int offset = readOffset(file, chunk.text());
+            OpenFileDescriptor descriptor = new OpenFileDescriptor(project, file, offset);
+            if (FileEditorManager.getInstance(project).openTextEditor(descriptor, true) != null) {
+                setStatus("Opened " + Asker.citedFile(path) + " at " + Asker.scopePhrase(chunk), FolioChrome.Tone.SUCCESS);
+                return;
+            }
+        }
+        if (project == null) {
+            setStatus(Asker.scopePhrase(chunk) + " · " + Asker.snippet(chunk), FolioChrome.Tone.INFO);
+            return;
+        }
+        new SourcePreview(project, chunk, file == null).show();
+    }
+
+    private static boolean editorFile(VirtualFile file) {
+        if (!file.isValid() || file.isDirectory() || !Asker.editorCanOpen(file.getName())) {
+            return false;
+        }
+        return !file.getFileType().isBinary();
+    }
+
+    private static int readOffset(VirtualFile file, String chunkText) {
+        try {
+            byte[] bytes = file.contentsToByteArray();
+            String contents = new String(bytes, file.getCharset());
+            return Asker.snippetOffset(contents, chunkText);
+        } catch (Exception ex) {
+            return 0;
+        }
     }
 
     private void hideChatEmpty() {
