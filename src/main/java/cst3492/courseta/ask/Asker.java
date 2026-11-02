@@ -366,9 +366,10 @@ public final class Asker {
 
     /**
      * A citation is {@code [n]} or {@code [n, m]} in prose.
-     * It follows whitespace or prose punctuation, including another citation ({@code [1][2]}).
+     * It follows whitespace or prose punctuation, including another citation ({@code [1][2]}),
+     * a parenthetical list such as {@code (see [1], [2])}, and a line-start {@code *}, {@code -}, or {@code >}.
      * It is not part of an expression: an index, a call, an assignment, or a list literal
-     * such as {@code print([1, 2, 3])} or {@code return [1, 2]}.
+     * such as {@code print([1, 2, 3])}, {@code foo(a, [1, 2])}, or {@code return [1, 2]}.
      */
     private static boolean isProseCitation(String raw, int bracketAt, List<int[]> code) {
         if (inside(code, bracketAt)) {
@@ -392,6 +393,9 @@ public final class Asker {
             return true;
         }
         char token = raw.charAt(at);
+        if ((token == '*' || token == '-' || token == '>') && markdownPrefix(raw, at)) {
+            return true;
+        }
         if (token == '=' || token == '(' || token == '[' || token == '{'
                 || token == '<' || token == '>' || token == '+' || token == '-'
                 || token == '*' || token == '/' || token == '%' || token == '&'
@@ -399,7 +403,7 @@ public final class Asker {
             return false;
         }
         if (token == ',') {
-            return !insideParentheses(raw, at, code);
+            return commaContinuesCitation(raw, at, code);
         }
         if (isIdent(token)) {
             int end = at + 1;
@@ -427,6 +431,35 @@ public final class Asker {
             }
         }
         return false;
+    }
+
+    /** A {@code *}, {@code -}, or {@code >} that begins a line is a markdown marker, not an operator. */
+    private static boolean markdownPrefix(String raw, int at) {
+        int index = at - 1;
+        while (index >= 0) {
+            char c = raw.charAt(index);
+            if (c == ' ' || c == '\t') {
+                index--;
+                continue;
+            }
+            return c == '\n' || c == '\r';
+        }
+        return true;
+    }
+
+    /**
+     * A comma separates prose citations, including inside parentheses ({@code (see [1], [2])}).
+     * A comma in an argument list ({@code foo(a, [1, 2])}) does not.
+     */
+    private static boolean commaContinuesCitation(String raw, int commaAt, List<int[]> code) {
+        if (!insideParentheses(raw, commaAt, code)) {
+            return true;
+        }
+        int at = commaAt - 1;
+        while (at >= 0 && isInlineSpace(raw.charAt(at))) {
+            at--;
+        }
+        return at >= 0 && raw.charAt(at) == ']' && closesCitation(raw, at, code);
     }
 
     private static boolean insideParentheses(String raw, int at, List<int[]> code) {

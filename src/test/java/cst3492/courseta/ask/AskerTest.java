@@ -275,7 +275,10 @@ class AskerTest {
                 "print([1, 2, 3])",
                 "return [1, 2];",
                 "foo(a, [1, 2])",
-                "Hello, [1] still counts.");
+                "Hello, [1] still counts.",
+                "a * [1]",
+                "x - [1]",
+                "n > [1]");
         Asker.CitationMap mapped = Asker.mapCitations(List.of(first, second), text);
         assertEquals(List.of(second, first), mapped.sources());
         assertTrue(mapped.text().contains("See [1], [2]."));
@@ -283,6 +286,33 @@ class AskerTest {
         assertTrue(mapped.text().contains("return [1, 2];"));
         assertTrue(mapped.text().contains("foo(a, [1, 2])"));
         assertTrue(mapped.text().contains("Hello, [2] still counts."));
+        assertTrue(mapped.text().contains("a * [1]"));
+        assertTrue(mapped.text().contains("x - [1]"));
+        assertTrue(mapped.text().contains("n > [1]"));
+    }
+
+    @Test
+    void parentheticalCitationListMapsEveryMarker() {
+        CourseChunk first = page("lecture-servlet.pdf", 1, "doGet");
+        CourseChunk second = page("lecture-jpa.pdf", 2, "OneToMany");
+        Asker.CitationMap mapped = Asker.mapCitations(List.of(first, second), "(see [2], [1])");
+        assertEquals(List.of(second, first), mapped.sources());
+        assertEquals("(see [1], [2])", mapped.text());
+    }
+
+    @Test
+    void starListMarkerIsACitation() {
+        assertMarkdownPrefixMaps("* [2]");
+    }
+
+    @Test
+    void dashListMarkerIsACitation() {
+        assertMarkdownPrefixMaps("- [2]");
+    }
+
+    @Test
+    void quoteMarkerIsACitation() {
+        assertMarkdownPrefixMaps("> [2]");
     }
 
     @Test
@@ -383,6 +413,16 @@ class AskerTest {
         CourseChunk first = new CourseChunk("lecture.pdf#PAGE#4#1", "lecture.pdf", ScopeKind.PAGE, 4, "alpha servlet part");
         CourseChunk second = new CourseChunk("lecture.pdf#PAGE#4#2", "lecture.pdf", ScopeKind.PAGE, 4, "beta servlet part");
         assertEquals(List.of("lecture.pdf page 4"), Asker.citationLines(List.of(first, second)));
+    }
+
+    /** A line-start marker is a citation. Leaving it unmapped keeps {@code [2]} and every chunk. */
+    private static void assertMarkdownPrefixMaps(String line) {
+        CourseChunk first = page("lecture-servlet.pdf", 1, "doGet");
+        CourseChunk second = page("lecture-jpa.pdf", 2, "OneToMany");
+        String text = "Notes.\n" + line;
+        Asker.CitationMap mapped = Asker.mapCitations(List.of(first, second), text);
+        assertEquals(List.of(second), mapped.sources());
+        assertEquals("Notes.\n" + line.replace("[2]", "[1]"), mapped.text());
     }
 
     /** The marker inside the region is a real prose citation if that guard is missing. */

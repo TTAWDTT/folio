@@ -13,7 +13,9 @@ import org.junit.jupiter.api.io.TempDir;
 
 import javax.swing.AbstractButton;
 import javax.swing.JButton;
+import javax.swing.JComponent;
 import javax.swing.UIManager;
+import javax.swing.plaf.ComponentUI;
 import javax.swing.plaf.basic.BasicButtonUI;
 import javax.swing.plaf.basic.BasicTextAreaUI;
 import java.awt.Font;
@@ -176,6 +178,10 @@ class FolioPanelTest {
 
     /** Installs the filled button the look-and-feel puts back on a theme change. */
     public static final class ResetButtonUI extends BasicButtonUI {
+        public static ComponentUI createUI(JComponent component) {
+            return new ResetButtonUI();
+        }
+
         @Override
         protected void installDefaults(AbstractButton button) {
             super.installDefaults(button);
@@ -190,6 +196,10 @@ class FolioPanelTest {
 
     /** Installs an opaque text area with padding, which a theme change does too. */
     public static final class ResetTextUI extends BasicTextAreaUI {
+        public static ComponentUI createUI(JComponent component) {
+            return new ResetTextUI();
+        }
+
         @Override
         protected void installDefaults() {
             super.installDefaults();
