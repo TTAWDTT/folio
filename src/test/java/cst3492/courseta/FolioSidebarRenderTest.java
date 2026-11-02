@@ -105,6 +105,12 @@ class FolioSidebarRenderTest {
                     assertEquals(0xDFE1E5, code.getForeground().getRGB() & 0xFFFFFF);
                     render(panel, "dark-360", 360);
                     render(panel, "dark-280", 280);
+                    var paragraph = (javax.swing.text.JTextComponent) find(panel,
+                            component -> component instanceof javax.swing.text.JTextComponent field
+                                    && field.getText().startsWith("An empty order returns zero. Use the identity"));
+                    assertNotNull(paragraph);
+                    assertTrue(paragraph.getHeight() >= paragraph.getFontMetrics(paragraph.getFont()).getHeight(),
+                            "The first answer paragraph is clipped: " + paragraph.getBounds());
                 } finally {
                     saved.forEach(UIManager::put);
                     JBColor.setDark(dark);

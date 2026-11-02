@@ -8,20 +8,22 @@ The plugin id is `cst3492.folio`, version `0.1.0`. The **Folio** tool window is 
 
 ## Use Folio in a course project
 
-1. Open **Folio**. On **Files**, choose **Index files** and select course materials. Indexing needs no API key. Materials are shared across projects in the same IDE configuration.
-2. On **Ask**, enter a course question. Without a key, Folio retrieves local sources and explains that model configuration is missing. It makes no HTTP request.
+1. Open **Folio**. In the mode menu, choose **Course files**, then **Index files** and select course materials. Indexing needs no API key. Materials are shared across projects in the same IDE configuration.
+2. Choose **Ask** in the mode menu and enter a course question. Without a key, Folio retrieves local sources and explains that model configuration is missing. It makes no HTTP request.
 3. Open the gear to configure the endpoint, model, and API key. A typed key can be used for the next request before saving. **Save settings** stores it in Password Safe and reports success after the write finishes. An empty key field keeps the stored key. **Clear API key** removes it.
-4. Send a question with a configured key. Folio shows the answer and labels whether its cards are inline citations, retrieved context, or a citation fallback. Follow-up questions use bounded conversation context. **Stop** cancels active work. **Clear chat** clears the conversation and prevents a late reply from restoring it.
+4. Send a question with a configured key. Folio shows incoming answer text as the provider sends it. After completion, it maps citations and labels whether the references are inline citations, retrieved context, or a citation fallback. Expand the reference row to inspect the source excerpts. Follow-up questions use bounded conversation context. **Stop** cancels active work. **Clear chat** clears the conversation and prevents late answer text from restoring it.
 5. Select a Java class or method and run **Generate JUnit From Scenario** in the editor menu. Accept a natural-language scenario to generate a preview. Inspect the Java, target path, and validation note before choosing **Write test file**.
-6. Stage changes and run **Draft Folio Commit Messages** from the commit dialog or the Commit tab. Folio captures every configured Git root, shows the captured diff and call estimate, and asks for three candidates. **Copy** and **Fill commit box** remain available for the current, unchanged staged snapshot.
+6. Stage changes and run **Draft Folio Commit Messages** from the commit dialog or the **Commit** mode. Folio captures every configured Git root, shows the captured diff and call estimate, and asks for three candidates. **Copy** and **Fill commit box** remain available for the current, unchanged staged snapshot.
 
-The composer supports Enter to send, Shift+Enter for a newline, and IME composition. It grows to six rows and then scrolls. The header wraps at narrow widths, and section buttons retain their tooltips when labels collapse. The UI follows the IDE theme and zoom.
+The composer supports Enter to send, Shift+Enter for a newline, and IME composition. It grows to six rows and then scrolls. A compact mode menu keeps **Ask**, **Tests**, **Commit**, **Drill**, and **Course files** reachable in a narrow sidebar. Settings remain in the header. Activity indicators run only while work is pending. The UI follows the IDE theme and zoom.
 
 ## Ask and citation behavior
 
+Ask and Drill request streaming responses. The sidebar appends actual incoming text and stops its activity indicator when the request completes, fails, or is cancelled. A provider that returns a normal JSON completion is displayed as a complete reply. Folio does not simulate a stream by revealing an already completed answer. Citation markers and source metadata are finalized after completion; provisional text is not completed conversation history.
+
 Retrieval is local BM25, without embeddings or a web search. Each request captures a read-only course-library snapshot, the current question, selected code, conversation context, and connection settings. Retrieval uses the current question and selection and returns at most four chunks. History is quoted context, not current citation evidence.
 
-A source card shows the document, page, slide, or section, any chunk part, and an excerpt. Clicking a text file on disk opens the editor near the excerpt. PDFs, slide decks, other non-text files, and missing paths use an indexed-chunk preview.
+References start collapsed. Expand the reference row to see the document, page, slide, or section, any chunk part, and an excerpt. Clicking a text file on disk opens the editor near the excerpt. PDFs, slide decks, other non-text files, and missing paths use an indexed-chunk preview.
 
 The evidence label comes from `Answer.Evidence`:
 
@@ -38,7 +40,7 @@ These labels describe provenance and citation syntax. They do not verify whether
 
 The visible chat holds at most 40 exchanges. Conversation context retains at most 40 completed Ask turns, including the selected code captured for each turn. The next request captures up to eight complete turns within 8,000 characters. `Asker` preserves every accepted history character as quoted data, including Java indexes and earlier reference numbers. History above 8,000 characters is rejected explicitly. Earlier references are not current citation evidence. Failed requests, configuration-only responses, and drills do not become Ask history.
 
-**Ask Folio** in the editor asks about the selection. **Folio Course Drill** requests three short questions about selected code through the same retrieval and citation path. An empty drill selection makes no model call.
+**Ask Folio** in the editor asks about the selection. For a Java file, a completed answer can offer **Generate a test**. It reuses the Java source and target directory captured by the editor action, then opens the existing test-preview flow. The answer text is not a writable test. **Folio Course Drill** requests three short questions about selected code through the same retrieval and citation path. An empty drill selection makes no model call.
 
 <details>
 <summary>Citation compatibility reference</summary>
@@ -92,7 +94,7 @@ The fixed public fixture has 12 positive and 12 negative queries over synthetic 
 
 **Generate JUnit From Scenario** opens a multiline scenario dialog. Cancel or an empty accept makes no generation request. Generation requires captured Java source and a key. The request keeps its scenario, source, target directory, and connection together.
 
-The Test tab separates the original model reply from the Java preview. `GeneratedTest.parse(Project, raw)` extracts one Java unit from a plain reply or one fenced block. IntelliJ PSI checks Java syntax and recognizes common JUnit annotations, nested containers, and basic method signatures. The filename comes from the parsed top-level declaration. The preview states, "Java syntax checked. Recognized JUnit annotations found. Not compiled or run."
+The **Tests** view separates the original model reply from the Java preview. `GeneratedTest.parse(Project, raw)` extracts one Java unit from a plain reply or one fenced block. IntelliJ PSI checks Java syntax and recognizes common JUnit annotations, nested containers, and basic method signatures. The filename comes from the parsed top-level declaration. The preview states, "Java syntax checked. Recognized JUnit annotations found. Not compiled or run."
 
 A valid preview with no captured directory remains visible but cannot be written. Folio prefers an existing matching package directory under the same module's Java test-source root. When none exists, it retains the adjacent source directory as the fallback. The target path is shown before writing.
 
@@ -106,7 +108,7 @@ Folio captures each configured Git root and falls back to the project base when 
 
 A single request handles a small diff. Larger diffs use ordered batches of at most 12,000 Java characters, followed by one synthesis request over every returned batch summary. No tail is silently discarded. Missing summaries and size or call limits fail explicitly without presenting a complete draft. Processing every raw character does not prove that the model's summaries retain every semantic detail.
 
-The Commit tab shows roots, staged file count, character and call estimates, candidates, and the captured diff. It asks the model for three conventional commit messages separated by `---`. The number returned still depends on the provider response.
+The **Commit** view shows roots, staged file count, character and call estimates, candidates, and the captured diff. It asks the model for three conventional commit messages separated by `---`. The number returned still depends on the provider response.
 
 Automatic copying or filling requires a current result, unchanged staging, and an unchanged original commit box. Automatic copying also preserves clipboard contents changed during generation. Explicit **Copy** and **Fill commit box** recheck staging and task identity. A full fingerprint check runs in the background. Delivery checks captured index and reference-file metadata immediately before a clipboard or commit-box write, including linked worktrees, split indexes, and reftable references. This catches ordinary queued changes. The file observation and UI write do not form an atomic operation against arbitrary external writes. Fill preserves user edits and refuses a closed or unreadable target. These actions do not execute a commit or alter staging.
 
@@ -179,9 +181,9 @@ A nonzero exit means tests or packaging failed. The mirror script does not retar
 
 `CourseLibrary` and `ProviderAccess` are application services. The first owns shared materials and committed revisions. The second owns connection settings and ordered Password Safe access. Each `FolioPanel` owns its task manager, bounded conversation, current results, and Swing presentation for one project/content lifetime.
 
-`FolioToolWindowFactory` creates the panel, registers it in project user data through `FolioPanels`, and binds disposal to the tool-window content. Editor and VCS actions activate the tool window and find that project's panel. `FolioChrome` supplies the layout, cards, composer, responsive sections, and colors.
+`FolioToolWindowFactory` creates the panel, registers it in project user data through `FolioPanels`, and binds disposal to the tool-window content. Editor and VCS actions activate the tool window and find that project's panel. `FolioChrome` supplies the narrow layout, answer rendering, reference disclosure, composer, and theme colors.
 
-The EDT captures immutable inputs. Background tasks use those values and read-only `CourseSearch` snapshots. `FolioTasks` tracks request IDs and typed success, failure, and cancellation outcomes. Test and Commit accept only the latest request. Delivery and later Write, Copy, or Fill require a live owner and current accepted result. Disposal cancels tasks and closes subscriptions. The activity indicator derives from active tasks.
+The EDT captures immutable inputs. Background tasks use those values and read-only `CourseSearch` snapshots. `FolioTasks` tracks request IDs and typed success, failure, and cancellation outcomes. Test and Commit accept only the latest request. Delivery and later Write, Copy, or Fill require a live owner and current accepted result. Streaming updates pass through the same task identity and lifetime checks before reaching the EDT. Final answers determine citation metadata and completed history. Disposal cancels tasks, stops answer motion, and closes subscriptions. The activity indicator derives from active tasks.
 
 | Package | Main responsibility |
 | --- | --- |
@@ -204,7 +206,7 @@ The historical sources are [FolioWindow.tla](docs/statechart/FolioWindow.tla), [
 
 ## Verification scope and remaining checks
 
-The pre-change baseline ran 138 tests and built the plugin. Five supplied acceptance assertions failed against the original implementation before the repairs. The integrated core later ran 202 tests and built the plugin before frontend integration. The frontend separately ran 49 scoped tests and built the plugin. The original 18 real-Project PSI cases checked generated bytes, collisions, packages, opening, and Undo. Six later cases check actual nested-test containers, reject ordinary helpers and invalid basic method signatures, and retain dynamic factories. The structural checks recognize direct tests, Jupiter `@Nested` containers, and JUnit 4 `Enclosed` containers. They do not establish dependency resolution or successful discovery by a real test runner. These scoped results overlap and must not be added into a final suite count. The final integrated `scripts/verify.sh` run completed with 244 tests across 24 suites, zero failures, errors, or skips, and a validated plugin ZIP. Run the same command for a new checkout.
+The pre-change baseline ran 138 tests and built the plugin. Five supplied acceptance assertions failed against the original implementation before the repairs. The integrated core later ran 202 tests and built the plugin before frontend integration. The frontend separately ran 49 scoped tests and built the plugin. The original 18 real-Project PSI cases checked generated bytes, collisions, packages, opening, and Undo. Six later cases check actual nested-test containers, reject ordinary helpers and invalid basic method signatures, and retain dynamic factories. The structural checks recognize direct tests, Jupiter `@Nested` containers, and JUnit 4 `Enclosed` containers. They do not establish dependency resolution or successful discovery by a real test runner. These scoped results overlap and must not be added into a final suite count. The earlier reliability-refactor snapshot completed `scripts/verify.sh` with 244 tests across 24 suites, zero failures, errors, or skips, and a validated plugin ZIP. The compact-sidebar suite adds real-stream delivery, task-event races, mode navigation, reference disclosure, motion lifetime, theme refresh, and narrow-window rendering. Run the same command for the current checkout; its measured count and plugin checksum are written to `build/verification/summary.json`.
 
 The deterministic tests cover shared-store commits and recovery, extraction fixtures, citation compatibility, staged-diff coverage, loopback HTTP boundaries, request identity, ordered settings, history, and existing keyboard/layout behavior. Real course-file checks preserved the 3-file, 85-page, 90-chunk denominator.
 

@@ -4,7 +4,6 @@ import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -123,19 +122,76 @@ class StreamingAcceptanceTest {
         }
     }
 
-    private static String stream(ChatClient client, String endpoint, Consumer<String> text) throws Exception {
-        try {
-            var method = ChatClient.class.getMethod("stream", String.class, String.class, String.class,
-                    String.class, String.class, Consumer.class);
-            return (String) method.invoke(client, endpoint, "fixture-key", "m", "s", "u", text);
-        } catch (NoSuchMethodException ex) {
-            throw new AssertionError("ChatClient must expose real incremental text delivery", ex);
-        } catch (InvocationTargetException ex) {
-            if (ex.getCause() instanceof Exception error) {
-                throw error;
+    @Test
+    void theProtocolTerminatorFinishesWithoutWaitingForConnectionClose() throws Exception {
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicReference<String> answer = new AtomicReference<>();
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/chat/completions", exchange -> {
+            exchange.getRequestBody().readAllBytes();
+            exchange.getResponseHeaders().set("Content-Type", "text/event-stream");
+            exchange.sendResponseHeaders(200, 0);
+            try (var output = exchange.getResponseBody()) {
+                output.write((event("complete") + "data: [DONE]\n\n").getBytes(StandardCharsets.UTF_8));
+                output.flush();
+                release.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
             }
-            throw new AssertionError(ex.getCause());
+        });
+        server.start();
+        Thread worker = new Thread(() -> {
+            try {
+                answer.set(stream(new HttpChatClient(), endpoint(server), part -> {}));
+            } catch (Throwable ex) {
+                failure.set(ex);
+            }
+        });
+        try {
+            worker.start();
+            worker.join(2_000);
+            assertFalse(worker.isAlive(), "The provider already sent its terminal event");
+            assertNull(failure.get());
+            assertEquals("complete", answer.get());
+        } finally {
+            release.countDown();
+            worker.interrupt();
+            worker.join(2_000);
+            server.stop(0);
         }
+    }
+
+    @Test
+    void streamingHttpErrorsRedactBeforeTheirDetailIsShortened() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/chat/completions", exchange -> {
+            exchange.getRequestBody().readAllBytes();
+            var error = new com.google.gson.JsonObject();
+            error.addProperty("message", "x".repeat(495) + "fixture-key" + "tail".repeat(10));
+            var root = new com.google.gson.JsonObject();
+            root.add("error", error);
+            byte[] response = root.toString().getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set("Content-Type", "application/json");
+            exchange.sendResponseHeaders(401, response.length);
+            try (var output = exchange.getResponseBody()) {
+                output.write(response);
+            }
+        });
+        server.start();
+        try {
+            IOException failure = assertThrows(IOException.class,
+                    () -> stream(new HttpChatClient(), endpoint(server), part -> {}));
+            assertTrue(failure.getMessage().startsWith("HTTP 401"));
+            assertFalse(failure.getMessage().contains("fixtu"));
+            assertTrue(failure.getMessage().length() < 530);
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    private static String stream(ChatClient client, String endpoint, Consumer<String> text) throws Exception {
+        return client.stream(endpoint, "fixture-key", "m", "s", "u", text);
     }
 
     private static String endpoint(HttpServer server) {

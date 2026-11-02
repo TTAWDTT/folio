@@ -15,6 +15,7 @@ required = {
     "PanelWorkflowTest",
     "StreamingAcceptanceTest", "SidebarDisclosureAcceptanceTest", "FolioTaskEventsTest",
     "HttpChatStreamingTest", "FolioSidebarTest", "FolioSidebarRenderTest",
+    "AskerStreamingTest", "SidebarResizeAcceptanceTest",
 }
 try:
     suites = {}
