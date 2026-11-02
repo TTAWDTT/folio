@@ -47,7 +47,7 @@ public final class ScenarioDialog extends DialogWrapper {
         hint.setFont(JBFont.small());
         body.add(hint, BorderLayout.NORTH);
         JBScrollPane scroll = new JBScrollPane(area);
-        scroll.setBorder(new RoundedLineBorder(JBColor.border(), 1, JBUI.scale(8)));
+        scroll.setBorder(new RoundedLineBorder(JBColor.border(), JBUI.scale(8), JBUI.scale(1)));
         scroll.getViewport().setBackground(JBColor.namedColor("Editor.background", new JBColor(0xFFFFFF, 0x2B2D30)));
         body.add(scroll, BorderLayout.CENTER);
         panel.add(body, BorderLayout.CENTER);

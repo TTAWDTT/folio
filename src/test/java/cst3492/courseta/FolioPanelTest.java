@@ -11,17 +11,29 @@ import cst3492.courseta.index.ScopeKind;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import com.intellij.ui.components.JBTextArea;
+
+import javax.swing.AbstractAction;
 import javax.swing.AbstractButton;
+import javax.swing.Action;
 import javax.swing.JButton;
 import javax.swing.JComponent;
+import javax.swing.KeyStroke;
+import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import javax.swing.plaf.ComponentUI;
 import javax.swing.plaf.basic.BasicButtonUI;
 import javax.swing.plaf.basic.BasicTextAreaUI;
 import java.awt.Font;
+import java.awt.Rectangle;
+import java.awt.event.ActionEvent;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -206,6 +218,108 @@ class FolioPanelTest {
             getComponent().setOpaque(true);
             getComponent().setBorder(javax.swing.BorderFactory.createEmptyBorder(4, 6, 4, 6));
         }
+    }
+
+    @Test
+    void enterSendsAndShiftEnterKeepsTheNewline() {
+        assertEquals(FolioPanel.ComposerAction.SEND, FolioPanel.composerAction(KeyEvent.VK_ENTER, false, true));
+        assertEquals(FolioPanel.ComposerAction.NEWLINE, FolioPanel.composerAction(KeyEvent.VK_ENTER, true, true));
+        assertEquals(FolioPanel.ComposerAction.PASS, FolioPanel.composerAction(KeyEvent.VK_ENTER, false, false));
+        assertEquals(FolioPanel.ComposerAction.NEWLINE, FolioPanel.composerAction(KeyEvent.VK_ENTER, true, false));
+        assertEquals(FolioPanel.ComposerAction.PASS, FolioPanel.composerAction(KeyEvent.VK_A, false, true));
+
+        AtomicInteger sent = new AtomicInteger();
+        AtomicBoolean enabled = new AtomicBoolean(true);
+        JBTextArea area = new JBTextArea();
+        AtomicInteger breaks = new AtomicInteger();
+        area.getActionMap().put("insert-break", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent event) {
+                breaks.incrementAndGet();
+            }
+        });
+        FolioPanel.installComposerKeys(area, sent::incrementAndGet, enabled::get);
+        Action send = area.getActionMap().get("folio-send");
+        send.actionPerformed(new ActionEvent(area, ActionEvent.ACTION_PERFORMED, ""));
+        assertEquals(1, sent.get());
+        enabled.set(false);
+        send.actionPerformed(new ActionEvent(area, ActionEvent.ACTION_PERFORMED, ""));
+        assertEquals(1, sent.get());
+        KeyStroke shiftEnter = KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, InputEvent.SHIFT_DOWN_MASK);
+        assertEquals("insert-break", area.getInputMap().get(shiftEnter));
+        assertEquals("folio-send", area.getInputMap().get(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0)));
+        ((Action) area.getActionMap().get("insert-break")).actionPerformed(new ActionEvent(area, 0, ""));
+        assertEquals(1, breaks.get());
+    }
+
+    @Test
+    void composerGrowsUntilSixRowsThenScrolls() {
+        assertEquals(1, FolioPanel.contentRows(""));
+        assertEquals(1, FolioPanel.contentRows("one line"));
+        assertEquals(3, FolioPanel.contentRows("a\nb\nc"));
+        assertEquals(1, FolioPanel.composerRows(1, FolioPanel.COMPOSER_MAX_ROWS));
+        assertEquals(6, FolioPanel.composerRows(6, FolioPanel.COMPOSER_MAX_ROWS));
+        assertEquals(6, FolioPanel.composerRows(9, FolioPanel.COMPOSER_MAX_ROWS));
+        assertFalse(FolioPanel.composerScrolls(6, FolioPanel.COMPOSER_MAX_ROWS));
+        assertTrue(FolioPanel.composerScrolls(7, FolioPanel.COMPOSER_MAX_ROWS));
+        int line = 16;
+        int insets = 12;
+        int one = FolioPanel.composerHeight(1, line, insets, FolioPanel.COMPOSER_MAX_ROWS);
+        int six = FolioPanel.composerHeight(6, line, insets, FolioPanel.COMPOSER_MAX_ROWS);
+        int nine = FolioPanel.composerHeight(9, line, insets, FolioPanel.COMPOSER_MAX_ROWS);
+        assertTrue(one < six);
+        assertEquals(six, nine);
+        assertEquals(6 * line + insets, six);
+
+        JBTextArea area = new JBTextArea();
+        area.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 14));
+        area.setLineWrap(true);
+        area.setWrapStyleWord(true);
+        area.setSize(120, 40);
+        area.setText("short");
+        assertEquals(1, FolioPanel.visualRows(area));
+        area.setText("word ".repeat(80));
+        assertTrue(FolioPanel.visualRows(area) > 1);
+        assertEquals(FolioPanel.COMPOSER_MAX_ROWS, FolioPanel.composerRows(FolioPanel.visualRows(area) + 4, FolioPanel.COMPOSER_MAX_ROWS));
+    }
+
+    @Test
+    void narrowHeaderAndTabsDoNotCoverEachOther() {
+        FolioChrome.TitleBlock titles = FolioChrome.TitleBlock.of("Folio", "Course assistant");
+        FolioChrome.ChipButton badge = new FolioChrome.ChipButton("Key ready · deepseek-flash", null);
+        JButton gear = FolioChrome.gear(null);
+        FolioChrome.HeaderBar header = new FolioChrome.HeaderBar(titles, badge, gear);
+        header.setSize(220, 160);
+        header.doLayout();
+        Rectangle subtitle = SwingUtilities.convertRectangle(titles, titles.subtitle().getBounds(), header);
+        assertFalse(badge.getBounds().intersects(subtitle), badge.getBounds() + " covers " + subtitle);
+        assertFalse(gear.getBounds().intersects(subtitle));
+        assertTrue(badge.getWidth() > 0);
+        assertTrue(subtitle.width > 0);
+
+        header.setSize(720, 80);
+        header.doLayout();
+        assertEquals("Key ready · deepseek-flash", badge.getText());
+
+        JButton[] tabs = {
+                FolioChrome.segment("Ask", null),
+                FolioChrome.segment("Files", null),
+                FolioChrome.segment("Test", null),
+                FolioChrome.segment("Commit", null)
+        };
+        FolioChrome.SegmentBar bar = new FolioChrome.SegmentBar(tabs);
+        int labels = bar.getPreferredSize().width;
+        bar.setSize(Math.max(32, labels / 4), 36);
+        bar.doLayout();
+        for (JButton tab : tabs) {
+            assertEquals("", tab.getText());
+            assertFalse(tab.getToolTipText().isBlank());
+        }
+        assertEquals("Commit", tabs[3].getToolTipText());
+        bar.setSize(Math.max(labels + 80, 960), 48);
+        bar.doLayout();
+        assertEquals("Commit", tabs[3].getText());
+        assertEquals("Ask", tabs[0].getText());
     }
 
     @Test
