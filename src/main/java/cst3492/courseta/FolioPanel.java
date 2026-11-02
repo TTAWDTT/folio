@@ -40,7 +40,6 @@ import cst3492.courseta.junitgen.TestDraft;
 
 import javax.swing.JButton;
 import javax.swing.JFileChooser;
-import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextField;
@@ -80,7 +79,7 @@ public final class FolioPanel extends JPanel {
     private final JBTextArea question = new JBTextArea(3, 20);
     private final JBTextArea scenario = new JBTextArea(3, 20);
     private final JBTextArea transcript = new JBTextArea(12, 20);
-    private final JLabel status = new JBLabel();
+    private final FolioChrome.StatusBanner statusBanner = new FolioChrome.StatusBanner();
     private final JBLabel progress = new JBLabel(AnimatedIcon.Default.INSTANCE);
     private final JBLabel working = FolioChrome.muted("Working…");
     private final JButton askButton = FolioChrome.primary("Ask", AllIcons.Actions.Find);
@@ -88,7 +87,7 @@ public final class FolioPanel extends JPanel {
     private final JButton previewButton = FolioChrome.primary("Preview test", AllIcons.Nodes.JunitTestMark);
     private final JButton writeButton = FolioChrome.secondary("Write test file", AllIcons.Actions.Execute);
     private final JButton indexButton = FolioChrome.primary("Index files", AllIcons.Actions.AddFile);
-    private final JButton badge = new JButton("No API key", AllIcons.General.Warning);
+    private final JButton badge = new FolioChrome.ChipButton("No API key", AllIcons.General.Warning);
     private final JButton gear = FolioChrome.gear(AllIcons.General.GearPlain);
     private final JBPanel<?> settingsCard = new JBPanel<>(new BorderLayout());
     private final CardLayout sections = new CardLayout();
@@ -97,8 +96,12 @@ public final class FolioPanel extends JPanel {
     private final FolioChrome.Column chatColumn = new FolioChrome.Column();
     private final FolioChrome.Column fileColumn = new FolioChrome.Column();
     private final FolioChrome.Column commitColumn = new FolioChrome.Column();
-    private final JPanel chatEmpty = emptyBlock("Ask a lecture question. Click a citation to copy the file and page.");
+    private final JPanel chatEmpty = FolioChrome.emptyState(
+            AllIcons.Actions.Find,
+            "Ask the course",
+            "Ask a lecture question. Click a citation to copy the file and page.");
     private final JPanel filesEmpty = new JBPanel<>(new BorderLayout(0, JBUI.scale(8)));
+    private final JPanel indexRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
     private final JPanel fileToolbar = new JBPanel<>(new FlowLayout(FlowLayout.LEFT, JBUI.scale(8), 0));
     private final JBLabel previewHint = FolioChrome.muted("Preview a test before writing a file.");
     private final FolioChrome.WrapText filesReport = new FolioChrome.WrapText("");
@@ -116,15 +119,24 @@ public final class FolioPanel extends JPanel {
     public FolioPanel(Project project) {
         super(new BorderLayout(0, JBUI.scale(8)));
         this.project = project;
-        setBorder(JBUI.Borders.empty(10, 12));
+        setBorder(JBUI.Borders.empty(12));
+        setOpaque(true);
+        setBackground(com.intellij.util.ui.UIUtil.getPanelBackground());
         transcript.setEditable(false);
         transcript.setLineWrap(true);
         transcript.setWrapStyleWord(true);
-        transcript.setFont(new Font(Font.MONOSPACED, Font.PLAIN, transcript.getFont().getSize()));
+        transcript.setOpaque(true);
+        transcript.setBackground(FolioChrome.answerFill());
+        transcript.setBorder(JBUI.Borders.empty(8, 10));
+        transcript.setFont(FolioChrome.codeFont(transcript.getFont().getSize()));
         question.setLineWrap(true);
         question.setWrapStyleWord(true);
+        question.setBorder(JBUI.Borders.empty(6, 8));
+        question.setBackground(FolioChrome.answerFill());
         scenario.setLineWrap(true);
         scenario.setWrapStyleWord(true);
+        scenario.setBorder(JBUI.Borders.empty(6, 8));
+        scenario.setBackground(FolioChrome.answerFill());
         apiKey.setColumns(16);
         shrinkable(baseUrl);
         shrinkable(model);
@@ -136,15 +148,24 @@ public final class FolioPanel extends JPanel {
         badge.addActionListener(event -> toggleSettings());
         gear.addActionListener(event -> toggleSettings());
         settingsCard.setVisible(false);
-        settingsCard.add(settingsForm(), BorderLayout.CENTER);
+        JBPanel<?> setup = FolioChrome.card(FolioChrome.answerFill());
+        setup.add(FolioChrome.sectionTitle("Setup"), BorderLayout.NORTH);
+        setup.add(settingsForm(), BorderLayout.CENTER);
+        settingsCard.add(setup, BorderLayout.CENTER);
         fileToolbar.setOpaque(false);
         fileToolbar.setVisible(false);
         filesEmpty.setOpaque(false);
-        filesEmpty.setBorder(JBUI.Borders.empty(16, 4));
-        filesEmpty.add(FolioChrome.hint("Index a PDF or a slide deck to search it from Ask."), BorderLayout.NORTH);
-        filesEmpty.add(indexButton, BorderLayout.WEST);
+        JPanel emptyFiles = FolioChrome.emptyState(
+                AllIcons.FileTypes.Text,
+                "No course files",
+                "Index a PDF or a slide deck to search it from Ask.");
+        indexRow.setOpaque(false);
+        indexRow.setBorder(JBUI.Borders.emptyTop(8));
+        indexRow.add(indexButton);
+        emptyFiles.add(indexRow, BorderLayout.SOUTH);
+        filesEmpty.add(emptyFiles, BorderLayout.NORTH);
         filesReport.setVisible(false);
-        setStatus("No course files are indexed.");
+        setStatus("No course files are indexed.", FolioChrome.Tone.INFO);
         add(header(), BorderLayout.NORTH);
         add(sections(), BorderLayout.CENTER);
         add(footer(), BorderLayout.SOUTH);
@@ -391,15 +412,21 @@ public final class FolioPanel extends JPanel {
     private JPanel header() {
         JBPanel<?> panel = new JBPanel<>(new BorderLayout(0, JBUI.scale(6)));
         panel.setBorder(JBUI.Borders.compound(
-                JBUI.Borders.customLineBottom(JBColor.border()),
+                JBUI.Borders.customLineBottom(FolioChrome.accent()),
                 JBUI.Borders.empty(0, 0, 8, 0)));
         JBPanel<?> row = new JBPanel<>(new BorderLayout(JBUI.scale(8), 0));
         row.setOpaque(false);
+        JBLabel mark = new JBLabel(FolioChrome.mark());
+        mark.setBorder(JBUI.Borders.emptyRight(8));
         JBPanel<?> titles = new JBPanel<>(new BorderLayout());
         titles.setOpaque(false);
         titles.add(FolioChrome.title("Folio"), BorderLayout.NORTH);
         titles.add(FolioChrome.muted("Course assistant"), BorderLayout.SOUTH);
-        row.add(titles, BorderLayout.WEST);
+        JBPanel<?> brand = new JBPanel<>(new BorderLayout());
+        brand.setOpaque(false);
+        brand.add(mark, BorderLayout.WEST);
+        brand.add(titles, BorderLayout.CENTER);
+        row.add(brand, BorderLayout.WEST);
         JBPanel<?> actions = new JBPanel<>(new FlowLayout(FlowLayout.RIGHT, JBUI.scale(6), 0));
         actions.setOpaque(false);
         actions.add(badge);
@@ -459,29 +486,27 @@ public final class FolioPanel extends JPanel {
     private JPanel sections() {
         JPanel panel = new JBPanel<>(new BorderLayout(0, JBUI.scale(4)));
         panel.setOpaque(false);
-        JPanel bar = new JPanel(new FlowLayout(FlowLayout.LEFT, JBUI.scale(6), 0));
-        bar.setOpaque(false);
-        bar.setBorder(JBUI.Borders.emptyTop(8));
         sectionButtons[TAB_ASK] = sectionButton("Ask", AllIcons.Actions.Find, TAB_ASK);
         sectionButtons[TAB_FILES] = sectionButton("Files", AllIcons.FileTypes.Text, TAB_FILES);
         sectionButtons[TAB_TEST] = sectionButton("Test", AllIcons.Nodes.JunitTestMark, TAB_TEST);
         sectionButtons[TAB_COMMIT] = sectionButton("Commit", AllIcons.Actions.Commit, TAB_COMMIT);
-        for (JButton button : sectionButtons) {
-            bar.add(button);
-        }
+        FolioChrome.SegmentBar bar = new FolioChrome.SegmentBar(sectionButtons);
+        bar.setBorder(JBUI.Borders.compound(JBUI.Borders.empty(3), JBUI.Borders.emptyTop(8)));
         sectionDeck.setOpaque(false);
         sectionDeck.add(askTab(), "ask");
         sectionDeck.add(filesTab(), "files");
         sectionDeck.add(testTab(), "test");
         sectionDeck.add(commitTab(), "commit");
+        JScrollPane scrolling = FolioChrome.scroll(sectionDeck);
+        scrolling.setHorizontalScrollBarPolicy(javax.swing.ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
         panel.add(bar, BorderLayout.NORTH);
-        panel.add(sectionDeck, BorderLayout.CENTER);
+        panel.add(scrolling, BorderLayout.CENTER);
         selectSection(TAB_ASK);
         return panel;
     }
 
     private JButton sectionButton(String text, javax.swing.Icon icon, int index) {
-        JButton button = new JButton(text, icon);
+        JButton button = FolioChrome.segment(text, icon);
         button.setToolTipText(text);
         button.addActionListener(event -> selectSection(index));
         return button;
@@ -492,10 +517,7 @@ public final class FolioPanel extends JPanel {
         sections.show(sectionDeck, names[index]);
         for (int i = 0; i < sectionButtons.length; i++) {
             JButton button = sectionButtons[i];
-            boolean selected = i == index;
-            button.putClientProperty("JButton.buttonType", selected ? "default" : null);
-            button.setFont(button.getFont().deriveFont(selected ? Font.BOLD : Font.PLAIN));
-            button.repaint();
+            FolioChrome.paintSegment(button, i == index);
         }
     }
 
@@ -507,11 +529,12 @@ public final class FolioPanel extends JPanel {
         feed.add(chatEmpty, BorderLayout.NORTH);
         feed.add(chatScroll, BorderLayout.CENTER);
         panel.add(feed, BorderLayout.CENTER);
-        JBPanel<?> composer = new JBPanel<>(new BorderLayout(0, JBUI.scale(6)));
-        composer.setOpaque(false);
+        JBPanel<?> composer = FolioChrome.card(FolioChrome.answerFill());
+        composer.add(FolioChrome.sectionTitle("Question"), BorderLayout.NORTH);
         composer.add(FolioChrome.fieldScroll(question), BorderLayout.CENTER);
         JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         row.setOpaque(false);
+        row.setBorder(JBUI.Borders.emptyTop(8));
         row.add(askButton);
         composer.add(row, BorderLayout.SOUTH);
         panel.add(composer, BorderLayout.SOUTH);
@@ -533,20 +556,29 @@ public final class FolioPanel extends JPanel {
     private JPanel testTab() {
         JBPanel<?> panel = new JBPanel<>(new BorderLayout(0, JBUI.scale(8)));
         panel.setBorder(JBUI.Borders.empty(8, 0, 0, 0));
-        JBPanel<?> top = new JBPanel<>(new BorderLayout(0, JBUI.scale(6)));
-        top.setOpaque(false);
-        top.add(FolioChrome.hint("Describe the behaviour, preview a JUnit test, then write it next to the class."), BorderLayout.NORTH);
-        top.add(labeled("Scenario", scenario), BorderLayout.CENTER);
+        JBPanel<?> top = FolioChrome.card(FolioChrome.answerFill());
+        top.add(FolioChrome.sectionTitle("Scenario"), BorderLayout.NORTH);
+        top.add(FolioChrome.hint("Describe the behaviour, preview a JUnit test, then write it next to the class."), BorderLayout.CENTER);
+        JBPanel<?> fields = new JBPanel<>(new BorderLayout(0, JBUI.scale(8)));
+        fields.setOpaque(false);
+        fields.setBorder(JBUI.Borders.emptyTop(8));
+        fields.add(FolioChrome.fieldScroll(scenario), BorderLayout.CENTER);
         JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, JBUI.scale(8), 0));
         row.setOpaque(false);
+        row.setBorder(JBUI.Borders.emptyTop(8));
         row.add(previewButton);
         row.add(writeButton);
-        top.add(row, BorderLayout.SOUTH);
+        fields.add(row, BorderLayout.SOUTH);
+        top.add(fields, BorderLayout.SOUTH);
         panel.add(top, BorderLayout.NORTH);
         JBPanel<?> preview = new JBPanel<>(new BorderLayout(0, JBUI.scale(4)));
         preview.setOpaque(false);
         preview.setBorder(JBUI.Borders.emptyTop(4));
-        preview.add(previewHint, BorderLayout.NORTH);
+        JBPanel<?> previewHead = new JBPanel<>(new BorderLayout());
+        previewHead.setOpaque(false);
+        previewHead.add(FolioChrome.sectionTitle("Preview"), BorderLayout.WEST);
+        previewHead.add(previewHint, BorderLayout.SOUTH);
+        preview.add(previewHead, BorderLayout.NORTH);
         preview.add(FolioChrome.fieldScroll(transcript), BorderLayout.CENTER);
         panel.add(preview, BorderLayout.CENTER);
         return panel;
@@ -555,16 +587,18 @@ public final class FolioPanel extends JPanel {
     private JPanel commitTab() {
         JBPanel<?> panel = new JBPanel<>(new BorderLayout(0, JBUI.scale(8)));
         panel.setBorder(JBUI.Borders.emptyTop(8));
-        JBPanel<?> top = new JBPanel<>(new BorderLayout(0, JBUI.scale(6)));
-        top.setOpaque(false);
-        top.add(FolioChrome.hint("Stage a change, then draft three messages. The first one is copied."), BorderLayout.NORTH);
+        JBPanel<?> top = FolioChrome.card(FolioChrome.answerFill());
+        top.add(FolioChrome.sectionTitle("Commit message"), BorderLayout.NORTH);
+        top.add(FolioChrome.hint("Stage a change, then draft three messages. The first one is copied."), BorderLayout.CENTER);
         JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         row.setOpaque(false);
+        row.setBorder(JBUI.Borders.emptyTop(8));
         row.add(commitButton);
         top.add(row, BorderLayout.SOUTH);
         panel.add(top, BorderLayout.NORTH);
         panel.add(FolioChrome.scroll(commitColumn), BorderLayout.CENTER);
-        commitColumn.addRow(emptyBlock("Nothing drafted yet."));
+        commitColumn.addRow(FolioChrome.emptyState(
+                AllIcons.Actions.Commit, "Nothing drafted yet", "A draft appears here after the model answers."));
         return panel;
     }
 
@@ -578,7 +612,7 @@ public final class FolioPanel extends JPanel {
         lead.add(progress);
         lead.add(working);
         panel.add(lead, BorderLayout.WEST);
-        panel.add(status, BorderLayout.CENTER);
+        panel.add(statusBanner, BorderLayout.CENTER);
         return panel;
     }
 
@@ -600,14 +634,15 @@ public final class FolioPanel extends JPanel {
             refreshKeyActions();
             setStatus(storedKey
                     ? "Settings saved. The stored API key was kept."
-                    : "Settings saved. Add an API key to enable Ask, test generation, and commit drafts.");
+                    : "Settings saved. Add an API key to enable Ask, test generation, and commit drafts.",
+                    storedKey ? FolioChrome.Tone.SUCCESS : FolioChrome.Tone.WARNING);
             return;
         }
         storedKey = true;
         apiKey.setText("");
         refreshKeyActions();
         ApplicationManager.getApplication().executeOnPooledThread(() -> Secrets.write(decision));
-        setStatus("Settings saved. A key is stored.");
+        setStatus("Settings saved. A key is stored.", FolioChrome.Tone.SUCCESS);
     }
 
     private void clearApiKey() {
@@ -615,10 +650,13 @@ public final class FolioPanel extends JPanel {
         storedKey = false;
         refreshKeyActions();
         ApplicationManager.getApplication().executeOnPooledThread(() -> Secrets.write(keyToStore("", true)));
-        setStatus("API key cleared.");
+        setStatus("API key cleared.", FolioChrome.Tone.WARNING);
     }
 
     private void loadStored() {
+        if (ApplicationManager.getApplication() == null) {
+            return;
+        }
         ApplicationManager.getApplication().executeOnPooledThread(() -> {
             try {
                 store = Path.of(PathManager.getConfigPath(), "folio");
@@ -636,13 +674,13 @@ public final class FolioPanel extends JPanel {
                         apiKey.setText("");
                         text = text + " A key is stored.";
                     }
-                    setStatus(text);
+                    setStatus(text, storedKey ? FolioChrome.Tone.SUCCESS : FolioChrome.Tone.INFO);
                     refreshFiles();
                     refreshKeyActions();
                 });
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> {
-                    setStatus(ex.getMessage());
+                    setStatus(ex.getMessage(), FolioChrome.Tone.ERROR);
                     showNote(ex.getMessage());
                 });
             }
@@ -680,7 +718,7 @@ public final class FolioPanel extends JPanel {
         }
         index.save(store.resolve("index.tsv"));
         SwingUtilities.invokeLater(() -> {
-            setStatus(index.size() + " chunks indexed.");
+            setStatus(index.size() + " chunks indexed.", FolioChrome.Tone.SUCCESS);
             refreshFiles();
         });
         return report.isEmpty() ? "No course chunk matched." : report.toString();
@@ -700,7 +738,7 @@ public final class FolioPanel extends JPanel {
             index.removeHandout(source);
             index.save(store.resolve("index.tsv"));
             SwingUtilities.invokeLater(() -> {
-                setStatus(name + " removed. " + index.size() + " chunks indexed.");
+                setStatus(name + " removed. " + index.size() + " chunks indexed.", FolioChrome.Tone.SUCCESS);
                 refreshFiles();
             });
             return name + " removed.";
@@ -747,7 +785,7 @@ public final class FolioPanel extends JPanel {
             fileToolbar.setVisible(true);
             filesEmpty.setVisible(false);
         } else {
-            filesEmpty.add(indexButton, BorderLayout.WEST);
+            indexRow.add(indexButton);
             fileToolbar.setVisible(false);
             filesEmpty.setVisible(true);
         }
@@ -827,7 +865,7 @@ public final class FolioPanel extends JPanel {
     private FolioChrome.AnswerCard addAnswerCard() {
         FolioChrome.AnswerCard card = new FolioChrome.AnswerCard(line -> {
             copy(line);
-            setStatus("Copied " + line);
+            setStatus("Copied " + line, FolioChrome.Tone.SUCCESS);
         });
         chatColumn.addRow(card);
         return card;
@@ -839,8 +877,7 @@ public final class FolioPanel extends JPanel {
 
     private static JPanel userCard(String text) {
         JBPanel<?> card = FolioChrome.card(FolioChrome.userFill());
-        JBLabel who = new JBLabel("You");
-        who.setFont(who.getFont().deriveFont(Font.BOLD));
+        JBLabel who = FolioChrome.accentLabel("You", null);
         card.add(who, BorderLayout.NORTH);
         card.add(new FolioChrome.WrapText(text), BorderLayout.CENTER);
         return card;
@@ -875,15 +912,15 @@ public final class FolioPanel extends JPanel {
         showTab(TAB_TEST);
         String body = textToWrite(previewReady, transcript.getText());
         if (body == null) {
-            setStatus("Preview a test before writing a file.");
+            setStatus("Preview a test before writing a file.", FolioChrome.Tone.WARNING);
             return;
         }
         if (insertDirectory == null) {
-            setStatus("Select a class or method, preview a test, then write the file.");
+            setStatus("Select a class or method, preview a test, then write the file.", FolioChrome.Tone.WARNING);
             return;
         }
         insertPreview(insertName, insertDirectory);
-        setStatus("Wrote " + insertName);
+        setStatus("Wrote " + insertName, FolioChrome.Tone.SUCCESS);
     }
 
     public void insertPreview(String fileName, VirtualFile directory) {
@@ -906,7 +943,7 @@ public final class FolioPanel extends JPanel {
         commitColumn.clearRows();
         JBPanel<?> card = FolioChrome.card(FolioChrome.answerFill());
         FolioChrome.WrapText body = new FolioChrome.WrapText(text);
-        body.setFont(new Font(Font.MONOSPACED, Font.PLAIN, body.getFont().getSize()));
+        body.setFont(FolioChrome.codeFont(body.getFont().getSize()));
         card.add(body, BorderLayout.CENTER);
         commitColumn.addRow(card);
     }
@@ -967,6 +1004,7 @@ public final class FolioPanel extends JPanel {
         String label = badgeText(storedKey, apiKey.getPassword().length, model.getText());
         badge.setText(label);
         badge.setIcon(storedKey ? AllIcons.General.GreenCheckmark : AllIcons.General.Warning);
+        FolioChrome.styleBadge(badge, storedKey, apiKey.getPassword().length > 0);
     }
 
     private void refreshPreviewHint() {
@@ -994,9 +1032,8 @@ public final class FolioPanel extends JPanel {
         }
     }
 
-    private void setStatus(String text) {
-        String safe = text == null ? "" : text.replace("&", "&amp;").replace("<", "&lt;");
-        status.setText("<html>" + safe + "</html>");
+    private void setStatus(String text, FolioChrome.Tone tone) {
+        statusBanner.setMessage(text, tone);
     }
 
     private static void shrinkable(JTextField field) {
@@ -1004,21 +1041,6 @@ public final class FolioPanel extends JPanel {
         field.setMinimumSize(new Dimension(80, height));
     }
 
-    private static JPanel labeled(String title, JBTextArea area) {
-        JPanel box = new JPanel(new BorderLayout(0, JBUI.scale(4)));
-        box.setOpaque(false);
-        box.add(new JBLabel(title), BorderLayout.NORTH);
-        box.add(FolioChrome.fieldScroll(area), BorderLayout.CENTER);
-        return box;
-    }
-
-    private static JPanel emptyBlock(String hint) {
-        JBPanel<?> panel = new JBPanel<>(new BorderLayout());
-        panel.setOpaque(false);
-        panel.setBorder(JBUI.Borders.empty(12, 4));
-        panel.add(FolioChrome.hint(hint), BorderLayout.NORTH);
-        return panel;
-    }
 
     private static void copy(String text) {
         Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(text), null);
