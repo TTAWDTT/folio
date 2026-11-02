@@ -1,6 +1,6 @@
 # Folio
 
-Folio is an IntelliJ IDEA plugin for CST3492 Group B. It sits in a tool window and answers questions from the course files the lecturer has indexed. When a chunk of a PDF page or a slide is relevant, the answer cites that file and that page or slide. When nothing in the index is relevant, the answer says so and does not invent a citation.
+Folio is an IntelliJ IDEA plugin for CST3492 Group B. It sits in a tool window and answers questions from the course files the lecturer has indexed. When a retrieved chunk is used, the answer cites it inline as [1], [2] and lists that chunk under the answer. When nothing in the index is relevant, the answer says it is not grounded in course files and does not invent a citation.
 
 Group B covers answering from course material and the IDE actions around it: generate a JUnit test, draft a commit message, and run a short course drill. It does not edit the student's code or drive the built-in diff viewer.
 
@@ -13,7 +13,7 @@ A twenty-minute demo in a course project:
 1. Open **Folio**. The header reads Folio / Course assistant. With no key stored, the badge says **No API key**, and Ask, Preview test, and Draft commit messages are disabled.
 2. Open the gear. Set the base URL and model if needed, paste an API key, and choose **Save settings**. The field clears and the badge becomes **Key ready · deepseek-flash**. An empty Save after that keeps the stored key.
 3. On **Files**, choose **Index files** and pick a lecture PDF and a slide deck. Each row shows the file name, the directory, and the page or slide count. **Remove** asks before deleting that path. Re-index and Remove also drop a legacy row stored under the bare file name.
-4. On **Ask**, type a question about the lecture. Folio shows the question, then citation chips (`lecture-servlet.pdf page 1`, or a slide number for a deck), then the answer. A chip copies the citation. A question that does not match the course shows the general-knowledge sentence and no chips.
+4. On **Ask**, type a question about the lecture. Folio shows the question, then the answer. Under the answer, each source card is a retrieved chunk the reply cited: the file name, the page or slide (and part, when a page was split), and a short excerpt. The numbers match the [1], [2] marks in the answer. Clicking a card opens a text file in the editor at that excerpt, or a preview when the file is a PDF, a slide deck, or not on disk. A question that matches nothing says the answer is not grounded in course files and shows no source cards.
 5. Put the caret on a method and run **Generate JUnit From Scenario** from the editor menu. The dialog is prefilled with the scenario already in the tool window. **Preview test** fills the preview. **Write test file** stays off until that preview returns a test, then writes it next to the class. A failed preview, or a reply that is not a test, leaves a note in the preview and does not enable Write.
 6. Stage a change and run **Draft Folio Commit Messages** from the commit dialog. Folio drafts three messages, copies the first, and, when the action was started from the commit box, places that first message in the box.
 
@@ -23,15 +23,22 @@ The tool window follows the IDE theme. Cards, the section bar, status banners, a
 
 ## Features
 
-### Ask, with cited pages and slides
+### Ask, with sources
 
-The Ask section is a short chat. An empty window shows a one-line hint. Each question is a card; each answer is a card under it. Citation chips are the file name plus `page N` or `slide N`. Clicking a chip copies that line.
+The Ask section is a short chat. An empty window shows a one-line hint. Each question is a card; each answer is a card under it. Source cards sit under the answer. A card shows `[n]`, the file name, `page N` or `slide N` (plus `part N` when that page or slide was split), and a short excerpt of the chunk.
 
-Retrieval runs before the model call, and the chips appear as soon as the hits are known. The model then sees those chunks and is told to repeat the path and scope number it uses. At most four chunks are sent.
+Retrieval still runs before the model call. At most four chunks are sent. Each one is numbered in the prompt. The model is told to cite those numbers inline as [1], [2], with a space before the bracket, and not to invent a number. Folio then checks the reply:
 
-If the key is missing, Ask does not call the model. The card shows: "No API key is configured. Add an API key in the Folio tool window and save settings." If there were hits, they stay on the card.
+- A marker is kept only when its number names one of those retrieved chunks. Markers are rewritten so [1], [2] follow the source list under the answer.
+- A number that was not retrieved is removed from the text and never becomes a card. Removing one tidies the space it left, including a space at the start or end of a line. A comma, `and`, `cf.`, or `和` is removed with the marker only when that word joins two citations, as in `[1] and [9]`, or when it sits inside parentheses beside the marker. A connective between ordinary words stays, so `Servlets [9] and JPA` becomes `Servlets and JPA` and `Cf. [9] page` becomes `Cf. page`. Parentheses left empty, or holding only a cue such as `see`, `cf.`, `and`, `见`, `和`, or `参见`, are removed. An ordinary word stays, so `(HttpServlet [9])` becomes `(HttpServlet)`. Full-width `（）` follow the same rule. A doubled Chinese comma such as `，，` is collapsed. That happens only when the marker was a citation. Adjacent prose markers such as `[1][2]` are both mapped, and so is a parenthetical list such as `(see [1], [2])`, a marker after a line-start `*`, `-`, or `>` (including `> > [1]`), a marker after closing emphasis (`**A** [1]`, `_A_ [1]`), and `([n])` when the parenthesis opens prose. A `(` is a call in `ident(`, `)(`, and `](` when the name is ASCII letters, digits, `_`, or `$`. A Chinese character before `(` is still prose, and a full-width `（` is never a call, so `如下（[2]）见 [3]` renumbers both markers. It is also an expression when `=`, an operator, or a keyword such as `if`, `while`, `return`, `for`, `switch`, or `new` precedes it, ignoring spaces, so `x = ([3])` and `if ([3])` are left as written. That leftover still counts: `a + ([1]) and see [3]` keeps the original numbers and every retrieved chunk. A two-space ending before a newline is kept. `[x](u) [9] and [1]` keeps `and`. Whitespace or the start of the text before `(` still makes `Servlets ([1])` a citation, while `foo([1])`, `foo()([1])`, and `m[0]([1])` stay literal. The same original number always becomes the same new number. An index, a call, or a list in an expression (`m[0][2]`, `foo()[1]`, `print([1, 2, 3])`, `foo(a, [1, 2])`, `foo(a, [5])`, `return [1, 2]`, `x = [1, 2]`, `a * [1]`) is not a citation and is never edited. If a `[n]` that this pass did not write names any retrieved chunk (`1` through the chunk count, not only the cards that were kept), including the label of a markdown link such as `[2](u)`, Folio lists every retrieved chunk in retrieval order and leaves the in-range markers as written. A prose marker that was not retrieved, such as `[9]`, is still removed on that path. Fenced blocks (including `~~~` and a fence indented by up to three spaces), four-space code blocks, and inline code are left as written, including their indentation. A citation on the line after a closing fence is still a citation.
+- If the reply contains no markers, the source list is the retrieved chunks. The model was given only those chunks and did not name a subset.
+- If every marker is out of range, there are no source cards. The card says: "The reply did not cite a retrieved course chunk."
 
-If the key is present and there are no hits, the answer starts with: "Response is based on general knowledge; no specific course material is referenced." There are no chips.
+Clicking a source opens that course file. A text file on disk opens in the editor with the caret at the excerpt. A PDF, a slide deck, another non-text file, or a path that is not on disk opens a preview of the indexed chunk instead.
+
+If the key is missing, Ask does not call the model. The card shows: "No API key is configured. Add an API key in the Folio tool window and save settings." If there were hits, those retrieved chunks stay on the card as sources.
+
+If the key is present and no chunk passes the cutoff, the answer starts with: "Response is based on general knowledge; no specific course material is referenced." The card states: "This answer isn't grounded in course files." There are no source cards. A prose [n] the model invents is removed. A list or index in code is not.
 
 **Ask Folio** on the editor popup asks "Explain the selected code." or, with no selection, "Explain this." **Folio Course Drill** asks the model for three short questions about the selection and still cites chunks. With no selection the drill says "Select some code first." and does not call the model.
 
@@ -389,42 +396,42 @@ Source files: `docs/statechart/FolioWindow.tla`, `FolioWindow.cfg`, `view.mjs`, 
 sequenceDiagram
   participant User
   participant Panel as FolioPanel
-  participant Index as CourseIndex
   participant Asker
+  participant Index as CourseIndex
   participant HTTP as HttpChatClient
   User->>Panel: Ask, or Ask Folio from the editor
   Panel->>Panel: show the question card and start the spinner
-  Panel->>Index: top of the question plus any selection, limit 4
-  Index-->>Panel: citation chips, or none
-  Panel->>Asker: ask with the same index, key, and model
+  Panel->>Asker: ask with the index, key, and model
+  Asker->>Index: top of the question plus any selection, limit 4
   alt no key
-    Asker-->>Panel: missing-key text, no HTTP call
+    Asker-->>Panel: missing-key text and the retrieved chunks, no HTTP call
   else hits
-    Asker->>HTTP: chat completion with those chunks
+    Asker->>HTTP: chat completion, chunks numbered [1], [2]
     HTTP-->>Asker: answer text
-    Asker-->>Panel: cited answer
+    Asker->>Asker: keep only [n] markers that name a retrieved chunk
+    Asker-->>Panel: answer text and the validated sources
   else no hits
     Asker->>HTTP: general-knowledge prompt
     HTTP-->>Asker: answer text
-    Asker-->>Panel: general-knowledge sentence plus the text
+    Asker-->>Panel: the answer is not grounded in course files
   end
-  Panel->>Panel: show the body and stop the spinner
+  Panel->>Panel: show the answer, then the source cards, and stop the spinner
 ```
 
-`Asker.ask` calls `CourseIndex.top` again with the same limit. The chips and the prompt therefore come from two lookups of the same index. The HTTP client posts JSON to `{baseUrl}/chat/completions` (or to the base URL itself when it already ends in `/chat/completions`) with a bearer token. Timeouts are 20 seconds to connect and 60 seconds for the response. The message content must be a JSON string. A non-2xx status becomes an `IOException` that includes a short piece of the error body. That failure is shown as the answer text, and the spinner stops.
+`Asker.ask` calls `CourseIndex.top` once. The prompt and the source cards come from that lookup, after citation markers are checked. The HTTP client posts JSON to `{baseUrl}/chat/completions` (or to the base URL itself when it already ends in `/chat/completions`) with a bearer token. Timeouts are 20 seconds to connect and 60 seconds for the response. The message content must be a JSON string. A non-2xx status becomes an `IOException` that includes a short piece of the error body. That failure is shown as the answer text, and the spinner stops.
 
 Anything that uses `FolioPanel.run` (Ask, drill, preview, commit draft, index, remove) increments a busy counter on the calling thread and decrements it when the result is delivered. A platform cancellation (`ControlFlowException`, including `ProcessCanceledException`) schedules the same decrement and is rethrown, so the spinner does not stay up.
 
 ## Limitations and what was not verified
 
-- No live model call was made for this write-up. Citation chips were not clicked in a running IDE, and the commit box was not filled in a running IDE. The Islands screenshots are from an earlier `runIde` session, before the theme. A headless paint of the themed panel exists for Ask, Files, Test, and Setup in light and dark. Icon glyphs do not draw in that paint.
+- No live model call was made for this write-up. Source cards were not clicked in a running IDE, and the commit box was not filled in a running IDE. The Islands screenshots are from an earlier `runIde` session, before the theme. A headless paint of the themed panel exists for Ask, Files, Test, and Setup in light and dark, and a headless paint of an answer with source cards. Icon glyphs do not draw in that paint.
 - There is no Islands screenshot of Commit, and no Islands dark screenshot of Files or Test.
 - The chat keeps every card. There is no clear button and no cap.
 - Ask, Preview, and Draft in the tool window are disabled with no key. The editor and VCS actions are not. They still open the tool window and call the panel. With no key, Ask, preview, and the commit draft return the missing-key sentence and do not call HTTP. The spinner still runs for that path and then stops.
 - **Write test file** turns on only when the last preview call succeeded and the reply contains `org.junit` or `class `. That check is only on the model reply. Failure text is shown as it is and does not enable Write, even when it contains those words. A reply that is not a test is shown with the note "The reply was not a JUnit test." and Write stays off. The no-directory sentence is a status line. It does not replace the preview, so it is not written.
 - Two `run` calls can overlap. The spinner is a counter, so it stays up until both finish. The statechart serializes them.
 - Saving a new key sets the badge to **Key ready** and then writes the Password Safe on a background thread. If that write fails, the badge still says **Key ready**. An empty Save does not take that path.
-- Indexed files may lie outside the project. Folio does not open them from a citation chip.
+- A source card opens a text file that is on disk in the editor, at the excerpt. A PDF, a slide deck, or a path that is not on disk opens a preview of the indexed chunk. That open path was not exercised in a running IDE.
 - Retrieval is lexical BM25 over the indexed files. It is not a web search and not a vector index.
 - The course plan in `docs/course-ta-plugin-plan.md` describes a larger program. This tree is the plugin that program built for Group B, not that program's process.
 
@@ -442,7 +449,7 @@ docs/course-ta-plugin-plan.md
 
 ## Testing
 
-`./gradlew test buildPlugin` with JDK 25 completes successfully. The suite is **82 tests, 0 failures**.
+`./gradlew test buildPlugin` with JDK 25 completes successfully. The suite is **123 tests, 0 failures**.
 
 | Test class | Tests |
 | --- | ---: |
@@ -450,11 +457,11 @@ docs/course-ta-plugin-plan.md
 | `HttpChatClientTest` | 10 |
 | `CommitMessageActionTest` | 9 |
 | `FolioPanelTest` | 10 |
-| `AskerTest` | 7 |
+| `AskerTest` | 48 |
 | `CourseFileParserTest` | 7 |
 | `GenerateTestActionTest` | 3 |
 | `TaSettingsTest` | 1 |
 | `AnswerTest` | 1 |
 | `CourseDrillActionTest` | 1 |
 
-The index tests lock the retrieval rules above: weather and unrelated questions return no hits, a lecture term still hits when it appears in every chunk, polite Chinese and English questions still reach the course term, and removing one absolute path leaves another file with the same name. They also load a legacy bare-name row: re-indexing the same handout drops that row, and Remove drops it too. `FolioPanelTest` locks the button gate, empty Save, the badge text, the scaled hint width, cancellation, and that Write copies a preview only after it succeeded. A prose reply leaves Write off. Error text that contains `class ` or `org.junit` does not enable Write either. `CourseFileParserTest` checks page and slide order and that a chosen source id is stored. The UI tests do not construct a `Project`, so they do not click the confirmation dialog or the live tool window.
+`AskerTest` locks citation mapping: prose `[n]` markers, including adjacent `[1][2]`, a parenthetical list `(see [1], [2])`, a line-start `*`, `-`, or `>`, closing emphasis such as `**A** [2]`, and a prose parenthesis such as `Servlets ([1])`, are renumbered onto retrieved chunks. `foo([1])`, `foo()([1])`, and `m[0]([1])` are calls and stay literal. A call name is ASCII, so `如下（[2]）见 [3]` and `如下([2])见 [3]` are both renumbered, and `cache$([3])` stays a call. A full-width `（` after `foo` is still prose. `x = ([3])`, `if ([3])`, and `return ([3])` are expressions and stay as written. An in-range expression such as `a + ([1])` beside `see [3]` keeps every retrieved chunk instead of minting a second `[1]`. `[2](u) and [3]` with three chunks does the same, so the link label is not left dangling. `(HttpServlet)` stays when the marker inside it is removed; a cue word still drops the parentheses, including full-width `（see ）`. Two spaces before a newline stay. `ends here [1] [9]` does not keep a trailing space. `[x](u) [9] and [1]` keeps `and`. The same original number always gets the same new number. Unknown numbers are dropped from candidates only. A comma, `and`, `cf.`, or `和` goes with the marker when it joins two citations or sits inside parentheses beside the marker, and a pair of parentheses left empty, including `(see )`, is removed. `A and [9] B` keeps `and`. A sentence comma such as `Text, [9] only` stays. A call argument such as `foo(a, [5])` is not rewritten. A leftover `[n]` in `1` through the retrieved count, including one past the card list such as `new [2] and [3]`, keeps every retrieved chunk and still drops a prose marker that was not retrieved, such as `[9]` beside `return [2]`, without leaving `and.`. A seeded generator labels each marker as a citation or as code when it builds the reply, including `([n])`, `new [n]`, `a**b** [n]`, `(a, [n])`, a `~~~` fence, and an indented code block, and checks the reply against those labels. Expression lists are not citations. Separate cases fail if the backtick fence, the `~~~` fence, inline code, an indented fence, or a four-space code block is no longer skipped, or if a citation on the line after a closing fence is left unmapped. An empty retrieval says the answer is not grounded and still leaves a code list alone. The index tests lock the retrieval rules above: weather and unrelated questions return no hits, a lecture term still hits when it appears in every chunk, polite Chinese and English questions still reach the course term, and removing one absolute path leaves another file with the same name. They also load a legacy bare-name row: re-indexing the same handout drops that row, and Remove drops it too. `FolioPanelTest` locks the button gate, empty Save, the badge text, the scaled hint width, cancellation, and that Write copies a preview only after it succeeded. A prose reply leaves Write off. Error text that contains `class ` or `org.junit` does not enable Write either. `CourseFileParserTest` checks page and slide order and that a chosen source id is stored. The UI tests do not construct a `Project`, so they do not click the confirmation dialog or the live tool window.
