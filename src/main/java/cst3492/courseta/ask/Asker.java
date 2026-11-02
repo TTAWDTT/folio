@@ -530,13 +530,29 @@ public final class Asker {
         return Role.PROSE;
     }
 
-    /** {@code ident(}, {@code )(}, and {@code ](} are calls. A space before {@code (} is not one. */
+    /**
+     * {@code ident(}, {@code )(}, and {@code ](} are calls. The name is ASCII letters, digits,
+     * {@code _}, or {@code $} only, so a Chinese character before {@code (} is still prose.
+     * A full-width {@code （} is never a call. A space before {@code (} is not one either.
+     */
     private static boolean callParen(String raw, int parenAt) {
-        if (parenAt <= 0) {
+        if (parenAt < 0 || raw.charAt(parenAt) == '（') {
+            return false;
+        }
+        if (parenAt == 0) {
             return false;
         }
         char immediate = raw.charAt(parenAt - 1);
-        return isIdent(immediate) || isCloseParen(immediate) || immediate == ']';
+        return isAsciiIdent(immediate) || immediate == ')' || immediate == ']';
+    }
+
+    /** A call name: ASCII letter, digit, {@code _}, or {@code $}. CJK letters are prose. */
+    private static boolean isAsciiIdent(char c) {
+        return (c >= 'A' && c <= 'Z')
+                || (c >= 'a' && c <= 'z')
+                || (c >= '0' && c <= '9')
+                || c == '_'
+                || c == '$';
     }
 
     /**
@@ -758,6 +774,7 @@ public final class Asker {
      * or emphasis glued to a word ({@code a**b** [1]}).
      * An index ({@code m[1]}, {@code foo()[1]}, {@code m[0][1]}), a call ({@code foo([1])}),
      * and an infix operator ({@code a * [1]}) are not.
+     * A markdown link {@code [n](url)} is, so an in-range label collides.
      */
     private static boolean readableAsCitation(String text, int bracketAt, List<int[]> code) {
         Role role = roleAt(text, bracketAt, code);
@@ -856,9 +873,29 @@ public final class Asker {
     private static boolean citationBefore(StringBuilder out, int tokenStart) {
         int index = skipBack(out, tokenStart);
         if (index > 0 && isCloseParen(out.charAt(index - 1))) {
+            if (linkBracketBefore(out, index - 1) >= 0) {
+                return true;
+            }
             index = skipBack(out, index - 1);
         }
         return index > 0 && out.charAt(index - 1) == ']';
+    }
+
+    /** Index of {@code ]} when {@code closeAt} is the {@code )} of a markdown link {@code ](url)}, else -1. */
+    private static int linkBracketBefore(StringBuilder out, int closeAt) {
+        int depth = 0;
+        for (int i = closeAt; i >= 0; i--) {
+            char c = out.charAt(i);
+            if (isCloseParen(c)) {
+                depth++;
+            } else if (isOpenParen(c)) {
+                depth--;
+                if (depth == 0) {
+                    return i > 0 && out.charAt(i - 1) == ']' ? i - 1 : -1;
+                }
+            }
+        }
+        return -1;
     }
 
     private static int skipBack(StringBuilder out, int index) {

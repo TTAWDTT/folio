@@ -572,6 +572,64 @@ class AskerTest {
     }
 
     /**
+     * A parenthesis after a Chinese character is prose, including a full-width {@code （}.
+     * {@code foo(} and {@code cache$(} stay calls. Alone, {@code 如下（[1]）} names one card.
+     */
+    @Test
+    void chineseParenIsACitation() {
+        CourseChunk first = page("lecture-servlet.pdf", 1, "doGet");
+        CourseChunk second = page("lecture-jpa.pdf", 2, "OneToMany");
+        CourseChunk third = page("lecture-jpa.pdf", 3, "persistence");
+        List<CourseChunk> hits = List.of(first, second, third);
+
+        Asker.CitationMap mapped = Asker.mapCitations(hits, "如下（[2]）见 [3]。");
+        assertEquals("如下（[1]）见 [2]。", mapped.text());
+        assertEquals(List.of(second, third), mapped.sources());
+
+        Asker.CitationMap lecture = Asker.mapCitations(hits, "详见讲义（[2]）和 [3]。");
+        assertEquals("详见讲义（[1]）和 [2]。", lecture.text());
+        assertEquals(List.of(second, third), lecture.sources());
+
+        Asker.CitationMap ascii = Asker.mapCitations(hits, "如下([2])见 [3]。");
+        assertEquals("如下([1])见 [2]。", ascii.text());
+        assertEquals(List.of(second, third), ascii.sources());
+
+        Asker.CitationMap wideName = Asker.mapCitations(hits, "foo（[2]）见 [3]。");
+        assertEquals("foo（[1]）见 [2]。", wideName.text());
+        assertEquals(List.of(second, third), wideName.sources());
+
+        Asker.CitationMap alone = Asker.mapCitations(hits, "如下（[1]）");
+        assertEquals("如下（[1]）", alone.text());
+        assertEquals(List.of(first), alone.sources());
+
+        Asker.CitationMap call = Asker.mapCitations(hits, "use foo([3]) see [3].");
+        assertEquals("use foo([3]) see [1].", call.text());
+        assertEquals(List.of(third), call.sources());
+
+        Asker.CitationMap dollar = Asker.mapCitations(hits, "use cache$([3]) see [3].");
+        assertEquals("use cache$([3]) see [1].", dollar.text());
+        assertEquals(List.of(third), dollar.sources());
+    }
+
+    /**
+     * An in-range markdown label is a leftover card number. With three chunks, rewriting the
+     * other cite would leave {@code [2](u)} pointing at a chunk the card list does not show.
+     */
+    @Test
+    void markdownLinkNumberCollides() {
+        CourseChunk first = page("lecture-servlet.pdf", 1, "doGet");
+        CourseChunk second = page("lecture-jpa.pdf", 2, "OneToMany");
+        CourseChunk third = page("lecture-jpa.pdf", 3, "persistence");
+        Asker.CitationMap mapped = Asker.mapCitations(List.of(first, second, third), "[2](u) and [3]");
+        assertEquals("[2](u) and [3]", mapped.text());
+        assertEquals(List.of(first, second, third), mapped.sources());
+
+        Asker.CitationMap dropped = Asker.mapCitations(List.of(first, second, third), "[2](u) and [9].");
+        assertEquals("[2](u).", dropped.text());
+        assertEquals(List.of(first, second, third), dropped.sources());
+    }
+
+    /**
      * Seeded replies mix in-range and out-of-range prose, repeats, adjacent markers, groups,
      * fences, inline code, calls, and lists. Each marker is labeled citation or code when it
      * is built. The check uses those labels, so a wrong classifier cannot agree with itself.
@@ -782,7 +840,7 @@ class AskerTest {
             if (part > 0) {
                 text.append('\n');
             }
-            int kind = random.nextInt(28);
+            int kind = random.nextInt(31);
             int left = markerNumber(random, retrieved, true);
             int right = markerNumber(random, retrieved, true);
             switch (kind) {
@@ -897,6 +955,26 @@ class AskerTest {
                     text.append("nx").append(tag);
                     keep(marks, "hb" + tag + "  \n");
                     keep(marks, "nx" + tag);
+                }
+                case 23 -> {
+                    int tag = trial * 10 + part;
+                    text.append("如下");
+                    cite(text, marks, "（", "）见" + tag + " ", left);
+                    cite(text, marks, "", "。", right);
+                }
+                case 24 -> {
+                    int tag = trial * 10 + part;
+                    text.append("讲义");
+                    cite(text, marks, "(", ")和" + tag + " ", left);
+                    cite(text, marks, "", "。", right);
+                }
+                case 25 -> {
+                    int tag = trial * 10 + part;
+                    int number = markerNumber(random, retrieved, true);
+                    boolean inRange = number >= 1 && number <= retrieved;
+                    code(text, marks, "md" + tag + "[" + number + "](u)", inRange);
+                    text.append(" and ");
+                    cite(text, marks, "", ".", right);
                 }
                 default -> literalFragment(text, marks, random, trial, part, retrieved);
             }
