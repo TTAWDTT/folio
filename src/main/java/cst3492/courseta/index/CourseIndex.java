@@ -52,6 +52,31 @@ public final class CourseIndex {
         }
     }
 
+    /**
+     * Drops this source, and the older bare-name row when {@code sourceDocument} is a path.
+     * Indexes written before paths were stored used only the file name, so re-indexing
+     * {@code /lectures/notes.pdf} must also drop {@code notes.pdf}. A different directory
+     * with the same file name is left alone. Deleting a bare name still removes that row.
+     */
+    public synchronized void removeHandout(String sourceDocument) {
+        if (sourceDocument == null || sourceDocument.isBlank()) {
+            return;
+        }
+        removeSource(sourceDocument);
+        String legacy = legacyFileName(sourceDocument);
+        if (legacy != null) {
+            removeSource(legacy);
+        }
+    }
+
+    static String legacyFileName(String sourceDocument) {
+        int slash = Math.max(sourceDocument.lastIndexOf('/'), sourceDocument.lastIndexOf('\\'));
+        if (slash < 0 || slash >= sourceDocument.length() - 1) {
+            return null;
+        }
+        return sourceDocument.substring(slash + 1);
+    }
+
     public synchronized void upsert(CourseChunk chunk) {
         CourseChunk previous = byId.put(chunk.id(), chunk);
         if (previous != null) {
