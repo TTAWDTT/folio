@@ -1,0 +1,88 @@
+---
+title: "Folio tool window"
+---
+stateDiagram-v2
+  state "Legend" as legend {
+    lg0: Setup
+    lg1: Working
+    lg2: Ready
+    lg3: Error
+  }
+  class lg0 tan
+  class lg1 orange
+  class lg2 teal
+  class lg3 pink
+  state "Setup" as s0 {
+    s1: No API key
+    s2: Key typed, not saved
+  }
+  state "Ready" as s3 {
+    s4: Key saved
+    s5: Files ready
+  }
+  state "Ask" as s6 {
+    s7: Asking
+    state "Finished" as s8 {
+      s9: Answer with citations
+      s10: The ask failed
+    }
+  }
+  state "Commit" as s11 {
+    s12: Drafting a message
+    state "Finished" as s13 {
+      s14: The draft failed
+      s15: Message in the commit box
+    }
+  }
+  state "Test" as s16 {
+    s17: Generating the preview
+    state "Finished" as s18 {
+      s19: Preview failed
+      s20: Not a test
+      s21: Test file written
+    }
+    s22: Preview shown
+  }
+  state "Course files" as s23 {
+    s24: Indexing
+  }
+  [*] --> s1
+  [*] --> s4
+  [*] --> s5
+  s1 --> s2: you type an API key
+  s4 --> s1: you clear the API key
+  s7 --> s9: the model answers
+  s7 --> s10: the ask fails
+  s12 --> s14: the draft fails
+  s12 --> s15: the message is in the commit box
+  s2 --> s1: you clear the field
+  s2 --> s4: you save settings
+  s17 --> s19: the preview fails
+  s17 --> s20: the reply is not a test
+  s17 --> s22: the model shows a preview
+  s24 --> s4: the index is empty
+  s24 --> s5: indexing finishes
+  s22 --> s21: you click Write test file
+  s3 --> s7: you click Ask
+  s3 --> s12: you click Draft commit messages
+  s3 --> s17: you click Preview test
+  s3 --> s24: you index files
+  s8 --> s7: you click Ask
+  s13 --> s12: you click Draft commit messages
+  s18 --> s17: you click Preview test
+  class s1 tan
+  class s2 tan
+  class s4 teal
+  class s5 teal
+  class s7 orange
+  class s9 teal
+  class s10 pink
+  class s12 orange
+  class s14 pink
+  class s15 teal
+  class s17 orange
+  class s19 pink
+  class s20 pink
+  class s21 teal
+  class s22 teal
+  class s24 orange

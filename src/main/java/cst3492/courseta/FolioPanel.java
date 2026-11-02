@@ -64,6 +64,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 public final class FolioPanel extends JPanel {
@@ -85,6 +86,7 @@ public final class FolioPanel extends JPanel {
     private final JButton askButton = FolioChrome.primary("Ask", AllIcons.Actions.Find);
     private final JButton commitButton = FolioChrome.primary("Draft commit messages", AllIcons.Actions.Commit);
     private final JButton previewButton = FolioChrome.primary("Preview test", AllIcons.Nodes.JunitTestMark);
+    private final JButton writeButton = FolioChrome.secondary("Write test file", AllIcons.Actions.Execute);
     private final JButton indexButton = FolioChrome.primary("Index files", AllIcons.Actions.AddFile);
     private final JButton badge = new JButton("No API key", AllIcons.General.Warning);
     private final JButton gear = FolioChrome.gear(AllIcons.General.GearPlain);
@@ -109,6 +111,7 @@ public final class FolioPanel extends JPanel {
     private VirtualFile insertDirectory;
     private String insertName = "FolioGeneratedTest.java";
     private String lastSource = "";
+    private boolean previewReady;
 
     public FolioPanel(Project project) {
         super(new BorderLayout(0, JBUI.scale(8)));
@@ -183,8 +186,10 @@ public final class FolioPanel extends JPanel {
         indexButton.addActionListener(event -> chooseFiles());
         commitButton.addActionListener(event -> draftCommit());
         previewButton.addActionListener(event -> runGenerate(lastSource.isBlank() ? scenario.getText() : lastSource));
+        writeButton.addActionListener(event -> writePreview());
         refreshKeyActions();
         refreshPreviewHint();
+        refreshWrite();
         loadStored();
     }
 
@@ -225,6 +230,62 @@ public final class FolioPanel extends JPanel {
         return failure.getMessage() == null ? failure.toString() : failure.getMessage();
     }
 
+    /** Shown when the model answered with something other than a test class. */
+    static final String NOT_A_TEST = "The reply was not a JUnit test.";
+
+    /**
+     * The prompt asks for one JUnit class with an {@code org.junit} import.
+     * A refusal or an explanation usually has neither.
+     */
+    static boolean looksLikeTest(String text) {
+        return text != null && (text.contains("org.junit") || text.contains("class "));
+    }
+
+    /**
+     * A preview succeeded only when the model returned test-like text. Blank text
+     * is the same failure as a missing scenario. Error text never takes this path:
+     * only the model reply is checked here.
+     */
+    static boolean previewSucceeded(String generated) {
+        return generated != null && !generated.isBlank() && looksLikeTest(generated);
+    }
+
+    /**
+     * What the preview shows for a model reply that did not throw. A blank reply
+     * is the missing-scenario sentence. A reply that is not a test keeps the
+     * reply under a note. A test is the reply itself.
+     */
+    static String previewTranscript(String generated) {
+        if (generated == null || generated.isBlank()) {
+            return Scenario.MISSING;
+        }
+        if (!looksLikeTest(generated)) {
+            return NOT_A_TEST + "\n\n" + generated.strip();
+        }
+        return generated;
+    }
+
+    /**
+     * Write turns on only after the call succeeded and the text now on screen
+     * still looks like a test. Failure text and the not-a-test note leave it
+     * off, including when that text contains {@code org.junit} or {@code class }.
+     */
+    static boolean previewReadyAfter(boolean callSucceeded, String shown) {
+        return callSucceeded && looksLikeTest(shown);
+    }
+
+    /**
+     * File body Write may create, or {@code null} when the last preview did not
+     * succeed. The transcript can still hold that failure, including a message
+     * that contains {@code org.junit} or {@code class }.
+     */
+    static String textToWrite(boolean lastPreviewSucceeded, String transcript) {
+        if (!lastPreviewSucceeded) {
+            return null;
+        }
+        return transcript == null ? "" : transcript;
+    }
+
     static String sourceId(Path file) {
         return file.toAbsolutePath().normalize().toString();
     }
@@ -252,7 +313,10 @@ public final class FolioPanel extends JPanel {
     }
 
     public void showNote(String text) {
-        transcript.setText(text == null ? "" : text);
+        String shown = text == null ? "" : text;
+        transcript.setText(shown);
+        previewReady = previewReadyAfter(false, shown);
+        refreshWrite();
         showTab(TAB_TEST);
     }
 
@@ -476,9 +540,7 @@ public final class FolioPanel extends JPanel {
         JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, JBUI.scale(8), 0));
         row.setOpaque(false);
         row.add(previewButton);
-        JButton write = FolioChrome.secondary("Write test file", AllIcons.Actions.Execute);
-        write.addActionListener(event -> writePreview());
-        row.add(write);
+        row.add(writeButton);
         top.add(row, BorderLayout.SOUTH);
         panel.add(top, BorderLayout.NORTH);
         JBPanel<?> preview = new JBPanel<>(new BorderLayout(0, JBUI.scale(4)));
@@ -786,7 +848,10 @@ public final class FolioPanel extends JPanel {
 
     private void runGenerate(String source) {
         showTab(TAB_TEST);
+        previewReady = false;
+        refreshWrite();
         String wanted = scenario.getText();
+        AtomicBoolean succeeded = new AtomicBoolean(false);
         run(() -> {
             if (!Scenario.canGenerate(wanted)) {
                 return Scenario.MISSING;
@@ -795,22 +860,26 @@ public final class FolioPanel extends JPanel {
             if (key.isBlank()) {
                 return Asker.MISSING_KEY;
             }
-            String generated = TestDraft.generate(new HttpChatClient(), baseUrl.getText().strip(), key, model.getText().strip(), wanted, source);
-            if (generated.isBlank()) {
-                return Scenario.MISSING;
-            }
-            return generated;
-        }, transcript::setText);
+            String generated = TestDraft.generate(
+                    new HttpChatClient(), baseUrl.getText().strip(), key, model.getText().strip(), wanted, source);
+            succeeded.set(previewSucceeded(generated));
+            return previewTranscript(generated);
+        }, text -> {
+            transcript.setText(text);
+            previewReady = previewReadyAfter(succeeded.get(), text);
+            refreshWrite();
+        });
     }
 
     private void writePreview() {
         showTab(TAB_TEST);
-        if (insertDirectory == null) {
-            transcript.setText("Select a class or method, preview a test, then write the file.");
+        String body = textToWrite(previewReady, transcript.getText());
+        if (body == null) {
+            setStatus("Preview a test before writing a file.");
             return;
         }
-        if (transcript.getText().isBlank() || !transcript.getText().contains("org.junit") && !transcript.getText().contains("class ")) {
-            transcript.setText("Preview a test before writing a file.");
+        if (insertDirectory == null) {
+            setStatus("Select a class or method, preview a test, then write the file.");
             return;
         }
         insertPreview(insertName, insertDirectory);
@@ -902,6 +971,11 @@ public final class FolioPanel extends JPanel {
 
     private void refreshPreviewHint() {
         previewHint.setVisible(transcript.getText().isBlank());
+    }
+
+    private void refreshWrite() {
+        writeButton.setEnabled(previewReady);
+        writeButton.setToolTipText(previewReady ? null : "Preview a test before writing a file.");
     }
 
     private void setBusy(boolean on) {
