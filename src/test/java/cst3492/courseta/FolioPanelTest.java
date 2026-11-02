@@ -2,6 +2,7 @@ package cst3492.courseta;
 
 import com.intellij.openapi.diagnostic.ControlFlowException;
 import com.intellij.openapi.progress.ProcessCanceledException;
+import com.intellij.ui.scale.JBUIScale;
 import com.intellij.util.ui.JBUI;
 import cst3492.courseta.ask.Asker;
 import cst3492.courseta.index.CourseChunk;
@@ -51,7 +52,10 @@ class FolioPanelTest {
         String left = "/lectures/a/notes.pdf";
         String right = "/lectures/b/notes.pdf";
         assertEquals("notes.pdf", Asker.citedFile(left));
+        assertEquals("notes.pdf", Asker.citedFile(right));
         assertEquals("/lectures/a", FolioPanel.fileLocation(left));
+        assertEquals("/lectures/b", FolioPanel.fileLocation(right));
+        assertNotEquals(FolioPanel.fileLocation(left), FolioPanel.fileLocation(right));
         assertEquals("", FolioPanel.fileLocation("notes.pdf"));
         assertEquals("", FolioPanel.fileLocation(null));
         List<CourseChunk> chunks = List.of(
@@ -61,7 +65,6 @@ class FolioPanelTest {
         assertEquals("2 pages · 3 chunks", FolioPanel.fileMeta(chunks));
         assertEquals("1 slide · 1 chunk", FolioPanel.fileMeta(List.of(
                 new CourseChunk("deck.pptx#SLIDE#1", "deck.pptx", ScopeKind.SLIDE, 1, "intro"))));
-        assertNotEquals(left, right);
     }
 
     @Test
@@ -87,10 +90,19 @@ class FolioPanelTest {
 
     @Test
     void hintWidthUsesTheScaledValue() {
-        String html = FolioChrome.hintHtml("Ask a question about the course.");
-        assertTrue(html.contains("width:" + JBUI.scale(240) + "px"));
-        assertTrue(html.contains("Ask a question"));
-        assertFalse(html.contains("<script>"));
+        JBUIScale.setUserScaleFactorForTest(1f);
+        int atOne = JBUI.scale(240);
+        JBUIScale.setUserScaleFactorForTest(2f);
+        try {
+            int atTwo = JBUI.scale(240);
+            assertTrue(atTwo > atOne);
+            String html = FolioChrome.hintHtml("a < b & c");
+            assertEquals("<html><body style='width:" + atTwo + "px'>a &lt; b &amp; c</body></html>", html);
+            assertFalse(html.contains("width:" + atOne + "px"));
+            assertFalse(html.contains("a < b"));
+        } finally {
+            JBUIScale.setUserScaleFactorForTest(1f);
+        }
     }
 
     private static final class Cancel extends RuntimeException implements ControlFlowException {

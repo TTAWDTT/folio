@@ -215,13 +215,12 @@ public final class FolioPanel extends JPanel {
 
     /**
      * User-visible text for a failed background task. Platform cancellations are rethrown
-     * so the caller can reset the spinner and then let them propagate. {@code null} means
-     * the throwable was a cancellation that this runtime cannot rethrow as unchecked.
+     * so the caller can reset the spinner and then let them propagate.
      */
     static String failureText(Throwable failure) {
         if (failure instanceof ControlFlowException) {
             ExceptionUtilRt.rethrowUnchecked(failure);
-            return null;
+            throw new AssertionError(failure);
         }
         return failure.getMessage() == null ? failure.toString() : failure.getMessage();
     }
@@ -610,7 +609,7 @@ public final class FolioPanel extends JPanel {
         StringBuilder report = new StringBuilder();
         for (Path file : files) {
             String source = sourceId(file);
-            index.removeSource(source);
+            index.removeHandout(source);
             List<CourseChunk> chunks = parser.parse(file, source, FolioPanel.class.getClassLoader());
             for (CourseChunk chunk : chunks) {
                 index.upsert(chunk);
@@ -636,7 +635,7 @@ public final class FolioPanel extends JPanel {
         }
         run(() -> {
             ensureStore();
-            index.removeSource(source);
+            index.removeHandout(source);
             index.save(store.resolve("index.tsv"));
             SwingUtilities.invokeLater(() -> {
                 setStatus(name + " removed. " + index.size() + " chunks indexed.");
@@ -854,9 +853,6 @@ public final class FolioPanel extends JPanel {
                     SwingUtilities.invokeLater(() -> setBusy(false));
                 }
                 text = failureText(ex);
-                if (text == null) {
-                    return;
-                }
             }
             String result = text;
             SwingUtilities.invokeLater(() -> {
