@@ -1126,7 +1126,7 @@ public final class FolioPanel extends JPanel {
 
     private void run(Work work, Consumer<String> sink, Runnable onFailure) {
         setBusy(true);
-        ApplicationManager.getApplication().executeOnPooledThread(() -> {
+        Runnable task = () -> {
             String text;
             boolean failed = false;
             try {
@@ -1155,7 +1155,12 @@ public final class FolioPanel extends JPanel {
                     setBusy(false);
                 }
             });
-        });
+        };
+        if (ApplicationManager.getApplication() == null) {
+            task.run();
+            return;
+        }
+        ApplicationManager.getApplication().executeOnPooledThread(task);
     }
 
     /** Scroll when the user just sent, or when they were already reading the latest line. */

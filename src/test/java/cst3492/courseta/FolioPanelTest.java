@@ -404,7 +404,7 @@ class FolioPanelTest {
     @Test
     void enterDoesNotSendWhileAnInputMethodIsComposing() {
         AtomicInteger sent = new AtomicInteger();
-        ComposingField area = new ComposingField();
+        ScriptedField area = new ScriptedField(false);
         area.setText("ka");
         assertTrue(FolioPanel.imeComposing(area));
         FolioPanel.installComposerKeys(area, sent::incrementAndGet, () -> true);
@@ -413,7 +413,23 @@ class FolioPanelTest {
         assertEquals(0, sent.get());
     }
 
-    /** Preferred and minimum size must not clear labels, and a narrow bar must not stack the buttons. */
+    /** Committed text is not composing, so Enter sends. Hard-coding composing to true does not. */
+    @Test
+    void enterSendsWhenInputMethodTextIsCommitted() {
+        AtomicInteger sent = new AtomicInteger();
+        ScriptedField area = new ScriptedField(true);
+        area.setText("ka");
+        assertFalse(FolioPanel.imeComposing(area));
+        FolioPanel.installComposerKeys(area, sent::incrementAndGet, () -> true);
+        Action send = area.getActionMap().get("folio-send");
+        send.actionPerformed(new ActionEvent(area, ActionEvent.ACTION_PERFORMED, ""));
+        assertEquals(1, sent.get());
+    }
+
+    /**
+     * Narrow layout drops the words. Measuring the preferred size afterwards must not put them back.
+     * Calling {@code getPreferredSize} first hides that, because the labels are already showing.
+     */
     @Test
     void segmentMeasurementDoesNotMutateButtonsOrOverlap() {
         JButton[] tabs = {
@@ -423,21 +439,34 @@ class FolioPanelTest {
                 FolioChrome.segment("Commit", null)
         };
         FolioChrome.SegmentBar bar = new FolioChrome.SegmentBar(tabs);
-        Dimension preferred = bar.getPreferredSize();
-        Dimension minimum = bar.getMinimumSize();
-        assertTrue(preferred.width > 0);
-        assertTrue(minimum.width > 0);
-        assertEquals("Ask", tabs[0].getText());
-        assertEquals("Commit", tabs[3].getText());
-        bar.setSize(Math.max(32, preferred.width / 4), Math.max(36, minimum.height));
+        bar.setSize(48, 36);
         bar.doLayout();
         for (int i = 0; i < tabs.length; i++) {
+            assertEquals("", tabs[i].getText());
             assertTrue(tabs[i].getWidth() > 0);
             for (int j = i + 1; j < tabs.length; j++) {
                 assertFalse(tabs[i].getBounds().intersects(tabs[j].getBounds()),
                         tabs[i].getBounds() + " overlaps " + tabs[j].getBounds());
             }
         }
+        assertTrue(bar.getPreferredSize().width > 48);
+        for (JButton tab : tabs) {
+            assertEquals("", tab.getText());
+        }
+    }
+
+    /**
+     * A failed ask runs the failure callback and puts the question back.
+     * A null callback, or skipping {@code onFailure.run()}, leaves the field empty.
+     */
+    @Test
+    void failedAskRestoresTheQuestionThroughTheFailureCallback() {
+        FolioPanel panel = panelWithKey();
+        FolioChrome.PromptArea question = composer(panel);
+        findBaseUrl(panel).setText("http://[");
+        question.setText("What is a servlet?");
+        fireSend(question);
+        awaitText(question, "What is a servlet?");
     }
 
     /** A blank composer must not send. Reverting the blank check calls the model with "(empty question)". */
@@ -543,6 +572,41 @@ class FolioPanelTest {
         }
     }
 
+    private static void awaitText(JTextComponent area, String expected) {
+        long deadline = System.nanoTime() + 5_000_000_000L;
+        while (System.nanoTime() < deadline) {
+            flushEdt();
+            if (expected.equals(area.getText())) {
+                return;
+            }
+            try {
+                Thread.sleep(15);
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        assertEquals(expected, area.getText());
+    }
+
+    private static JTextField findBaseUrl(Component component) {
+        if (component instanceof JTextField field
+                && !(component instanceof com.intellij.ui.components.JBPasswordField)
+                && field.getText() != null
+                && field.getText().contains("api.deepseek.com")) {
+            return field;
+        }
+        if (component instanceof Container container) {
+            for (Component child : container.getComponents()) {
+                JTextField found = findBaseUrl(child);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
+    }
+
     private static FolioChrome.PromptArea composer(Component component) {
         if (component instanceof FolioChrome.PromptArea area) {
             return area;
@@ -633,8 +697,17 @@ class FolioPanelTest {
         return false;
     }
 
-    /** Document text is still uncommitted, so {@link FolioPanel#imeComposing} is true. */
-    private static final class ComposingField extends JBTextArea {
+    /**
+     * {@code committed} means the whole document is committed, so Enter may send.
+     * Otherwise the input method still holds the text.
+     */
+    private static final class ScriptedField extends JBTextArea {
+        private final boolean committed;
+
+        private ScriptedField(boolean committed) {
+            this.committed = committed;
+        }
+
         @Override
         public InputMethodRequests getInputMethodRequests() {
             return new InputMethodRequests() {
@@ -661,7 +734,7 @@ class FolioPanelTest {
 
                 @Override
                 public int getCommittedTextLength() {
-                    return 0;
+                    return committed ? getDocument().getLength() : 0;
                 }
 
                 @Override
