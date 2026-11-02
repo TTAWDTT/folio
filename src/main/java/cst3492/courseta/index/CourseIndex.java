@@ -35,6 +35,10 @@ public final class CourseIndex {
         return byId.size();
     }
 
+    public synchronized List<CourseChunk> chunks() {
+        return List.copyOf(byId.values());
+    }
+
     public synchronized void removeSource(String sourceDocument) {
         List<CourseChunk> drop = new ArrayList<>();
         for (CourseChunk chunk : byId.values()) {

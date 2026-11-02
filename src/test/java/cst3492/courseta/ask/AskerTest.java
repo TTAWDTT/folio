@@ -108,6 +108,17 @@ class AskerTest {
     }
 
     @Test
+    void citationUsesTheFileNameWhenTheSourceIsAPath() {
+        CourseChunk chunk = new CourseChunk(
+                "/lectures/a/notes.pdf#PAGE#2", "/lectures/a/notes.pdf", ScopeKind.PAGE, 2, "polymorphism");
+        assertEquals("notes.pdf", Asker.citedFile("/lectures/a/notes.pdf"));
+        assertEquals("notes.pdf", Asker.citedFile("C:\\lectures\\a\\notes.pdf"));
+        assertEquals("deck.pptx", Asker.citedFile("deck.pptx"));
+        assertEquals("", Asker.citedFile(null));
+        assertEquals("notes.pdf page 2", Asker.citationLine(chunk));
+    }
+
+    @Test
     void repeatedPageCitationsCollapseToOneLine() {
         CourseChunk first = new CourseChunk("lecture.pdf#PAGE#4#1", "lecture.pdf", ScopeKind.PAGE, 4, "alpha servlet part");
         CourseChunk second = new CourseChunk("lecture.pdf#PAGE#4#2", "lecture.pdf", ScopeKind.PAGE, 4, "beta servlet part");

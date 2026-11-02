@@ -113,6 +113,21 @@ class CourseFileParserTest {
         assertTrue(chunks.get(0).text().toLowerCase().contains("alpha"));
         assertTrue(chunks.get(1).text().toLowerCase().contains("beta"));
         assertEquals(ScopeKind.PAGE, chunks.get(0).scopeKind());
+        assertEquals("fixture-two-page.pdf", chunks.get(0).sourceDocument());
+    }
+
+    @Test
+    void parseStampsTheGivenSourceId(@TempDir Path dir) throws Exception {
+        Path pdf = dir.resolve("notes.pdf");
+        try (PDDocument document = new PDDocument()) {
+            writePage(document, "alpha page");
+            document.save(pdf.toFile());
+        }
+        String source = "/lectures/a/notes.pdf";
+        List<CourseChunk> chunks = new CourseFileParser().parse(pdf, source, CourseFileParser.class.getClassLoader());
+        assertFalse(chunks.isEmpty());
+        assertTrue(chunks.stream().allMatch(chunk -> source.equals(chunk.sourceDocument())));
+        assertEquals("notes.pdf", chunks.get(0).sourceDocument().substring(source.lastIndexOf('/') + 1));
     }
 
     @Test
