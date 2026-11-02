@@ -8,7 +8,7 @@
     <depends>com.intellij.modules.vcs</depends>
 
     <extensions defaultExtensionNs="com.intellij">
-        <toolWindow id="Folio" anchor="right" factoryClass="cst3492.courseta.FolioToolWindowFactory"/>
+        <toolWindow id="Folio" anchor="right" icon="/icons/folio.svg" factoryClass="cst3492.courseta.FolioToolWindowFactory"/>
     </extensions>
 
     <actions>

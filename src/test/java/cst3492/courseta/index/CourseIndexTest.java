@@ -318,6 +318,20 @@ class CourseIndexTest {
         return index;
     }
 
+    @Test
+    void chunksListsIndexedRowsForTheFileList() {
+        CourseIndex index = new CourseIndex();
+        index.upsert(chunk("lecture-jpa.pdf", 2, "一对多关系使用 @OneToMany。"));
+        index.upsert(chunk("lecture-servlet.pdf", 1, "A servlet extends HttpServlet and overrides doGet."));
+        List<CourseChunk> rows = index.chunks();
+        assertEquals(2, rows.size());
+        assertEquals("lecture-jpa.pdf", rows.get(0).sourceDocument());
+        assertEquals(2, rows.get(0).scopeNumber());
+        assertEquals(2, index.chunks().size());
+        index.removeSource("lecture-jpa.pdf");
+        assertEquals(1, index.chunks().size());
+    }
+
     private static CourseChunk chunk(String source, int page, String text) {
         return new CourseChunk(CourseChunk.idFor(source, ScopeKind.PAGE, page), source, ScopeKind.PAGE, page, text);
     }
