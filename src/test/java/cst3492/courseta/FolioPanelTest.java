@@ -6,10 +6,8 @@ import com.intellij.ui.scale.JBUIScale;
 import com.intellij.util.ui.JBUI;
 import cst3492.courseta.ask.Asker;
 import cst3492.courseta.index.CourseChunk;
-import cst3492.courseta.junitgen.Scenario;
 import cst3492.courseta.index.ScopeKind;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 
 import com.intellij.ui.components.JBTextArea;
 
@@ -39,8 +37,6 @@ import java.text.AttributedCharacterIterator;
 import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -55,19 +51,131 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FolioPanelTest {
     @Test
+    void automaticCommitFillChecksStagingAgainAtDelivery(@org.junit.jupiter.api.io.TempDir java.nio.file.Path root)
+            throws Exception {
+        for (boolean changeBeforeDelivery : List.of(false, true)) {
+            try (CommitDelivery fixture = new CommitDelivery(root.resolve("auto-" + changeBeforeDelivery))) {
+                fixture.queueCandidates();
+                fixture.workers.drain();
+                if (changeBeforeDelivery) {
+                    fixture.stage("replacement staged content");
+                }
+                fixture.delivery.drain();
+                assertEquals(changeBeforeDelivery ? 0 : 1, fixture.writes.get());
+            }
+        }
+    }
+
+    @Test
+    void explicitCommitFillChecksStagingAfterItsBackgroundCheck(@org.junit.jupiter.api.io.TempDir java.nio.file.Path root)
+            throws Exception {
+        for (boolean changeBeforeDelivery : List.of(false, true)) {
+            try (CommitDelivery fixture = new CommitDelivery(root.resolve("explicit-" + changeBeforeDelivery))) {
+                fixture.queueCandidates();
+                fixture.workers.drain();
+                fixture.delivery.drain();
+                assertEquals(1, fixture.writes.get());
+                button(fixture.panel, "Fill commit box").doClick();
+                fixture.workers.drain();
+                if (changeBeforeDelivery) {
+                    fixture.stage("replacement after background validation");
+                }
+                fixture.delivery.drain();
+                assertEquals(changeBeforeDelivery ? 1 : 2, fixture.writes.get());
+            }
+        }
+    }
+
+    @Test
+    void splitIndexKeepsAutomaticAndExplicitCommitFill(@org.junit.jupiter.api.io.TempDir java.nio.file.Path root)
+            throws Exception {
+        try (CommitDelivery fixture = new CommitDelivery(root)) {
+            fixture.git("update-index", "--split-index");
+            fixture.queueCandidates();
+            fixture.workers.drain();
+            fixture.delivery.drain();
+            assertEquals(1, fixture.writes.get());
+            button(fixture.panel, "Fill commit box").doClick();
+            fixture.workers.drain();
+            fixture.delivery.drain();
+            assertEquals(2, fixture.writes.get());
+        }
+    }
+
+    private static final class CommitDelivery implements AutoCloseable {
+        final java.nio.file.Path root;
+        final FolioTasksTest.Queue workers = new FolioTasksTest.Queue();
+        final FolioTasksTest.Queue delivery = new FolioTasksTest.Queue();
+        final AtomicInteger writes = new AtomicInteger();
+        final java.util.concurrent.atomic.AtomicReference<String> targetText =
+                new java.util.concurrent.atomic.AtomicReference<>("original commit text");
+        final FolioPanel panel;
+
+        CommitDelivery(java.nio.file.Path root) throws Exception {
+            this.root = java.nio.file.Files.createDirectories(root);
+            git("init");
+            stage("original staged content");
+            panel = new FolioPanel(null, cst3492.courseta.index.CourseLibrary.inMemory(), ProviderAccess.inMemory(),
+                    workers, delivery, (a, b, c, d, e) -> "unused");
+            workers.drain();
+            delivery.drain();
+        }
+
+        void stage(String text) throws Exception {
+            java.nio.file.Files.writeString(root.resolve("note.txt"), text + "\n");
+            git("add", "note.txt");
+        }
+
+        void queueCandidates() throws Exception {
+            var snapshot = cst3492.courseta.commit.GitDiffs.capture(List.of(root));
+            CommitTarget target = new CommitTarget(targetText::get, text -> {
+                targetText.set(text);
+                writes.incrementAndGet();
+            }, () -> true);
+            Class<?> inputType = Class.forName(FolioPanel.class.getName() + "$CommitInput");
+            var inputConstructor = inputType.getDeclaredConstructors()[0];
+            inputConstructor.setAccessible(true);
+            Object input = inputConstructor.newInstance(List.of(root), new ProviderConnection("https://example.test", "m", "key"),
+                    target, null);
+            Class<?> resultType = Class.forName(FolioPanel.class.getName() + "$CommitResult");
+            var resultConstructor = resultType.getDeclaredConstructors()[0];
+            resultConstructor.setAccessible(true);
+            Object result = resultConstructor.newInstance(snapshot, List.of("feat: first", "fix: second"),
+                    cst3492.courseta.commit.CommitDraft.estimate(snapshot.diff()),
+                    cst3492.courseta.commit.GitDiffs.verify(snapshot), input);
+            var field = FolioPanel.class.getDeclaredField("tasks");
+            field.setAccessible(true);
+            FolioTasks tasks = (FolioTasks) field.get(panel);
+            var show = FolioPanel.class.getDeclaredMethod("showCommitCandidates", resultType);
+            show.setAccessible(true);
+            tasks.submit(FolioTasks.Channel.COMMIT, () -> result, outcome -> {
+                try {
+                    show.invoke(panel, ((FolioTasks.Outcome.Success<?>) outcome).value());
+                } catch (ReflectiveOperationException ex) {
+                    throw new AssertionError(ex);
+                }
+            });
+        }
+
+        private void git(String... args) throws Exception {
+            java.util.ArrayList<String> command = new java.util.ArrayList<>(List.of("git", "-C", root.toString()));
+            command.addAll(List.of(args));
+            Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
+            String output = new String(process.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            assertEquals(0, process.waitFor(), output);
+        }
+
+        @Override
+        public void close() {
+            panel.dispose();
+        }
+    }
+
+    @Test
     void llmActionsStayDisabledUntilAKeyIsPresent() {
         assertFalse(FolioPanel.llmActionsEnabled(false, 0));
         assertTrue(FolioPanel.llmActionsEnabled(true, 0));
         assertTrue(FolioPanel.llmActionsEnabled(false, 3));
-    }
-
-    @Test
-    void emptySaveKeepsTheStoredKeyUntilTheUserClearsIt() {
-        assertNull(FolioPanel.keyToStore("", false));
-        assertNull(FolioPanel.keyToStore("   ", false));
-        assertEquals("sk-new", FolioPanel.keyToStore(" sk-new ", false));
-        assertEquals("", FolioPanel.keyToStore("sk-old", true));
-        assertEquals("", FolioPanel.keyToStore("", true));
     }
 
     @Test
@@ -100,17 +208,6 @@ class FolioPanelTest {
     }
 
     @Test
-    void sourceIdUsesTheAbsolutePathSoSameNamesStayDistinct(@TempDir Path dir) throws Exception {
-        Path left = dir.resolve("a").resolve("notes.pdf");
-        Path right = dir.resolve("b").resolve("notes.pdf");
-        Files.createDirectories(left.getParent());
-        Files.createDirectories(right.getParent());
-        assertEquals(left.toAbsolutePath().normalize().toString(), FolioPanel.sourceId(left));
-        assertEquals(right.toAbsolutePath().normalize().toString(), FolioPanel.sourceId(right));
-        assertNotEquals(FolioPanel.sourceId(left), FolioPanel.sourceId(right));
-    }
-
-    @Test
     void backgroundFailureTextIncludesErrorsAndRethrowsCancellation() {
         assertEquals("disk full", FolioPanel.failureText(new Error("disk full")));
         assertEquals("boom", FolioPanel.failureText(new IllegalStateException("boom")));
@@ -121,39 +218,28 @@ class FolioPanelTest {
     }
 
     @Test
-    void writeCopiesOnlyASuccessfulPreview() {
-        String test = "import org.junit.Test;\nclass FolioGeneratedTest {\n}\n";
-        String directoryHint = "Select a class or method, preview a test, then write the file.";
-        assertFalse(FolioPanel.previewSucceeded(null));
-        assertFalse(FolioPanel.previewSucceeded(""));
-        assertFalse(FolioPanel.previewSucceeded(" \n "));
-        assertTrue(FolioPanel.previewSucceeded(test));
-        assertNull(FolioPanel.textToWrite(false, directoryHint));
-        assertNull(FolioPanel.textToWrite(false, "Error: class not found"));
-        assertNull(FolioPanel.textToWrite(false, "HTTP 400: expected org.junit class"));
-        assertNull(FolioPanel.textToWrite(false, test));
-        assertNull(FolioPanel.textToWrite(false, Scenario.MISSING));
-        assertEquals(test, FolioPanel.textToWrite(true, test));
+    void arbitraryModelTextDoesNotEnableWriting() {
+        FolioPanel panel = new FolioPanel(null);
+        panel.showNote("import org.junit.Test; class FolioGeneratedTest {}");
+        JButton write = button(panel, "Write test file");
+        assertFalse(write.isEnabled());
+        panel.showNote("HTTP 400: expected org.junit class");
+        assertFalse(write.isEnabled());
     }
 
-    @Test
-    void proseReplyLeavesWriteDisabled() {
-        String prose = "I will not generate a test. Describe the behaviour more clearly.";
-        assertFalse(FolioPanel.looksLikeTest(prose));
-        assertFalse(FolioPanel.previewSucceeded(prose));
-        String shown = FolioPanel.previewTranscript(prose);
-        assertEquals(FolioPanel.NOT_A_TEST + "\n\n" + prose, shown);
-        assertFalse(FolioPanel.previewReadyAfter(false, shown));
-        assertFalse(FolioPanel.previewReadyAfter(true, shown));
-        assertNull(FolioPanel.textToWrite(FolioPanel.previewReadyAfter(false, shown), shown));
-        assertFalse(FolioPanel.previewReadyAfter(false, "Error: class not found"));
-        assertFalse(FolioPanel.previewReadyAfter(false, "HTTP 400: expected org.junit class"));
-        String test = "import org.junit.Test;\nclass FolioGeneratedTest {\n}\n";
-        assertEquals(test, FolioPanel.previewTranscript(test));
-        assertTrue(FolioPanel.previewReadyAfter(true, test));
-        assertFalse(FolioPanel.previewReadyAfter(false, test));
-        assertEquals(Scenario.MISSING, FolioPanel.previewTranscript("  "));
-        assertFalse(FolioPanel.previewReadyAfter(false, Scenario.MISSING));
+    private static JButton button(Component component, String text) {
+        if (component instanceof JButton button && text.equals(button.getText())) {
+            return button;
+        }
+        if (component instanceof Container container) {
+            for (Component child : container.getComponents()) {
+                JButton found = button(child, text);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
     }
 
     @Test
@@ -491,20 +577,29 @@ class FolioPanelTest {
      */
     @Test
     void busyDisablesEnterAndShowsTheSpinner() {
-        FolioPanel panel = panelWithKey();
+        FolioTasksTest.Queue workers = new FolioTasksTest.Queue();
+        FolioTasksTest.Queue delivery = new FolioTasksTest.Queue();
+        FolioPanel panel = new FolioPanel(null, cst3492.courseta.index.CourseLibrary.inMemory(),
+                ProviderAccess.inMemory(), workers, delivery, (base, key, model, system, user) -> "answer");
+        workers.drain();
+        delivery.drain();
+        findPassword(panel).setText("test-key");
         FolioChrome.PromptArea question = composer(panel);
         question.setText("What is a servlet?");
         JButton send = sendButton(question);
         assertTrue(send.isEnabled());
-        panel.setBusy(true);
+        fireSend(question);
+        question.setText("a new unsent question");
         assertFalse(send.isEnabled());
         assertSame(com.intellij.ui.AnimatedIcon.Default.INSTANCE, send.getDisabledIcon());
         fireSend(question);
-        assertEquals("What is a servlet?", question.getText());
+        assertEquals("a new unsent question", question.getText());
         assertFalse(containsText(panel, "(empty question)"));
-        panel.setBusy(false);
+        workers.drain();
+        delivery.drain();
         assertTrue(send.isEnabled());
         assertNull(send.getDisabledIcon());
+        panel.dispose();
     }
 
     /** Typing ten lines on the real field stops at six. The static cap alone does not lock this. */

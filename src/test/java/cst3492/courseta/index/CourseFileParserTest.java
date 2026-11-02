@@ -153,6 +153,80 @@ class CourseFileParserTest {
         assertEquals(ScopeKind.SLIDE, chunks.get(0).scopeKind());
     }
 
+    @Test
+    void nestedGroupsTablesAndNotesStayOnTheirOriginalSlide(@TempDir Path dir) throws Exception {
+        Path deck = dir.resolve("nested.pptx");
+        try (XMLSlideShow show = new XMLSlideShow()) {
+            XSLFSlide first = show.createSlide();
+            first.getSlideMaster().createTextBox().setText("MASTER_MUST_NOT_LEAK");
+            first.createGroup().createGroup().createTextBox().setText("NESTED_INTERFACE_CONTRACT");
+            first.createTable(1, 2).getCell(0, 1).setText("TABLE_JUNIT_ASSERTION");
+            show.getNotesSlide(first).createTextBox().setText("SPEAKER_BOUNDARY_NOTE");
+            show.createSlide();
+            addSlide(show, "THIRD_SLIDE_TEXT");
+            try (var output = Files.newOutputStream(deck)) { show.write(output); }
+        }
+        List<CourseChunk> chunks = new CourseFileParser().parse(deck, "stable-source", getClass().getClassLoader());
+        assertEquals(2, chunks.size());
+        assertEquals(1, chunks.getFirst().scopeNumber());
+        assertEquals(3, chunks.getLast().scopeNumber());
+        assertTrue(chunks.getFirst().text().contains("NESTED_INTERFACE_CONTRACT"));
+        assertTrue(chunks.getFirst().text().contains("TABLE_JUNIT_ASSERTION"));
+        assertTrue(chunks.getFirst().text().contains("SPEAKER_BOUNDARY_NOTE"));
+        assertTrue(chunks.stream().noneMatch(chunk -> chunk.text().contains("MASTER_MUST_NOT_LEAK")));
+        assertTrue(chunks.stream().allMatch(chunk -> chunk.scopeKind() == ScopeKind.SLIDE
+                && chunk.sourceDocument().equals("stable-source")));
+    }
+
+    @Test
+    void nonPaginatedTextUsesSectionsAndNeverInventsPages(@TempDir Path dir) throws Exception {
+        for (String extension : List.of("txt", "md")) {
+            Path file = dir.resolve("notes." + extension);
+            Files.writeString(file, "Java interfaces define contracts.\nJUnit assertions verify behavior.");
+            List<CourseChunk> chunks = new CourseFileParser().parse(file, "stable-" + extension, getClass().getClassLoader());
+            assertFalse(chunks.isEmpty());
+            assertTrue(chunks.stream().allMatch(chunk -> chunk.scopeKind() == ScopeKind.SECTION && chunk.scopeNumber() == 1));
+            assertTrue(chunks.stream().allMatch(chunk -> chunk.sourceDocument().equals("stable-" + extension)));
+        }
+        Path word = dir.resolve("notes.docx");
+        try (var document = new org.apache.poi.xwpf.usermodel.XWPFDocument(); var output = Files.newOutputStream(word)) {
+            document.createParagraph().createRun().setText("Java interfaces define contracts.");
+            document.createTable(1, 1).getRow(0).getCell(0).setText("JUnit assertions verify behavior.");
+            document.write(output);
+        }
+        List<CourseChunk> wordChunks = new CourseFileParser().parse(word, "stable-docx", getClass().getClassLoader());
+        assertFalse(wordChunks.isEmpty());
+        assertTrue(wordChunks.stream().allMatch(chunk -> chunk.scopeKind() == ScopeKind.SECTION
+                && chunk.scopeNumber() == 1 && chunk.sourceDocument().equals("stable-docx")));
+        assertTrue(wordChunks.stream().anyMatch(chunk -> chunk.text().contains("JUnit assertions")));
+        assertTrue(CourseFileParser.chunksFromXml("deck.pptx",
+                "<html><body><div class=\"slide-master\">ONLY_MASTER</div></body></html>").isEmpty());
+    }
+
+    @Test
+    void anEmptyPdfPageDoesNotRenumberFollowingPages(@TempDir Path dir) throws Exception {
+        Path pdf = dir.resolve("blank-middle.pdf");
+        try (PDDocument document = new PDDocument()) {
+            writePage(document, "first page");
+            document.addPage(new PDPage());
+            writePage(document, "third page");
+            document.save(pdf.toFile());
+        }
+        var chunks = new CourseFileParser().parse(pdf, getClass().getClassLoader());
+        assertEquals(List.of(1, 3), chunks.stream().map(CourseChunk::scopeNumber).toList());
+        assertTrue(chunks.stream().allMatch(chunk -> chunk.scopeKind() == ScopeKind.PAGE));
+    }
+
+    @Test
+    void xhtmlRejectsExternalEntities(@TempDir Path dir) throws Exception {
+        Path secret = dir.resolve("private.txt");
+        Files.writeString(secret, "must not be read");
+        String xml = "<!DOCTYPE html [<!ENTITY external SYSTEM \"" + secret.toUri()
+                + "\">]><html><body>&external;</body></html>";
+        org.junit.jupiter.api.Assertions.assertThrows(Exception.class,
+                () -> CourseFileParser.chunksFromXml("malicious.xml", xml));
+    }
+
     private static XSLFSlide addSlide(XMLSlideShow show, String text) {
         XSLFSlide slide = show.createSlide();
         XSLFTextBox box = slide.createTextBox();

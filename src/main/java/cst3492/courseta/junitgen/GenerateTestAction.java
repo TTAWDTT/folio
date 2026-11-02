@@ -36,7 +36,6 @@ public final class GenerateTestAction extends AnAction {
         }
         String source = sourceOf(event);
         VirtualFile directory = directoryOf(event);
-        String fileName = testFileName(event);
         FolioPanel existing = FolioPanels.get(project);
         ScenarioDialog dialog = new ScenarioDialog(project, prefill(existing == null ? null : existing.scenarioText()));
         boolean accepted = dialog.showAndGet();
@@ -54,7 +53,7 @@ public final class GenerateTestAction extends AnAction {
                 return;
             }
             panel.setScenarioText(scenario);
-            panel.generateFromSelection(source, directory, fileName);
+            panel.generateFromSelection(source, directory);
         }, true);
     }
 
@@ -86,15 +85,6 @@ public final class GenerateTestAction extends AnAction {
         }
         PsiClass type = PsiTreeUtil.getParentOfType(leaf, PsiClass.class);
         return type == null ? "" : type.getText();
-    }
-
-    static String testFileName(AnActionEvent event) {
-        VirtualFile file = event.getData(CommonDataKeys.VIRTUAL_FILE);
-        if (file == null || file.isDirectory()) {
-            return "FolioGeneratedTest.java";
-        }
-        String base = file.getNameWithoutExtension();
-        return base.endsWith("Test") ? base + ".java" : base + "Test.java";
     }
 
     public static VirtualFile directoryOf(AnActionEvent event) {

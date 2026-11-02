@@ -1,0 +1,24 @@
+negative	How do I make pancakes?
+negative	How do I get concert tickets?
+negative	How can I set a dinner table?
+negative	How do I take holiday photos?
+negative	How do I put flowers in a vase?
+negative	How can I create a wedding invitation?
+negative	How do I check my luggage?
+negative	How do I return a damaged sweater?
+negative	How can I add cinnamon to porridge?
+negative	How do I remove coffee stains?
+negative	How do I write a birthday poem?
+negative	How do I read a knitting chart?
+positive	How do I make HTTP requests?
+positive	How do I get session attributes?
+positive	How can I set a cookie?
+positive	How do I create JUnit assertions?
+positive	How do I check invalid input at a boundary?
+positive	How do I read bytes with InputStream?
+positive	How can I write bytes with OutputStream?
+positive	How can I override a superclass method?
+positive	kindly describe polymorphism briefly
+positive	inheritance
+positive	make
+positive	return

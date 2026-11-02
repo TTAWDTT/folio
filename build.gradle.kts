@@ -55,4 +55,6 @@ tasks.withType<JavaCompile>().configureEach {
 
 tasks.test {
     useJUnitPlatform()
+    systemProperty("idea.load.plugins.id", "cst3492.folio,com.intellij.java")
+    forkEvery = 1
 }

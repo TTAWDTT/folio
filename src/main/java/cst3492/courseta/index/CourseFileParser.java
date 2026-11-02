@@ -2,6 +2,9 @@ package cst3492.courseta.index;
 
 import org.apache.poi.xslf.usermodel.XMLSlideShow;
 import org.apache.poi.xslf.usermodel.XSLFNotes;
+import org.apache.poi.xslf.usermodel.XSLFGroupShape;
+import org.apache.poi.xslf.usermodel.XSLFTable;
+import org.apache.poi.xslf.usermodel.XSLFTableRow;
 import org.apache.poi.xslf.usermodel.XSLFShape;
 import org.apache.poi.xslf.usermodel.XSLFSlide;
 import org.apache.poi.xslf.usermodel.XSLFTextShape;
@@ -25,6 +28,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 public final class CourseFileParser {
     public List<CourseChunk> parse(Path file, ClassLoader loader) throws Exception {
@@ -32,7 +36,7 @@ public final class CourseFileParser {
     }
 
     public List<CourseChunk> parse(Path file, String sourceId, ClassLoader loader) throws Exception {
-        String name = file.getFileName().toString().toLowerCase();
+        String name = file.getFileName().toString().toLowerCase(Locale.ROOT);
         String source = sourceId == null || sourceId.isBlank() ? file.getFileName().toString() : sourceId;
         if (name.endsWith(".pptx")) {
             return chunksFromPptx(file, source);
@@ -73,7 +77,13 @@ public final class CourseFileParser {
 
     private static void appendShapes(StringBuilder builder, List<XSLFShape> shapes) {
         for (XSLFShape shape : shapes) {
-            if (shape instanceof XSLFTextShape textShape) {
+            if (shape instanceof XSLFGroupShape group) {
+                appendShapes(builder, group.getShapes());
+            } else if (shape instanceof XSLFTable table) {
+                for (XSLFTableRow row : table.getRows()) {
+                    appendShapes(builder, new ArrayList<>(row.getCells()));
+                }
+            } else if (shape instanceof XSLFTextShape textShape) {
                 String text = textShape.getText();
                 if (text != null && !text.isBlank()) {
                     if (!builder.isEmpty()) {
@@ -88,6 +98,11 @@ public final class CourseFileParser {
     static List<CourseChunk> chunksFromXml(String sourceDocument, String xml) throws Exception {
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
         factory.setNamespaceAware(false);
+        factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+        factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+        factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+        factory.setXIncludeAware(false);
+        factory.setExpandEntityReferences(false);
         Document document = factory.newDocumentBuilder().parse(new InputSource(new StringReader(xml)));
         NodeList divs = document.getElementsByTagName("div");
         List<Raw> raws = new ArrayList<>();
@@ -132,7 +147,23 @@ public final class CourseFileParser {
                 chunks.addAll(CourseChunks.split(sourceDocument, ScopeKind.SLIDE, slide, text));
             }
         }
+        if (raws.isEmpty() && !hasSlideStructure(divs)) {
+            NodeList bodies = document.getElementsByTagName("body");
+            if (bodies.getLength() > 0) {
+                String text = textOf((Element) bodies.item(0));
+                chunks.addAll(CourseChunks.split(sourceDocument, ScopeKind.SECTION, 1, text));
+            }
+        }
         return chunks;
+    }
+
+    private static boolean hasSlideStructure(NodeList divs) {
+        for (int i = 0; i < divs.getLength(); i++) {
+            if (divs.item(i) instanceof Element element && element.getAttribute("class").startsWith("slide-")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static String textOf(Element element) {

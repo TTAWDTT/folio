@@ -35,7 +35,9 @@ public final class Tokens {
      * "one-to-one" still matches, but they do not dilute "explain polymorphism" or OneToMany.
      */
     private static final Set<String> COVERAGE_SKIP = Set.of(
-            "confused", "give", "simple", "one", "many", "kindly", "briefly", "describe");
+            "confused", "give", "simple", "one", "many", "kindly", "briefly", "describe",
+            "make", "call", "get", "set", "take", "put", "let", "keep", "work", "find", "show", "build", "create",
+            "read", "write", "run", "add", "remove", "change", "check", "handle", "provide", "include", "return", "help");
     /**
      * Courtesy words removed from a Chinese coverage span. They are not removed from the
      * index, so 请求 and 性能 stay searchable. Longer phrases are matched first.

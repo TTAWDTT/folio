@@ -16,6 +16,7 @@ public final class FolioToolWindowFactory implements ToolWindowFactory {
         FolioPanel panel = new FolioPanel(project);
         FolioPanels.register(project, panel);
         Content content = ContentFactory.getInstance().createContent(panel, "", false);
+        content.setDisposer(panel);
         toolWindow.getContentManager().addContent(content);
         LOG.info("Folio tool window created");
     }
