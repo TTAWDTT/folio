@@ -28,16 +28,24 @@ import java.util.List;
 
 public final class CourseFileParser {
     public List<CourseChunk> parse(Path file, ClassLoader loader) throws Exception {
+        return parse(file, file.getFileName().toString(), loader);
+    }
+
+    public List<CourseChunk> parse(Path file, String sourceId, ClassLoader loader) throws Exception {
         String name = file.getFileName().toString().toLowerCase();
+        String source = sourceId == null || sourceId.isBlank() ? file.getFileName().toString() : sourceId;
         if (name.endsWith(".pptx")) {
-            return chunksFromPptx(file);
+            return chunksFromPptx(file, source);
         }
         String xml = toXml(file, loader);
-        return chunksFromXml(file.getFileName().toString(), xml);
+        return chunksFromXml(source, xml);
     }
 
     static List<CourseChunk> chunksFromPptx(Path file) throws Exception {
-        String source = file.getFileName().toString();
+        return chunksFromPptx(file, file.getFileName().toString());
+    }
+
+    static List<CourseChunk> chunksFromPptx(Path file, String source) throws Exception {
         List<CourseChunk> chunks = new ArrayList<>();
         try (InputStream input = Files.newInputStream(file); XMLSlideShow show = new XMLSlideShow(input)) {
             List<XSLFSlide> slides = show.getSlides();

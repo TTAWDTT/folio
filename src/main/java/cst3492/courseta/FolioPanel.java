@@ -4,6 +4,8 @@ import com.intellij.icons.AllIcons;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.application.PathManager;
 import com.intellij.openapi.command.WriteCommandAction;
+import com.intellij.openapi.diagnostic.ControlFlowException;
+import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.fileTypes.FileTypeManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vcs.CommitMessageI;
@@ -20,6 +22,7 @@ import com.intellij.ui.components.JBPanel;
 import com.intellij.ui.components.JBPasswordField;
 import com.intellij.ui.components.JBTextArea;
 import com.intellij.ui.components.JBTextField;
+import com.intellij.util.ExceptionUtilRt;
 import com.intellij.util.ui.JBUI;
 import cst3492.courseta.ask.Answer;
 import cst3492.courseta.ask.Asker;
@@ -200,6 +203,40 @@ public final class FolioPanel extends JPanel {
         }
         String value = typed == null ? "" : typed.strip();
         return value.isEmpty() ? null : value;
+    }
+
+    static String badgeText(boolean storedKey, int typedCharacters, String modelName) {
+        if (storedKey) {
+            String model = modelName == null ? "" : modelName.strip();
+            return model.isEmpty() ? "Key ready" : "Key ready · " + model;
+        }
+        return typedCharacters > 0 ? "Key not saved" : "No API key";
+    }
+
+    /**
+     * User-visible text for a failed background task. Platform cancellations are rethrown
+     * so the caller can reset the spinner and then let them propagate. {@code null} means
+     * the throwable was a cancellation that this runtime cannot rethrow as unchecked.
+     */
+    static String failureText(Throwable failure) {
+        if (failure instanceof ControlFlowException) {
+            ExceptionUtilRt.rethrowUnchecked(failure);
+            return null;
+        }
+        return failure.getMessage() == null ? failure.toString() : failure.getMessage();
+    }
+
+    static String sourceId(Path file) {
+        return file.toAbsolutePath().normalize().toString();
+    }
+
+    static String fileLocation(String sourceId) {
+        String name = Asker.citedFile(sourceId);
+        if (sourceId == null || name.equals(sourceId)) {
+            return "";
+        }
+        int slash = Math.max(sourceId.lastIndexOf('/'), sourceId.lastIndexOf('\\'));
+        return slash > 0 ? sourceId.substring(0, slash) : "";
     }
 
     public void ask(String text, String selection) {
@@ -572,9 +609,9 @@ public final class FolioPanel extends JPanel {
         CourseFileParser parser = new CourseFileParser();
         StringBuilder report = new StringBuilder();
         for (Path file : files) {
-            String source = file.getFileName().toString();
+            String source = sourceId(file);
             index.removeSource(source);
-            List<CourseChunk> chunks = parser.parse(file, FolioPanel.class.getClassLoader());
+            List<CourseChunk> chunks = parser.parse(file, source, FolioPanel.class.getClassLoader());
             for (CourseChunk chunk : chunks) {
                 index.upsert(chunk);
                 report.append(Asker.citationLine(chunk)).append("\n");
@@ -590,15 +627,22 @@ public final class FolioPanel extends JPanel {
 
     private void removeFile(String source) {
         showTab(TAB_FILES);
+        String name = Asker.citedFile(source);
+        String message = fileLocation(source).isEmpty()
+                ? "Remove " + name + " from the course index?"
+                : "Remove " + name + " from the course index?\n" + source;
+        if (Messages.showYesNoDialog(project, message, "Remove course file", Messages.getQuestionIcon()) != Messages.YES) {
+            return;
+        }
         run(() -> {
             ensureStore();
             index.removeSource(source);
             index.save(store.resolve("index.tsv"));
             SwingUtilities.invokeLater(() -> {
-                setStatus(source + " removed. " + index.size() + " chunks indexed.");
+                setStatus(name + " removed. " + index.size() + " chunks indexed.");
                 refreshFiles();
             });
-            return source + " removed.";
+            return name + " removed.";
         }, this::showFilesReport);
     }
 
@@ -655,10 +699,13 @@ public final class FolioPanel extends JPanel {
         row.add(icon, BorderLayout.WEST);
         JBPanel<?> text = new JBPanel<>(new BorderLayout());
         text.setOpaque(false);
-        JBLabel title = new JBLabel(name);
+        JBLabel title = new JBLabel(Asker.citedFile(name));
         title.setFont(title.getFont().deriveFont(Font.BOLD));
+        title.setToolTipText(name);
         text.add(title, BorderLayout.NORTH);
-        text.add(FolioChrome.muted(fileMeta(chunks)), BorderLayout.SOUTH);
+        String location = fileLocation(name);
+        String meta = fileMeta(chunks);
+        text.add(FolioChrome.muted(location.isEmpty() ? meta : location + " · " + meta), BorderLayout.SOUTH);
         row.add(text, BorderLayout.CENTER);
         JButton remove = FolioChrome.secondary("Remove", AllIcons.General.Remove);
         remove.addActionListener(event -> removeFile(name));
@@ -666,7 +713,7 @@ public final class FolioPanel extends JPanel {
         return row;
     }
 
-    private static String fileMeta(List<CourseChunk> chunks) {
+    static String fileMeta(List<CourseChunk> chunks) {
         Set<Integer> pages = new LinkedHashSet<>();
         Set<Integer> slides = new LinkedHashSet<>();
         for (CourseChunk chunk : chunks) {
@@ -802,8 +849,14 @@ public final class FolioPanel extends JPanel {
             String text;
             try {
                 text = work.get();
-            } catch (Exception ex) {
-                text = ex.getMessage() == null ? ex.toString() : ex.getMessage();
+            } catch (Throwable ex) {
+                if (ex instanceof ControlFlowException) {
+                    SwingUtilities.invokeLater(() -> setBusy(false));
+                }
+                text = failureText(ex);
+                if (text == null) {
+                    return;
+                }
             }
             String result = text;
             SwingUtilities.invokeLater(() -> {
@@ -846,14 +899,9 @@ public final class FolioPanel extends JPanel {
         askButton.setToolTipText(tip);
         commitButton.setToolTipText(tip);
         previewButton.setToolTipText(tip);
-        String modelName = model.getText() == null ? "" : model.getText().strip();
-        if (enabled) {
-            badge.setIcon(AllIcons.General.GreenCheckmark);
-            badge.setText(modelName.isEmpty() ? "Key ready" : "Key ready · " + modelName);
-        } else {
-            badge.setIcon(AllIcons.General.Warning);
-            badge.setText("No API key");
-        }
+        String label = badgeText(storedKey, apiKey.getPassword().length, model.getText());
+        badge.setText(label);
+        badge.setIcon(storedKey ? AllIcons.General.GreenCheckmark : AllIcons.General.Warning);
     }
 
     private void refreshPreviewHint() {

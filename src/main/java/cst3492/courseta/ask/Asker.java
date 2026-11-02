@@ -36,9 +36,20 @@ public final class Asker {
         return new Answer(Answer.Kind.CITED, text, List.copyOf(hits), true);
     }
 
+    public static String citedFile(String source) {
+        if (source == null || source.isEmpty()) {
+            return "";
+        }
+        int slash = Math.max(source.lastIndexOf('/'), source.lastIndexOf('\\'));
+        if (slash < 0 || slash >= source.length() - 1) {
+            return source;
+        }
+        return source.substring(slash + 1);
+    }
+
     public static String citationLine(CourseChunk chunk) {
         String unit = chunk.scopeKind().name().equals("SLIDE") ? "slide" : "page";
-        return chunk.sourceDocument() + " " + unit + " " + chunk.scopeNumber();
+        return citedFile(chunk.sourceDocument()) + " " + unit + " " + chunk.scopeNumber();
     }
 
     public static List<String> citationLines(List<CourseChunk> hits) {

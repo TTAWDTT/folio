@@ -319,6 +319,18 @@ class CourseIndexTest {
     }
 
     @Test
+    void removeDropsOnlyTheMatchingPath() {
+        CourseIndex index = new CourseIndex();
+        index.upsert(chunk("/lectures/a/notes.pdf", 1, "alpha notes about polymorphism"));
+        index.upsert(chunk("/lectures/b/notes.pdf", 2, "beta notes about servlets"));
+        index.removeSource("/lectures/a/notes.pdf");
+        assertEquals(1, index.size());
+        assertEquals("/lectures/b/notes.pdf", index.chunks().get(0).sourceDocument());
+        index.removeSource("notes.pdf");
+        assertEquals(1, index.size());
+    }
+
+    @Test
     void chunksListsIndexedRowsForTheFileList() {
         CourseIndex index = new CourseIndex();
         index.upsert(chunk("lecture-jpa.pdf", 2, "一对多关系使用 @OneToMany。"));

@@ -65,10 +65,14 @@ final class FolioChrome {
     }
 
     static JBLabel hint(String text) {
-        String safe = text == null ? "" : text.replace("&", "&amp;").replace("<", "&lt;");
         JBLabel label = muted(text);
-        label.setText("<html><body style='width:240px'>" + safe + "</body></html>");
+        label.setText(hintHtml(text));
         return label;
+    }
+
+    static String hintHtml(String text) {
+        String safe = text == null ? "" : text.replace("&", "&amp;").replace("<", "&lt;");
+        return "<html><body style='width:" + JBUI.scale(240) + "px'>" + safe + "</body></html>";
     }
 
     static JBPanel<?> card(Color fill) {
