@@ -316,6 +316,46 @@ class AskerTest {
     }
 
     @Test
+    void boldEmphasisCitationMaps() {
+        CourseChunk first = page("lecture-servlet.pdf", 1, "doGet");
+        CourseChunk second = page("lecture-jpa.pdf", 2, "OneToMany");
+        CourseChunk third = page("lecture-jpa.pdf", 3, "persistence");
+        Asker.CitationMap mapped = Asker.mapCitations(List.of(first, second, third), "**A** [2] and see [3].");
+        assertEquals(List.of(second, third), mapped.sources());
+        assertEquals("**A** [1] and see [2].", mapped.text());
+    }
+
+    @Test
+    void underscoreEmphasisCitationMaps() {
+        CourseChunk first = page("lecture-servlet.pdf", 1, "doGet");
+        CourseChunk second = page("lecture-jpa.pdf", 2, "OneToMany");
+        Asker.CitationMap mapped = Asker.mapCitations(List.of(first, second), "_A_ [2]");
+        assertEquals(List.of(second), mapped.sources());
+        assertEquals("_A_ [1]", mapped.text());
+    }
+
+    @Test
+    void parenArgumentDoesNotLeaveADanglingMarker() {
+        CourseChunk first = page("lecture-servlet.pdf", 1, "doGet");
+        CourseChunk second = page("lecture-jpa.pdf", 2, "OneToMany");
+        CourseChunk third = page("lecture-jpa.pdf", 3, "persistence");
+        Asker.CitationMap mapped = Asker.mapCitations(List.of(first, second, third), "(a, [2]) and [3].");
+        assertEquals(List.of(third), mapped.sources());
+        assertEquals("(a, ) and [1].", mapped.text());
+    }
+
+    @Test
+    void danglingMarkerMustPointAtItsCard() {
+        CourseChunk first = page("lecture-servlet.pdf", 1, "doGet");
+        CourseChunk second = page("lecture-jpa.pdf", 2, "OneToMany");
+        CourseChunk third = page("lecture-jpa.pdf", 3, "persistence");
+        Asker.CitationMap mapped = Asker.mapCitations(List.of(first, second, third),
+                "See [1] and [3]. Also (a, [2]).");
+        assertEquals(List.of(first, third), mapped.sources());
+        assertEquals("See [1] and [2]. Also (a, ).", mapped.text());
+    }
+
+    @Test
     void backtickFenceGuardIsRequired() {
         assertCodeRegionStaysLiteral(String.join("\n", "Before.", "```", "See [2].", "```", "After."));
     }
