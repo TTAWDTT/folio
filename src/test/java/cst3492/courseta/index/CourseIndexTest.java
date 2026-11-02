@@ -319,6 +319,43 @@ class CourseIndexTest {
     }
 
     @Test
+    void reindexDropsALegacyBareNameAndDeleteRemovesIt(@TempDir Path dir) throws Exception {
+        Path store = dir.resolve("index.tsv");
+        CourseIndex legacy = new CourseIndex();
+        legacy.upsert(chunk("handout.pdf", 1, "uniquelegacy polymorphism lecture"));
+        legacy.save(store);
+
+        CourseIndex index = CourseIndex.load(store);
+        assertEquals(1, index.size());
+        assertEquals("handout.pdf", index.chunks().get(0).sourceDocument());
+        index.removeHandout("handout.pdf");
+        assertEquals(0, index.size());
+        assertTrue(index.top("uniquelegacy polymorphism", 4).isEmpty());
+
+        index.upsert(chunk("handout.pdf", 1, "uniquelegacy polymorphism lecture"));
+        String absolute = dir.resolve("materials").resolve("handout.pdf").toAbsolutePath().normalize().toString();
+        String other = dir.resolve("elsewhere").resolve("handout.pdf").toAbsolutePath().normalize().toString();
+        index.upsert(chunk(other, 1, "servlet filters and wrappers"));
+        index.removeHandout(absolute);
+        index.upsert(chunk(absolute, 1, "uniquelegacy polymorphism lecture revised"));
+        index.save(store);
+
+        CourseIndex reloaded = CourseIndex.load(store);
+        assertEquals(2, reloaded.size());
+        assertEquals(0L, reloaded.chunks().stream().filter(row -> row.sourceDocument().equals("handout.pdf")).count());
+        assertEquals(1L, reloaded.chunks().stream().filter(row -> row.sourceDocument().equals(absolute)).count());
+        assertEquals(1L, reloaded.chunks().stream().filter(row -> row.sourceDocument().equals(other)).count());
+        List<CourseChunk> hits = reloaded.top("uniquelegacy polymorphism", 4);
+        assertEquals(1, hits.size());
+        assertEquals(absolute, hits.get(0).sourceDocument());
+
+        reloaded.removeHandout(absolute);
+        assertEquals(1, reloaded.size());
+        assertEquals(other, reloaded.chunks().get(0).sourceDocument());
+        assertTrue(reloaded.top("uniquelegacy polymorphism", 4).isEmpty());
+    }
+
+    @Test
     void removeDropsOnlyTheMatchingPath() {
         CourseIndex index = new CourseIndex();
         index.upsert(chunk("/lectures/a/notes.pdf", 1, "alpha notes about polymorphism"));
