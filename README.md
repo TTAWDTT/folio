@@ -21,6 +21,8 @@ The composer supports Enter to send, Shift+Enter for a newline, and IME composit
 
 Ask and Drill request streaming responses. The sidebar appends actual incoming text and stops its activity indicator when the request completes, fails, or is cancelled. A provider that returns a normal JSON completion is displayed as a complete reply. Folio does not simulate a stream by revealing an already completed answer. Citation markers and source metadata are finalized after completion; provisional text is not completed conversation history.
 
+Completed replies render triple-backtick blocks as code. **Copy** beside the Folio answer label copies the full answer, including code fences. **Copy** inside a code block copies only that block's code. An unclosed fence stays visible as literal text.
+
 Retrieval is local BM25, without embeddings or a web search. Each request captures a read-only course-library snapshot, the current question, selected code, conversation context, and connection settings. Retrieval uses the current question and selection and returns at most four chunks. History is quoted context, not current citation evidence.
 
 References start collapsed. Expand the reference row to see the document, page, slide, or section, any chunk part, and an excerpt. Clicking a text file on disk opens the editor near the excerpt. PDFs, slide decks, other non-text files, and missing paths use an indexed-chunk preview.

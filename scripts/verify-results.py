@@ -16,6 +16,7 @@ required = {
     "StreamingAcceptanceTest", "SidebarDisclosureAcceptanceTest", "FolioTaskEventsTest",
     "HttpChatStreamingTest", "FolioSidebarTest", "FolioSidebarRenderTest",
     "AskerStreamingTest", "SidebarResizeAcceptanceTest", "FenceRenderingAcceptanceTest",
+    "FenceLineEndingTest",
 }
 try:
     suites = {}
