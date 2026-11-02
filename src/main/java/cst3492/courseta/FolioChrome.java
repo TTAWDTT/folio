@@ -455,7 +455,7 @@ final class FolioChrome {
         JBPanel<?> body = new JBPanel<>(new BorderLayout(0, JBUI.scale(8)));
         body.setOpaque(false);
         String note = missing
-                ? "This file is not in the project. The excerpt is the indexed chunk."
+                ? "This path is not on disk. The excerpt is the indexed chunk."
                 : "This file does not open as text in the editor. The excerpt is the indexed chunk.";
         body.add(banner(note, missing ? Tone.WARNING : Tone.INFO), BorderLayout.NORTH);
         JBPanel<?> excerpt = new JBPanel<>(new BorderLayout(0, JBUI.scale(6)));

@@ -17,8 +17,8 @@ public final class Asker {
     public static final String NO_VALID_CITE =
             "The reply did not cite a retrieved course chunk.";
 
-    /** [n] or [n, m], not an index such as args[0]. */
-    private static final Pattern MARKER = Pattern.compile("(?<![\\w])\\[(\\d+(?:\\s*,\\s*\\d+)*)\\]");
+    /** [n] or [n, m]. Callers still reject indexes, calls, and code. */
+    private static final Pattern MARKER = Pattern.compile("\\[(\\d+(?:\\s*,\\s*\\d+)*)\\]");
 
     private Asker() {
     }
@@ -57,18 +57,22 @@ public final class Asker {
     public static CitationMap mapCitations(List<CourseChunk> hits, String modelText) {
         List<CourseChunk> retrieved = hits == null ? List.of() : hits;
         String raw = modelText == null ? "" : modelText;
-        Matcher matcher = MARKER.matcher(raw);
-        if (!matcher.find()) {
+        List<int[]> code = codeSpans(raw);
+        if (!hasProseCitation(raw, code)) {
             return new CitationMap(raw, List.copyOf(retrieved));
         }
-        matcher.reset();
         StringBuilder out = new StringBuilder();
         List<CourseChunk> ordered = new ArrayList<>();
         int[] shown = new int[retrieved.size() + 1];
         int next = 1;
         int cursor = 0;
+        boolean removed = false;
+        Matcher matcher = MARKER.matcher(raw);
         while (matcher.find()) {
-            out.append(raw, cursor, matcher.start());
+            if (!isProseCitation(raw, matcher.start(), code)) {
+                continue;
+            }
+            appendSlice(out, raw.substring(cursor, matcher.start()), removed);
             List<Integer> kept = new ArrayList<>();
             for (String part : matcher.group(1).split("\\s*,\\s*")) {
                 int number = markerNumber(part);
@@ -84,7 +88,9 @@ public final class Asker {
                     kept.add(display);
                 }
             }
-            if (!kept.isEmpty()) {
+            if (kept.isEmpty()) {
+                removed = true;
+            } else {
                 out.append('[');
                 for (int i = 0; i < kept.size(); i++) {
                     if (i > 0) {
@@ -93,11 +99,12 @@ public final class Asker {
                     out.append(kept.get(i));
                 }
                 out.append(']');
+                removed = false;
             }
             cursor = matcher.end();
         }
-        out.append(raw.substring(cursor));
-        return new CitationMap(tidy(out.toString()), List.copyOf(ordered));
+        appendSlice(out, raw.substring(cursor), removed);
+        return new CitationMap(out.toString(), List.copyOf(ordered));
     }
 
     public record CitationMap(String text, List<CourseChunk> sources) {
@@ -217,10 +224,145 @@ public final class Asker {
         }
     }
 
-    private static String tidy(String text) {
-        String value = text.replaceAll("[ \\t]{2,}", " ");
-        value = value.replaceAll(" (?=[.,;:!?])", "");
-        return value.stripLeading();
+    /** Fenced blocks and inline code. Markers inside them are not citations. */
+    private static List<int[]> codeSpans(String raw) {
+        List<int[]> spans = new ArrayList<>();
+        int i = 0;
+        while (i < raw.length()) {
+            if (fenceAt(raw, i)) {
+                int close = fenceEnd(raw, i);
+                spans.add(new int[] {i, close});
+                i = close;
+                continue;
+            }
+            if (raw.charAt(i) == '`') {
+                int close = raw.indexOf('`', i + 1);
+                int newline = raw.indexOf('\n', i + 1);
+                if (close > i + 1 && (newline < 0 || close < newline)) {
+                    spans.add(new int[] {i, close + 1});
+                    i = close + 1;
+                    continue;
+                }
+            }
+            i++;
+        }
+        return spans;
+    }
+
+    private static boolean fenceAt(String raw, int index) {
+        if (index > 0 && raw.charAt(index - 1) != '\n') {
+            return false;
+        }
+        return raw.startsWith("```", index) || raw.startsWith("~~~", index);
+    }
+
+    private static int fenceEnd(String raw, int open) {
+        int lineEnd = raw.indexOf('\n', open);
+        if (lineEnd < 0) {
+            return raw.length();
+        }
+        String marker = raw.startsWith("```", open) ? "```" : "~~~";
+        int at = lineEnd + 1;
+        while (at < raw.length()) {
+            int next = raw.indexOf('\n', at);
+            int end = next < 0 ? raw.length() : next;
+            if (raw.substring(at, end).strip().equals(marker)) {
+                return next < 0 ? raw.length() : next + 1;
+            }
+            if (next < 0) {
+                break;
+            }
+            at = next + 1;
+        }
+        return raw.length();
+    }
+
+    private static boolean hasProseCitation(String raw, List<int[]> code) {
+        Matcher matcher = MARKER.matcher(raw);
+        while (matcher.find()) {
+            if (isProseCitation(raw, matcher.start(), code)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * A standalone citation in prose. Skips code, and skips a bracket that follows
+     * an identifier or a closing bracket, as in {@code m[0][2]} and {@code foo()[1]}.
+     * An assignment such as {@code x = [1, 2]} is a list, not a citation.
+     */
+    private static boolean isProseCitation(String raw, int bracketAt, List<int[]> code) {
+        if (inside(code, bracketAt)) {
+            return false;
+        }
+        if (bracketAt > 0) {
+            char previous = raw.charAt(bracketAt - 1);
+            if (Character.isLetterOrDigit(previous) || previous == '_' || previous == ')' || previous == ']') {
+                return false;
+            }
+        }
+        int at = bracketAt - 1;
+        while (at >= 0 && (raw.charAt(at) == ' ' || raw.charAt(at) == '\t')) {
+            at--;
+        }
+        return at < 0 || raw.charAt(at) != '=';
+    }
+
+    private static boolean inside(List<int[]> spans, int index) {
+        for (int[] span : spans) {
+            if (index >= span[0] && index < span[1]) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Copies a slice. After a removed marker, collapses only the space that marker left
+     * behind. Code, indentation, and other spacing stay as written.
+     */
+    private static void appendSlice(StringBuilder out, String slice, boolean removed) {
+        if (!removed) {
+            out.append(slice);
+            return;
+        }
+        int index = 0;
+        while (index < slice.length() && (slice.charAt(index) == ' ' || slice.charAt(index) == '\t')) {
+            index++;
+        }
+        boolean punct = index < slice.length() && isTightPunct(slice.charAt(index));
+        if (punct) {
+            trimTrailingSpaces(out);
+            out.append(slice.substring(index));
+            return;
+        }
+        boolean outSpace = out.length() > 0
+                && (out.charAt(out.length() - 1) == ' ' || out.charAt(out.length() - 1) == '\t');
+        if (outSpace) {
+            out.append(slice.substring(index));
+            return;
+        }
+        if (index > 0 && index < slice.length()) {
+            out.append(' ');
+        }
+        out.append(slice.substring(index));
+    }
+
+    private static boolean isTightPunct(char c) {
+        return c == '.' || c == ',' || c == ';' || c == ':' || c == '!' || c == '?';
+    }
+
+    private static void trimTrailingSpaces(StringBuilder out) {
+        int end = out.length();
+        while (end > 0) {
+            char c = out.charAt(end - 1);
+            if (c != ' ' && c != '\t') {
+                break;
+            }
+            end--;
+        }
+        out.setLength(end);
     }
 
     private static String buildUser(String question, String selection, List<CourseChunk> hits) {

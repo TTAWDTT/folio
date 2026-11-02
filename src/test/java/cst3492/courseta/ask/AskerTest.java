@@ -249,6 +249,74 @@ class AskerTest {
     }
 
     @Test
+    void citationsSkipCodeSpansFencesAndIndexes() {
+        CourseChunk first = page("lecture-servlet.pdf", 1, "doGet");
+        CourseChunk second = page("lecture-jpa.pdf", 2, "OneToMany");
+        String text = String.join("\n",
+                "Override doGet [2].",
+                "Call m[0][2], foo()[1], and list[2].",
+                "`x = [1, 2, 3]`",
+                "```",
+                "values = [1, 2, 3]",
+                "    indented = a ? b : c;",
+                "```",
+                "x = [1, 2]");
+        Asker.CitationMap mapped = Asker.mapCitations(List.of(first, second), text);
+        assertEquals(List.of(second), mapped.sources());
+        assertTrue(mapped.text().contains("Override doGet [1]."));
+        assertFalse(mapped.text().contains("Override doGet [2]."));
+        assertTrue(mapped.text().contains("m[0][2]"));
+        assertTrue(mapped.text().contains("foo()[1]"));
+        assertTrue(mapped.text().contains("list[2]"));
+        assertTrue(mapped.text().contains("`x = [1, 2, 3]`"));
+        assertTrue(mapped.text().contains("values = [1, 2, 3]"));
+        assertTrue(mapped.text().contains("    indented = a ? b : c;"));
+        assertTrue(mapped.text().contains("x = [1, 2]"));
+    }
+
+    @Test
+    void droppingAMarkerDoesNotRewriteCodeOrIndentation() {
+        CourseChunk first = page("lecture-servlet.pdf", 1, "doGet");
+        String text = String.join("\n",
+                "See [1].",
+                "    return a ? b : c;",
+                "```",
+                "    keep  two spaces",
+                "```",
+                "Gone [8].");
+        Asker.CitationMap mapped = Asker.mapCitations(List.of(first), text);
+        assertEquals(List.of(first), mapped.sources());
+        assertTrue(mapped.text().contains("See [1]."));
+        assertTrue(mapped.text().contains("    return a ? b : c;"));
+        assertTrue(mapped.text().contains("    keep  two spaces"));
+        assertTrue(mapped.text().contains("Gone."));
+        assertFalse(mapped.text().contains("[8]"));
+        assertFalse(mapped.text().contains("a ? b: c"));
+    }
+
+    @Test
+    void ungroundedAnswerKeepsCodeLists() throws Exception {
+        ChatClient chat = (base, key, model, system, user) -> String.join("\n",
+                "Paris is the capital [1].",
+                "```",
+                "x = [1, 2]",
+                "    keep = a ? b : c;",
+                "```",
+                "Also m[0][2] and foo()[1].");
+        Answer answer = Asker.ask(new CourseIndex(), chat, "https://api.deepseek.com", "key", "deepseek-flash",
+                "What is the capital of France?", null);
+        assertEquals(Answer.Kind.GENERAL, answer.kind());
+        assertTrue(answer.citations().isEmpty());
+        assertTrue(answer.text().contains("Paris is the capital."));
+        assertFalse(answer.text().contains("capital [1]"));
+        assertTrue(answer.text().contains("x = [1, 2]"));
+        assertTrue(answer.text().contains("    keep = a ? b : c;"));
+        assertTrue(answer.text().contains("m[0][2]"));
+        assertTrue(answer.text().contains("foo()[1]"));
+        assertFalse(answer.text().contains("x =."));
+    }
+
+    @Test
     void repeatedPageCitationsCollapseToOneLine() {
         CourseChunk first = new CourseChunk("lecture.pdf#PAGE#4#1", "lecture.pdf", ScopeKind.PAGE, 4, "alpha servlet part");
         CourseChunk second = new CourseChunk("lecture.pdf#PAGE#4#2", "lecture.pdf", ScopeKind.PAGE, 4, "beta servlet part");

@@ -30,7 +30,7 @@ The Ask section is a short chat. An empty window shows a one-line hint. Each que
 Retrieval still runs before the model call. At most four chunks are sent. Each one is numbered in the prompt. The model is told to cite those numbers inline as [1], [2], with a space before the bracket, and not to invent a number. Folio then checks the reply:
 
 - A marker is kept only when its number names one of those retrieved chunks. Markers are rewritten so [1], [2] follow the source list under the answer.
-- A number that was not retrieved is removed from the text and never becomes a card. An index such as `args[0]` is left alone.
+- A number that was not retrieved is removed from the text and never becomes a card. Removing one only tidies the space it left. Indexes such as `args[0]` and `m[0][2]`, calls such as `foo()[1]`, assignments such as `x = [1, 2]`, fenced blocks, and inline code are left as written, including their indentation.
 - If the reply contains no markers, the source list is the retrieved chunks. The model was given only those chunks and did not name a subset.
 - If every marker is out of range, there are no source cards. The card says: "The reply did not cite a retrieved course chunk."
 
@@ -38,7 +38,7 @@ Clicking a source opens that course file. A text file on disk opens in the edito
 
 If the key is missing, Ask does not call the model. The card shows: "No API key is configured. Add an API key in the Folio tool window and save settings." If there were hits, those retrieved chunks stay on the card as sources.
 
-If the key is present and no chunk passes the cutoff, the answer starts with: "Response is based on general knowledge; no specific course material is referenced." The card states: "This answer isn't grounded in course files." There are no source cards, and a [n] the model invents is removed.
+If the key is present and no chunk passes the cutoff, the answer starts with: "Response is based on general knowledge; no specific course material is referenced." The card states: "This answer isn't grounded in course files." There are no source cards. A prose [n] the model invents is removed. A list or index in code is not.
 
 **Ask Folio** on the editor popup asks "Explain the selected code." or, with no selection, "Explain this." **Folio Course Drill** asks the model for three short questions about the selection and still cites chunks. With no selection the drill says "Select some code first." and does not call the model.
 
@@ -449,7 +449,7 @@ docs/course-ta-plugin-plan.md
 
 ## Testing
 
-`./gradlew test buildPlugin` with JDK 25 completes successfully. The suite is **82 tests, 0 failures**.
+`./gradlew test buildPlugin` with JDK 25 completes successfully. The suite is **94 tests, 0 failures**.
 
 | Test class | Tests |
 | --- | ---: |
@@ -457,11 +457,11 @@ docs/course-ta-plugin-plan.md
 | `HttpChatClientTest` | 10 |
 | `CommitMessageActionTest` | 9 |
 | `FolioPanelTest` | 10 |
-| `AskerTest` | 7 |
+| `AskerTest` | 19 |
 | `CourseFileParserTest` | 7 |
 | `GenerateTestActionTest` | 3 |
 | `TaSettingsTest` | 1 |
 | `AnswerTest` | 1 |
 | `CourseDrillActionTest` | 1 |
 
-The index tests lock the retrieval rules above: weather and unrelated questions return no hits, a lecture term still hits when it appears in every chunk, polite Chinese and English questions still reach the course term, and removing one absolute path leaves another file with the same name. They also load a legacy bare-name row: re-indexing the same handout drops that row, and Remove drops it too. `FolioPanelTest` locks the button gate, empty Save, the badge text, the scaled hint width, cancellation, and that Write copies a preview only after it succeeded. A prose reply leaves Write off. Error text that contains `class ` or `org.junit` does not enable Write either. `CourseFileParserTest` checks page and slide order and that a chosen source id is stored. The UI tests do not construct a `Project`, so they do not click the confirmation dialog or the live tool window.
+`AskerTest` locks citation mapping: prose `[n]` markers are renumbered onto retrieved chunks, unknown numbers are dropped, and code spans, fences, indexes, and indentation stay as written. An empty retrieval says the answer is not grounded and still leaves a code list alone. The index tests lock the retrieval rules above: weather and unrelated questions return no hits, a lecture term still hits when it appears in every chunk, polite Chinese and English questions still reach the course term, and removing one absolute path leaves another file with the same name. They also load a legacy bare-name row: re-indexing the same handout drops that row, and Remove drops it too. `FolioPanelTest` locks the button gate, empty Save, the badge text, the scaled hint width, cancellation, and that Write copies a preview only after it succeeded. A prose reply leaves Write off. Error text that contains `class ` or `org.junit` does not enable Write either. `CourseFileParserTest` checks page and slide order and that a chosen source id is stored. The UI tests do not construct a `Project`, so they do not click the confirmation dialog or the live tool window.

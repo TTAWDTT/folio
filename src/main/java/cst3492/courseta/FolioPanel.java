@@ -873,21 +873,61 @@ public final class FolioPanel extends JPanel {
         if (chunk == null) {
             return;
         }
+        if (project == null) {
+            setStatus(Asker.scopePhrase(chunk) + " · " + Asker.snippet(chunk), FolioChrome.Tone.INFO);
+            return;
+        }
+        if (ApplicationManager.getApplication() == null) {
+            new SourcePreview(project, chunk, true).show();
+            return;
+        }
         String path = chunk.sourceDocument();
-        VirtualFile file = path == null || path.isBlank()
-                ? null
-                : LocalFileSystem.getInstance().refreshAndFindFileByPath(path);
-        if (project != null && file != null && editorFile(file)) {
-            int offset = readOffset(file, chunk.text());
+        ApplicationManager.getApplication().executeOnPooledThread(() -> {
+            VirtualFile file = null;
+            boolean editable = false;
+            int offset = 0;
+            try {
+                file = path == null || path.isBlank()
+                        ? null
+                        : LocalFileSystem.getInstance().refreshAndFindFileByPath(path);
+                if (file != null) {
+                    VirtualFile found = file;
+                    boolean[] canEdit = {false};
+                    int[] at = {0};
+                    ApplicationManager.getApplication().runReadAction(() -> {
+                        canEdit[0] = editorFile(found);
+                        if (canEdit[0]) {
+                            at[0] = readOffset(found, chunk.text());
+                        }
+                    });
+                    editable = canEdit[0];
+                    offset = at[0];
+                }
+            } catch (RuntimeException ex) {
+                if (ex instanceof ControlFlowException) {
+                    throw ex;
+                }
+                file = null;
+                editable = false;
+            }
+            VirtualFile found = file;
+            boolean open = editable;
+            int at = offset;
+            SwingUtilities.invokeLater(() -> presentSource(chunk, found, open, at));
+        });
+    }
+
+    private void presentSource(CourseChunk chunk, VirtualFile file, boolean editable, int offset) {
+        if (project == null || project.isDisposed()) {
+            return;
+        }
+        String path = chunk.sourceDocument();
+        if (editable && file != null) {
             OpenFileDescriptor descriptor = new OpenFileDescriptor(project, file, offset);
             if (FileEditorManager.getInstance(project).openTextEditor(descriptor, true) != null) {
                 setStatus("Opened " + Asker.citedFile(path) + " at " + Asker.scopePhrase(chunk), FolioChrome.Tone.SUCCESS);
                 return;
             }
-        }
-        if (project == null) {
-            setStatus(Asker.scopePhrase(chunk) + " · " + Asker.snippet(chunk), FolioChrome.Tone.INFO);
-            return;
         }
         new SourcePreview(project, chunk, file == null).show();
     }
