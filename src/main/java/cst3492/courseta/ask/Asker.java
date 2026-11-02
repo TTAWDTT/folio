@@ -56,11 +56,15 @@ public final class Asker {
      * with that same original number is rewritten to that same new number. A number that was
      * not retrieved is removed only from a candidate. A comma, {@code and}, {@code cf.}, or {@code 和}
      * goes with it when that word joins two citations, or when it is inside parentheses beside the marker.
-     * A connective between ordinary words stays. Parentheses left empty are removed.
-     * Indexes, calls, and expression lists are not candidates and are never edited.
-     * A parenthesis is a call in {@code ident(}, {@code )(}, and {@code ](}, and an expression when
-     * {@code =}, an operator, or a keyword such as {@code if} or {@code return} precedes it.
-     * {@code Servlets ([n])} is still a citation.
+     * A connective between ordinary words stays. Parentheses left empty, or holding only a cue
+     * such as {@code see}, {@code cf.}, {@code and}, {@code 见}, {@code 和}, or {@code 参见}, are removed.
+     * An ordinary word such as {@code (HttpServlet)} stays. Indexes, calls, and expression lists
+     * are not candidates and are never edited.
+     * A parenthesis is a call in {@code ident(}, {@code )(}, and {@code ](}. It is a readable
+     * expression, left as written but still a collision, when {@code =}, an operator, or a keyword
+     * such as {@code if} or {@code return} precedes it, as in {@code a + ([1])}.
+     * {@code Servlets ([n])} is still a citation. A markdown link {@code [n](url)} is left as written
+     * and collides the same way. Full-width parentheses follow the same rules.
      * Afterwards the numbers written into candidate positions are exactly {@code 1..cards},
      * and each one is that card. A single {@code [n]} left outside code collides when {@code n}
      * names a retrieved chunk ({@code 1..retrieved}) and this pass did not write it.
@@ -447,7 +451,8 @@ public final class Asker {
     /**
      * One classification of a bracket, used both when rewriting and when checking a leftover.
      * {@link Role#PROSE} is a citation. {@link Role#READABLE} is left as written but still collides
-     * when its number names a retrieved chunk ({@code new [2]}, {@code a**b** [1]}, {@code (a, [2])}).
+     * when its number names a retrieved chunk ({@code new [2]}, {@code a**b** [1]}, {@code (a, [2])},
+     * {@code a + ([1])}, {@code [1](url)}).
      * {@link Role#OPAQUE} is an index, a call, an operator, or code.
      */
     private enum Role {
@@ -460,9 +465,10 @@ public final class Asker {
      * a parenthetical list such as {@code (see [1], [2])}, a line-start {@code *}, {@code -}, or {@code >},
      * closing emphasis ({@code **A** [1]}, {@code _A_ [1]}), and a parenthesis that opens prose
      * ({@code ([1])}, {@code Servlets ([1])}).
-     * It is not part of an expression: an index, a call ({@code ident(}, {@code )(}, {@code ](}),
-     * an assignment ({@code x = ([1])}), a keyword parenthesis ({@code if ([1])}, {@code return ([1])}),
-     * or a list literal such as {@code print([1, 2, 3])}, {@code foo(a, [1, 2])}, or {@code return [1, 2]}.
+     * It is not a call ({@code ident(}, {@code )(}, {@code ](}) and not an index.
+     * An expression parenthesis ({@code x = ([1])}, {@code a + ([1])}, {@code if ([1])}) is left
+     * as written and still collides. A list literal such as {@code print([1, 2, 3])},
+     * {@code foo(a, [1, 2])}, or {@code return [1, 2]} is not a citation.
      */
     private static boolean isProseCitation(String raw, int bracketAt, List<int[]> code) {
         return roleAt(raw, bracketAt, code) == Role.PROSE;
@@ -472,11 +478,14 @@ public final class Asker {
         if (inside(code, bracketAt)) {
             return Role.OPAQUE;
         }
+        if (markdownLink(raw, bracketAt)) {
+            return Role.READABLE;
+        }
         if (bracketAt == 0) {
             return Role.PROSE;
         }
         char previous = raw.charAt(bracketAt - 1);
-        if (isIdent(previous) || previous == ')') {
+        if (isIdent(previous) || isCloseParen(previous)) {
             return Role.OPAQUE;
         }
         if (previous == ']') {
@@ -498,8 +507,11 @@ public final class Asker {
         if ((token == '*' || token == '_') && closesEmphasis(raw, at)) {
             return Role.PROSE;
         }
-        if (token == '(') {
-            return expressionParen(raw, at, code) ? Role.OPAQUE : Role.PROSE;
+        if (isOpenParen(token)) {
+            if (callParen(raw, at)) {
+                return Role.OPAQUE;
+            }
+            return expressionParen(raw, at, code) ? Role.READABLE : Role.PROSE;
         }
         if (isExpressionToken(token)) {
             return gluedEmphasis(raw, at) ? Role.READABLE : Role.OPAQUE;
@@ -518,19 +530,22 @@ public final class Asker {
         return Role.PROSE;
     }
 
+    /** {@code ident(}, {@code )(}, and {@code ](} are calls. A space before {@code (} is not one. */
+    private static boolean callParen(String raw, int parenAt) {
+        if (parenAt <= 0) {
+            return false;
+        }
+        char immediate = raw.charAt(parenAt - 1);
+        return isIdent(immediate) || isCloseParen(immediate) || immediate == ']';
+    }
+
     /**
-     * A call ({@code ident(}, {@code )(}, {@code ](}), or a parenthesis that still belongs to an
-     * expression: {@code =} or another operator, a comma that is not a citation list, or a keyword
-     * such as {@code if}, {@code while}, {@code return}, {@code for}, {@code switch}, or {@code new}.
-     * Spaces before {@code (} do not matter. {@code Servlets ([1])} stays prose.
+     * A parenthesis that still belongs to an expression: {@code =} or another operator, a comma
+     * that is not a citation list, or a keyword such as {@code if}, {@code while}, {@code return},
+     * {@code for}, {@code switch}, or {@code new}. Spaces before {@code (} do not matter.
+     * {@code Servlets ([1])} stays prose. The bracket is readable, so an in-range number collides.
      */
     private static boolean expressionParen(String raw, int parenAt, List<int[]> code) {
-        if (parenAt > 0) {
-            char immediate = raw.charAt(parenAt - 1);
-            if (isIdent(immediate) || immediate == ')' || immediate == ']') {
-                return true;
-            }
-        }
         int at = parenAt - 1;
         while (at >= 0 && isSpaceTab(raw.charAt(at))) {
             at--;
@@ -669,9 +684,9 @@ public final class Asker {
                 continue;
             }
             char c = raw.charAt(index);
-            if (c == '(') {
+            if (isOpenParen(c)) {
                 depth++;
-            } else if (c == ')' && depth > 0) {
+            } else if (isCloseParen(c) && depth > 0) {
                 depth--;
             }
         }
@@ -780,7 +795,8 @@ public final class Asker {
      */
     private static int omitRemovedMarker(StringBuilder out, String raw, int markerEnd, List<int[]> code) {
         boolean inParen = insideParentheses(raw, markerEnd, code);
-        int cursor = skipFollowingConnective(raw, markerEnd, inParen);
+        boolean linkBefore = markdownLinkBefore(raw, markerEnd);
+        int cursor = skipFollowingConnective(raw, markerEnd, inParen, linkBefore);
         if (cursor == markerEnd) {
             stripPrecedingConnective(out, raw, cursor, inParen);
         }
@@ -792,21 +808,22 @@ public final class Asker {
      * The word is dropped when a citation marker is on its other side, or when the marker
      * is inside parentheses. A word between ordinary prose stays.
      */
-    private static int skipFollowingConnective(String raw, int at, boolean inParen) {
+    private static int skipFollowingConnective(String raw, int at, boolean inParen, boolean linkBefore) {
         int start = skipSpaceTab(raw, at);
         if (start >= raw.length()) {
             return at;
         }
         if (isComma(raw.charAt(start))) {
             int after = skipSpaceTab(raw, start + 1);
-            if (after >= raw.length() || raw.charAt(after) == '[' || raw.charAt(after) == ')'
+            if (after >= raw.length() || raw.charAt(after) == '[' || isCloseParen(raw.charAt(after))
                     || isTightPunct(raw.charAt(after))) {
                 return after;
             }
             return at;
         }
         String token = tokenAt(raw, start);
-        if (token == null || !wordJoinsCitation(raw, start + token.length(), inParen)) {
+        // A markdown link owns the following sentence: [x](u) [9] and [1] keeps and.
+        if (token == null || linkBefore || !wordJoinsCitation(raw, start + token.length(), inParen)) {
             return at;
         }
         return skipSpaceTab(raw, start + token.length());
@@ -838,7 +855,7 @@ public final class Asker {
 
     private static boolean citationBefore(StringBuilder out, int tokenStart) {
         int index = skipBack(out, tokenStart);
-        if (index > 0 && out.charAt(index - 1) == ')') {
+        if (index > 0 && isCloseParen(out.charAt(index - 1))) {
             index = skipBack(out, index - 1);
         }
         return index > 0 && out.charAt(index - 1) == ']';
@@ -874,25 +891,32 @@ public final class Asker {
             return true;
         }
         char c = raw.charAt(index);
-        return c == ')' || isTightPunct(c);
+        return isCloseParen(c) || isTightPunct(c);
     }
 
     /**
-     * Drops {@code ()} and parentheses whose only leftover is a cue word, as in {@code (see )}
-     * or {@code (a )} after the marker inside them was removed.
+     * Drops {@code ()} and parentheses whose remaining interior is only cue words
+     * ({@code see}, {@code cf.}, {@code and}, {@code 见}, {@code 和}, {@code 参见}) and punctuation.
+     * {@code (HttpServlet)} stays. Full-width {@code （）} follow the same rule.
      */
     private static int dropVacantParens(StringBuilder out, String raw, int cursor) {
         while (true) {
             int close = skipSpaceTab(raw, cursor);
-            if (close >= raw.length() || raw.charAt(close) != ')') {
+            int punct = close;
+            while (punct < raw.length() && isVacantPunct(raw.charAt(punct))) {
+                punct++;
+            }
+            punct = skipSpaceTab(raw, punct);
+            if (punct >= raw.length() || !isCloseParen(raw.charAt(punct))) {
                 return cursor;
             }
             int open = matchingOpen(out);
-            if (open < 0 || !vacantInterior(out.substring(open + 1))) {
+            String between = raw.substring(close, punct);
+            if (open < 0 || !vacantInterior(out.substring(open + 1) + between)) {
                 return cursor;
             }
             out.setLength(open);
-            cursor = close + 1;
+            cursor = punct + 1;
         }
     }
 
@@ -900,9 +924,9 @@ public final class Asker {
         int depth = 0;
         for (int index = out.length() - 1; index >= 0; index--) {
             char c = out.charAt(index);
-            if (c == ')') {
+            if (isCloseParen(c)) {
                 depth++;
-            } else if (c == '(') {
+            } else if (isOpenParen(c)) {
                 if (depth == 0) {
                     return index;
                 }
@@ -912,18 +936,42 @@ public final class Asker {
         return -1;
     }
 
-    /** Empty, or a single leftover cue such as {@code see}, {@code a}, {@code cf.}, or {@code 和}. */
+    /** Empty, or only cue words and punctuation. An ordinary word such as {@code HttpServlet} is not vacant. */
     private static boolean vacantInterior(String interior) {
-        String trimmed = interior.strip();
-        if (trimmed.isEmpty() || "和".equals(trimmed) || "cf.".equalsIgnoreCase(trimmed)) {
-            return true;
-        }
-        for (int i = 0; i < trimmed.length(); i++) {
-            if (!isIdent(trimmed.charAt(i))) {
+        int index = 0;
+        while (index < interior.length()) {
+            char c = interior.charAt(index);
+            if (Character.isWhitespace(c) || Character.isSpaceChar(c) || isVacantPunct(c)) {
+                index++;
+                continue;
+            }
+            String cue = cueAt(interior, index);
+            if (cue == null) {
                 return false;
             }
+            index += cue.length();
         }
         return true;
+    }
+
+    /** Longer cues first so {@code 参见} is not read as {@code 见}. */
+    private static final String[] CUE_WORDS = {"参见", "see", "and", "cf", "和", "见"};
+
+    private static String cueAt(String text, int at) {
+        for (String cue : CUE_WORDS) {
+            if (at + cue.length() > text.length()) {
+                continue;
+            }
+            if (!text.regionMatches(true, at, cue, 0, cue.length())) {
+                continue;
+            }
+            int after = at + cue.length();
+            if (after < text.length() && isIdent(text.charAt(after))) {
+                continue;
+            }
+            return cue;
+        }
+        return null;
     }
 
     private static String tokenAt(String raw, int at) {
@@ -977,6 +1025,61 @@ public final class Asker {
         return c == ' ' || c == '\t';
     }
 
+    private static boolean isOpenParen(char c) {
+        return c == '(' || c == '（';
+    }
+
+    private static boolean isCloseParen(char c) {
+        return c == ')' || c == '）';
+    }
+
+    private static boolean isVacantPunct(char c) {
+        return isTightPunct(c);
+    }
+
+    /** {@code [n](url)} is a markdown link, not a card number. */
+    private static boolean markdownLink(String raw, int bracketAt) {
+        int close = raw.indexOf(']', bracketAt + 1);
+        if (close < 0 || close + 1 >= raw.length() || raw.charAt(close + 1) != '(') {
+            return false;
+        }
+        return raw.substring(bracketAt + 1, close).matches("\\d+(?:\\s*,\\s*\\d+)*");
+    }
+
+    /** The removed marker sits just after a markdown link, as in {@code [x](u) [9]}. */
+    private static boolean markdownLinkBefore(String raw, int markerEnd) {
+        int at = markerEnd - 1;
+        if (at < 0 || raw.charAt(at) != ']') {
+            return false;
+        }
+        while (at >= 0 && raw.charAt(at) != '[') {
+            at--;
+        }
+        if (at < 0) {
+            return false;
+        }
+        at--;
+        while (at >= 0 && isSpaceTab(raw.charAt(at))) {
+            at--;
+        }
+        if (at < 0 || !isCloseParen(raw.charAt(at))) {
+            return false;
+        }
+        int depth = 0;
+        for (int i = at; i >= 0; i--) {
+            char c = raw.charAt(i);
+            if (isCloseParen(c)) {
+                depth++;
+            } else if (isOpenParen(c)) {
+                depth--;
+                if (depth == 0) {
+                    return i > 0 && raw.charAt(i - 1) == ']';
+                }
+            }
+        }
+        return false;
+    }
+
     /**
      * Copies a slice. After a removed marker, collapses only the space that marker left
      * behind. Code, indentation, and other spacing stay as written.
@@ -986,8 +1089,12 @@ public final class Asker {
             out.append(slice);
             return;
         }
-        int index = 0;
-        while (index < slice.length() && isSpaceTab(slice.charAt(index))) {
+        int leadSpaces = 0;
+        while (leadSpaces < slice.length() && slice.charAt(leadSpaces) == ' ') {
+            leadSpaces++;
+        }
+        int index = leadSpaces;
+        while (index < slice.length() && slice.charAt(index) == '\t') {
             index++;
         }
         if (index >= slice.length()) {
@@ -1001,11 +1108,16 @@ public final class Asker {
         }
         if (slice.charAt(index) == '\n' || slice.charAt(index) == '\r') {
             trimTrailingSpaces(out);
+            // Two or more spaces immediately before the newline are a hard break. Keep those,
+            // and drop only the separator that sat before the removed marker.
+            if (leadSpaces >= 2 && index == leadSpaces) {
+                out.append(slice, 0, leadSpaces);
+            }
             out.append(slice.substring(index));
             return;
         }
         char next = slice.charAt(index);
-        if (isTightPunct(next) || next == ')') {
+        if (isTightPunct(next) || isCloseParen(next)) {
             trimTrailingSpaces(out);
             out.append(slice.substring(index));
             return;

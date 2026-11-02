@@ -474,7 +474,8 @@ class AskerTest {
 
     /**
      * {@code and} and {@code cf.} between ordinary words are the sentence, not a citation joiner.
-     * Inside {@code (see )} the cue is dropped with the empty parentheses. Chinese {@code ，} and
+     * Inside {@code (see )} the cue is dropped with the empty parentheses. An ordinary word such as
+     * {@code (a)} stays. Chinese {@code ，} and
      * {@code 和} follow the same rule, and a removed marker does not leave a space at the line edge.
      */
     @Test
@@ -489,14 +490,36 @@ class AskerTest {
         assertEquals("见 [1]。", Asker.mapCitations(List.of(first, second), "见 [1] 和 [9]。").text());
         assertEquals("中文，见 [1]。", Asker.mapCitations(List.of(first, second), "中文，[9]，见 [1]。").text());
         assertEquals("Note.", Asker.mapCitations(List.of(first), "Note (see [9]).").text());
-        assertEquals("Words.", Asker.mapCitations(List.of(first), "Words (a [9]).").text());
+        assertEquals("Words (a).", Asker.mapCitations(List.of(first), "Words (a [9]).").text());
         assertEquals("page", Asker.mapCitations(List.of(first), "[9] page").text());
         assertEquals("See\nNext", Asker.mapCitations(List.of(first), "See [9]\nNext").text());
     }
 
     /**
+     * Parentheses stay when an ordinary word is left inside them. Only an empty pair, or a cue
+     * such as {@code see} / {@code cf.} / {@code and} / {@code 见} / {@code 和} / {@code 参见},
+     * is deleted. Full-width parentheses follow the same rule.
+     */
+    @Test
+    void ordinaryWordInsideParensStays() {
+        CourseChunk first = page("lecture-servlet.pdf", 1, "doGet");
+        assertEquals("The API (HttpServlet) handles it",
+                Asker.mapCitations(List.of(first), "The API (HttpServlet [9]) handles it").text());
+        assertEquals("Use (doGet) first",
+                Asker.mapCitations(List.of(first), "Use (doGet [9]) first").text());
+        assertEquals("Note.", Asker.mapCitations(List.of(first), "Note (and [9]).").text());
+        assertEquals("注。", Asker.mapCitations(List.of(first), "注（见 [9]）。").text());
+        assertEquals("注。", Asker.mapCitations(List.of(first), "注（参见 [9]）。").text());
+        assertEquals("注。", Asker.mapCitations(List.of(first), "注（和 [9]）。").text());
+        assertEquals("The API（HttpServlet）handles it",
+                Asker.mapCitations(List.of(first), "The API（HttpServlet [9]）handles it").text());
+        assertEquals("注。", Asker.mapCitations(List.of(first), "注（see [9]）。").text());
+    }
+
+    /**
      * A parenthesis after {@code =}, an operator, or {@code if}/{@code return}/{@code new}
-     * is an expression and stays as written. {@code Servlets ([1])} is still a citation.
+     * is an expression and stays as written. An in-range number there still collides, so the
+     * reply is not rewritten into two {@code [1]}s. {@code Servlets ([1])} is still a citation.
      */
     @Test
     void expressionParenIsNotACitation() {
@@ -504,8 +527,16 @@ class AskerTest {
         CourseChunk second = page("lecture-jpa.pdf", 2, "OneToMany");
         CourseChunk third = page("lecture-jpa.pdf", 3, "persistence");
         Asker.CitationMap assigned = Asker.mapCitations(List.of(first, second, third), "x = ([3]) then see [3].");
-        assertEquals("x = ([3]) then see [1].", assigned.text());
-        assertEquals(List.of(third), assigned.sources());
+        assertEquals("x = ([3]) then see [3].", assigned.text());
+        assertEquals(List.of(first, second, third), assigned.sources());
+
+        Asker.CitationMap added = Asker.mapCitations(List.of(first, second, third), "a + ([1]) and see [3].");
+        assertEquals("a + ([1]) and see [3].", added.text());
+        assertEquals(List.of(first, second, third), added.sources());
+
+        Asker.CitationMap outside = Asker.mapCitations(List.of(first, second, third), "x = ([9]) then see [3].");
+        assertEquals("x = ([9]) then see [1].", outside.text());
+        assertEquals(List.of(third), outside.sources());
 
         assertEquals("if ([3])", Asker.mapCitations(List.of(first, second, third), "if ([3])").text());
         assertEquals("while ([3])", Asker.mapCitations(List.of(first, second, third), "while ([3])").text());
@@ -517,6 +548,27 @@ class AskerTest {
         Asker.CitationMap kept = Asker.mapCitations(List.of(first, second), "Hello, ([2])");
         assertEquals("Hello, ([1])", kept.text());
         assertEquals(List.of(second), kept.sources());
+    }
+
+    /**
+     * The final trim drops a space left after the last kept marker. Two spaces before a newline
+     * stay, because that is a hard break. {@code and} after a markdown link is the sentence.
+     * A link number such as {@code [2](url)} is left as written and still collides.
+     */
+    @Test
+    void removedMarkerKeepsHardBreakTailAndLink() {
+        CourseChunk first = page("lecture-servlet.pdf", 1, "doGet");
+        CourseChunk second = page("lecture-jpa.pdf", 2, "OneToMany");
+        assertEquals("ends here [1]", Asker.mapCitations(List.of(first), "ends here [1] [9]").text());
+        assertEquals("See  \nNext", Asker.mapCitations(List.of(first), "See [9]  \nNext").text());
+        assertEquals("See\nNext", Asker.mapCitations(List.of(first), "See [9]\nNext").text());
+        assertEquals("[x](u) and [1].", Asker.mapCitations(List.of(first), "[x](u) [9] and [1].").text());
+        assertEquals("See [1].", Asker.mapCitations(List.of(first), "See [9] and [1].").text());
+
+        Asker.CitationMap link = Asker.mapCitations(List.of(first, second),
+                "[2](http://example.test) and see [1].");
+        assertEquals("[2](http://example.test) and see [1].", link.text());
+        assertEquals(List.of(first, second), link.sources());
     }
 
     /**
@@ -730,7 +782,7 @@ class AskerTest {
             if (part > 0) {
                 text.append('\n');
             }
-            int kind = random.nextInt(25);
+            int kind = random.nextInt(28);
             int left = markerNumber(random, retrieved, true);
             int right = markerNumber(random, retrieved, true);
             switch (kind) {
@@ -812,6 +864,39 @@ class AskerTest {
                     text.append(" pg").append(tag);
                     keep(marks, "Cf.");
                     keep(marks, "pg" + tag);
+                }
+                case 19 -> {
+                    int tag = trial * 10 + part;
+                    int number = markerNumber(random, retrieved, true);
+                    String word = "Http" + tag;
+                    text.append("api").append(tag).append(" (").append(word).append(" ");
+                    cite(text, marks, "", "", number);
+                    text.append(") tail").append(tag);
+                    keep(marks, "(" + word);
+                    keep(marks, "tail" + tag);
+                }
+                case 20 -> {
+                    int tag = trial * 10 + part;
+                    int number = markerNumber(random, retrieved, true);
+                    boolean inRange = number >= 1 && number <= retrieved;
+                    code(text, marks, "sum" + tag + " + ([" + number + "])", inRange);
+                }
+                case 21 -> {
+                    int tag = trial * 10 + part;
+                    int number = markerNumber(random, retrieved, true);
+                    text.append("fw").append(tag).append("（see ");
+                    cite(text, marks, "", "", number);
+                    text.append("）");
+                    keep(marks, "fw" + tag);
+                }
+                case 22 -> {
+                    int tag = trial * 10 + part;
+                    text.append("hb").append(tag).append(" ");
+                    cite(text, marks, "", "", outOfRange(random, retrieved));
+                    text.append("  \n");
+                    text.append("nx").append(tag);
+                    keep(marks, "hb" + tag + "  \n");
+                    keep(marks, "nx" + tag);
                 }
                 default -> literalFragment(text, marks, random, trial, part, retrieved);
             }
@@ -935,6 +1020,7 @@ class AskerTest {
         assertFalse(text.contains("and."), "orphan and" + where);
         assertFalse(text.contains("and ."), "orphan and" + where);
         assertFalse(Pattern.compile("\\(\\s*see\\s*\\)").matcher(text).find(), "empty see paren" + where);
+        assertFalse(Pattern.compile("（\\s*see\\s*）").matcher(text).find(), "empty see paren" + where);
         assertTrue(emptyParens(text) <= emptyParens(input), "empty parens" + where);
     }
 
