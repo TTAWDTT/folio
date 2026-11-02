@@ -9,8 +9,9 @@
 \* when the call guard is removed.
 \* A preview that returns prose is not a test. Write stays off. The reply is
 \* still the transcript.
-\* Indexing here starts only after a key is stored. The Index files button
-\* does not need a key; that path is left out.
+\* Index files does not need a key. Remove does not need a key either.
+\* The chart draws indexing from No API key and from a saved key.
+\* Indexing again from a result, and Remove, stay hidden.
 \* Starting Ask, Preview, or Draft clears the test transcript. The panel
 \* keeps the last preview on screen until the next preview replaces it.
 \* Cancelling a call is left out.
@@ -175,7 +176,6 @@ YouClearKey ==
   /\ UNCHANGED <<index, written>>
 
 YouIndexFiles ==
-  /\ key = "stored"
   /\ atHub
   /\ index \in {"empty", "ready"}
   /\ screen' = "indexing"
@@ -188,7 +188,6 @@ YouIndexFiles ==
   /\ UNCHANGED <<key, secret, llmButtons, written>>
 
 YouRemoveFile ==
-  /\ key = "stored"
   /\ atHub
   /\ index = "ready"
   /\ screen' = "indexing"

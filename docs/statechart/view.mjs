@@ -4,8 +4,8 @@ const place = {
   noKey: ["Setup", "No API key"],
   typed: ["Setup", "Key typed, not saved"],
   saved: ["Ready", "Key saved"],
-  filesNoKey: ["Course files", "Files ready, no key"],
-  typedFiles: ["Course files", "Files ready, key not saved"],
+  filesNoKey: ["Course files", "Files ready, key not stored"],
+  typedFiles: ["Course files", "Files ready, key not stored"],
   savedFiles: ["Ready", "Files ready"],
   indexing: ["Course files", "Indexing"],
   asking: ["Ask", "Asking"],
@@ -44,8 +44,7 @@ export const group = (v) => {
   if (
     name === "No API key" ||
     name === "Key typed, not saved" ||
-    name === "Files ready, no key" ||
-    name === "Files ready, key not saved"
+    name === "Files ready, key not stored"
   )
     return "Setup";
   return "Ready";
@@ -94,10 +93,19 @@ export const step = (action, from, to) => {
   if (action === "YouSaveKey") return from.screen === "typed" ? "you save settings" : null;
   if (action === "YouClearKey") return from.screen === "saved" ? "you clear the API key" : null;
   if (action === "YouIndexFiles")
-    return from.screen === "saved" || from.screen === "savedFiles" ? "you index files" : null;
+    return from.screen === "noKey" ||
+      from.screen === "filesNoKey" ||
+      from.screen === "typedFiles" ||
+      from.screen === "saved" ||
+      from.screen === "savedFiles"
+      ? "you index files"
+      : null;
   if (action === "YouRemoveFile") return null;
-  if (action === "IndexingFinishes") return "indexing finishes";
-  if (action === "IndexingFindsNothing") return "the index is empty";
+  if (action === "IndexingFinishes")
+    return to.screen === "savedFiles" || to.screen === "filesNoKey" || to.screen === "typedFiles"
+      ? "indexing finishes"
+      : null;
+  if (action === "IndexingFindsNothing") return to.screen === "saved" ? "the index is empty" : null;
   if (action === "BeginCall" || action === "YouAsk" || action === "YouPreview" || action === "YouDraft") {
     const label = beginLabel(to.screen);
     return label && showBegin(from.screen, to.screen) ? label : null;

@@ -17,7 +17,9 @@ A twenty-minute demo in a course project:
 5. Put the caret on a method and run **Generate JUnit From Scenario** from the editor menu. The dialog is prefilled with the scenario already in the tool window. **Preview test** fills the preview. **Write test file** stays off until that preview returns a test, then writes it next to the class. A failed preview, or a reply that is not a test, leaves a note in the preview and does not enable Write.
 6. Stage a change and run **Draft Folio Commit Messages** from the commit dialog. Folio drafts three messages, copies the first, and, when the action was started from the commit box, places that first message in the box.
 
-The screenshots below are the tool window in Islands Light and Islands Dark. They are not a recording of that full demo.
+The screenshots below are the tool window in Islands Light and Islands Dark, from before the theme in the next section. They are not a recording of that full demo.
+
+The tool window follows the IDE theme. Cards, the section bar, status banners, and the key badge take their colors from the platform, so the same window is readable in light and dark. Ask, Files, Test, Commit, and Setup are rounded sections. The main action in a section is the platform default button. Empty Ask, Files, and Commit sections say what to do next. A running call, a saved key, a failure, and a successful write each use the platform banner color.
 
 ## Features
 
@@ -59,7 +61,7 @@ The tool window shows the bounded diff and the numbered messages. Message 1 is c
 
 ## Screenshots
 
-Taken in IntelliJ IDEA 2026.2.4 with the new UI. Islands Light is the light set. Islands Dark is the dark set. The previous single-form window was not re-shot, and there is no screenshot of the Commit section.
+Taken in IntelliJ IDEA 2026.2.4 with the new UI, before the theme above. Islands Light is the light set. Islands Dark is the dark set. The previous single-form window was not re-shot, and there is no screenshot of the Commit section. Headless paints of the themed window are not a substitute for these: icon glyphs do not draw without a window.
 
 Ask, Islands Light:
 
@@ -186,11 +188,17 @@ Among chunks that clear the half-coverage bar, Folio keeps those whose score is 
 | `cst3492.courseta.commit` | `CommitMessageAction`, `CommitDraft`, `CommitBox`, `GitDiffs` | Staged diff, three messages, commit box |
 | `cst3492.courseta.drill` | `CourseDrillAction`, `Drill` | Three questions about the selection |
 
-`FolioPanel` is the behaviour owner. `FolioChrome` is the Swing layout: cards, buttons, the spinner, and the section columns. `FolioToolWindowFactory` builds the panel and registers it in `FolioPanels`, one panel per project. Editor and VCS actions do not call the factory. They activate the Folio tool window, then take the panel from `FolioPanels`.
+`FolioPanel` is the behaviour owner. `FolioChrome` is the Swing layout: cards, the section bar, banners, buttons, and the empty states. Only `FolioPanel` uses it. `ScenarioDialog` is in another package and styles itself with the same platform colors. `FolioToolWindowFactory` builds the panel and registers it in `FolioPanels`, one panel per project. Editor and VCS actions do not call the factory. They activate the Folio tool window, then take the panel from `FolioPanels`.
 
 ### Components
 
-Indexing, Ask, test generation, and commit drafting hang off `FolioPanel`. That panel calls `CourseFileParser` for each chosen file. `CourseIndex` stores and scores the chunks. It does not parse files.
+Read the picture from the top, then left to right. UI is teal, services are blue, retrieval is orange, storage is tan, and the HTTP client is purple. The same colors flip for a dark page.
+
+`FolioToolWindowFactory` creates `FolioPanel` and registers it. Ask, drill, generate-test, and the commit action look the panel up in `FolioPanels`. Generate test also opens `ScenarioDialog`. The dialog does not call the panel. The action copies the scenario onto the panel after the dialog closes.
+
+`FolioPanel` calls the services under it. `Drill` calls `Asker`, and does not call HTTP itself. `Asker`, `TestDraft`, and `CommitDraft` call `HttpChatClient`. The panel fills `CommitBox` and reads `GitDiffs`. `CommitDraft` does neither.
+
+The panel parses files with `CourseFileParser`, which splits them through `CourseChunks`. `CourseIndex` stores and scores the chunks and asks `Tokens` for terms. It does not parse files. `Asker` calls `CourseIndex` as well. The index file is `folio/index.tsv` under the IDE config directory. The API key is Password Safe service `Folio/apiKey`. Base URL and model are `folio.xml` via `TaSettings`. The staged diff is `git diff --cached`.
 
 ![Folio components](docs/images/components.svg)
 
@@ -199,23 +207,40 @@ Indexing, Ask, test generation, and commit drafting hang off `FolioPanel`. That 
 
 ```mermaid
 flowchart TB
-  Factory[FolioToolWindowFactory] --> Panel[FolioPanel]
-  Editor[Editor and VCS actions] --> Panels[FolioPanels]
+  Factory[FolioToolWindowFactory] -->|creates| Panel[FolioPanel]
+  Factory -->|registers| Panels[FolioPanels]
+  AskDrill[AskAction and CourseDrillAction] --> Panels
+  Gen[GenerateTestAction] -->|opens| Dialog[ScenarioDialog]
+  CommitAct[CommitMessageAction] --> Panels
+  Gen --> Panels
   Panels --> Panel
   Panel --> Chrome[FolioChrome]
-  Panel --> Settings[TaSettings and Secrets]
-  Panel --> Index[CourseIndex]
-  Panel --> Parser[CourseFileParser]
+  Panel --> Drill
+  Drill --> Asker
   Panel --> Asker
   Panel --> Tests[TestDraft]
   Panel --> Commits[CommitDraft]
+  Panel --> Diffs[GitDiffs]
+  Panel --> Box[CommitBox]
+  Panel --> Settings[TaSettings]
+  Panel --> Secrets
+  Panel --> Parser[CourseFileParser]
   Parser --> Chunks[CourseChunks]
-  Index --> Tokens
+  Panel --> Index[CourseIndex]
   Asker --> Index
+  Index --> Tokens
   Asker --> Http[HttpChatClient]
   Tests --> Http
   Commits --> Http
-  Commits --> Box[CommitBox]
+  Index --> Tsv["folio/index.tsv"]
+  Secrets --> Safe["Password Safe Folio/apiKey"]
+  Settings --> Xml[folio.xml]
+  Diffs --> Git["git diff --cached"]
+  class Factory,AskDrill,Gen,CommitAct,Panels,Dialog,Panel,Chrome teal
+  class Drill,Asker,Tests,Commits,Diffs,Box,Settings,Secrets blue
+  class Parser,Chunks,Index,Tokens orange
+  class Tsv,Safe,Xml,Git tan
+  class Http purple
 ```
 
 </details>
@@ -226,11 +251,11 @@ The chart is the path a person walks, not three dials side by side. Read it from
 
 There are three places to start, drawn as arrows from the black dot. A fresh window starts at **No API key**. Opening the window again can start at **Key saved** or at **Files ready**, which is the saved key and the saved index. There is no restore arrow.
 
-**Setup** is tan: type a key, clear the field, or save it. **Ready** is where the saved key waits, with or without course files. From that box the four buttons diverge: **you click Ask**, **you click Preview test**, **you click Draft commit messages**, and **you index files**. Ask, Test, and Commit are separate boxes. **Finished** inside each box is an outcome. The arrow out of Finished is that same button again. **Preview shown** sits next to Finished because **you click Write test file** is a different step. **Preview failed** and **Not a test** are inside Finished and have no Write arrow.
+**Setup** is tan: type a key, clear the field, or save it. **Ready** is where the saved key waits, with or without course files. **Course files** holds **Indexing** and **Files ready, key not stored**. Index files does not need a key, so that last box is tan. From Ready the four buttons diverge: **you click Ask**, **you click Preview test**, **you click Draft commit messages**, and **you index files**. Ask, Test, and Commit are separate boxes. **Finished** inside each box is an outcome. The arrow out of Finished is that same button again. **Preview shown** sits next to Finished because **you click Write test file** is a different step. **Preview failed** and **Not a test** are inside Finished and have no Write arrow.
 
-Color is the phase. Tan is setup, before a key is saved. Orange is the spinner: indexing, asking, generating a preview, or drafting. Teal is a saved key, files ready, or a successful result. Pink is a failed ask, preview, or draft, or a reply that is not a test.
+Color is the phase. Tan is setup, before a key is saved, including files that were indexed with no stored key. Orange is the spinner: indexing, asking, generating a preview, or drafting. Teal is a saved key, files ready, or a successful result. Pink is a failed ask, preview, or draft, or a reply that is not a test.
 
-The checked rules are in `docs/statechart/FolioWindow.tla`. TLC reached 73 states and 348 steps and found no break. The chart draws 16 states and 21 arrows.
+The checked rules are in `docs/statechart/FolioWindow.tla`. TLC reached 102 states and 502 steps and found no break. The chart draws 17 states and 24 arrows. Twenty-one of those arrows are the saved-key path. The other three are indexing with no stored key: **you index files** from **No API key**, **indexing finishes** into **Files ready, key not stored**, and **you index files** again from that box.
 
 - The Ask, Preview, and Draft buttons are enabled exactly when a key is typed or stored.
 - A running call was started with a typed or stored key.
@@ -242,12 +267,16 @@ The chart hides steps that repeat a drawn arrow or that do not change the box yo
 
 - Empty Save, and Write again after the file is already written. The box does not change.
 - Remove a file. It enters Indexing the same way as indexing again.
-- Ask, Preview, and Draft while the key is typed but not saved. The buttons do turn on. The chart shows those clicks after Save, from Ready.
+- Ask, Preview, and Draft while the key is typed but not saved, including when files are already indexed. The buttons do turn on. The chart shows those clicks after Save, from Ready.
 - From a finished Ask, Test, or Commit, the other features' buttons, and indexing. The chart draws only the same button again.
 - From Preview shown, another Ask, Preview, or Draft. The drawn step is Write.
 - Clearing the key, clearing the field, or saving, when you do that from a result rather than from Setup or Key saved.
+- Saving a key that was only typed while files were already indexed. That reaches **Files ready**.
+- Indexing while a key is typed but not saved. The chart draws indexing from **No API key** and from a saved key.
+- An empty index when no key is stored. That returns to **No API key**, or to **Key typed, not saved** if a key was typed. The drawn empty-index arrow returns only to **Key saved**.
+- Typing a key while files are ready. The box stays **Files ready, key not stored**.
 
-The model runs one activity at a time. The panel's spinner is a busy counter, so two `run` calls can overlap and the spinner stays up until both finish. The model also leaves out the editor and VCS actions. They can still call the panel when the tool-window buttons are off. With no key they return the missing-key sentence and do not call HTTP, but the spinner still runs. It leaves out changing the key while a call is already running. Clear is only allowed at a hub. If it were allowed mid-call, `rest` would end the call, and TLC would not report it. The window lets that call finish. It leaves out indexing before a key is stored, cancelling a call, `showNote` (an empty scenario from the editor, or an index error), and the target directory. A reply that is not a test is a state. Write in the model assumes a directory is known. The panel also refuses when the editor action never set one. Clearing the key after files are indexed is left out. The window allows it, and the files stay. Starting Ask, Preview, or Draft clears the test transcript in the model. The panel keeps the previous preview on screen until that call returns. Chat cards and the wording of a commit message are not states. The chart's "message in the commit box" is only that the draft succeeded.
+The model runs one activity at a time. The panel's spinner is a busy counter, so two `run` calls can overlap and the spinner stays up until both finish. The model also leaves out the editor and VCS actions. They can still call the panel when the tool-window buttons are off. With no key they return the missing-key sentence and do not call HTTP, but the spinner still runs. It leaves out changing the key while a call is already running. Clear is only allowed at a hub. If it were allowed mid-call, `rest` would end the call, and TLC would not report it. The window lets that call finish. It leaves out cancelling a call, `showNote` (an empty scenario from the editor, or an index error), and the target directory. A reply that is not a test is a state. Write in the model assumes a directory is known. The panel also refuses when the editor action never set one. Clearing the key after files are indexed is left out. The window allows it, and the files stay. Starting Ask, Preview, or Draft clears the test transcript in the model. The panel keeps the previous preview on screen until that call returns. Chat cards and the wording of a commit message are not states. The chart's "message in the commit box" is only that the draft succeeded.
 
 ![Folio tool window](docs/statechart/chart.svg)
 
@@ -302,11 +331,13 @@ stateDiagram-v2
   }
   state "Course files" as s23 {
     s24: Indexing
+    s25: Files ready, key not stored
   }
   [*] --> s1
   [*] --> s4
   [*] --> s5
   s1 --> s2: you type an API key
+  s1 --> s24: you index files
   s4 --> s1: you clear the API key
   s7 --> s9: the model answers
   s7 --> s10: the ask fails
@@ -317,8 +348,10 @@ stateDiagram-v2
   s17 --> s19: the preview fails
   s17 --> s20: the reply is not a test
   s17 --> s22: the model shows a preview
+  s24 --> s25: indexing finishes
   s24 --> s4: the index is empty
   s24 --> s5: indexing finishes
+  s25 --> s24: you index files
   s22 --> s21: you click Write test file
   s3 --> s7: you click Ask
   s3 --> s12: you click Draft commit messages
@@ -343,11 +376,12 @@ stateDiagram-v2
   class s21 teal
   class s22 teal
   class s24 orange
+  class s25 tan
 ```
 
 </details>
 
-Source files: `docs/statechart/FolioWindow.tla`, `FolioWindow.cfg`, `view.mjs`, `chart.mmd`, and `chart.svg`. `view.mjs` supplies the labels, the groups, and the colors. `chart.mmd` is regenerated from the spec and that view with the statechart script (`scripts/statechart FolioWindow.tla --view view.mjs --out DIR`, with mise on `PATH`). `chart.svg` is that Mermaid rendered with pele 1.9.0 (`limit` 1000000, `outputLimit` 8000000, `maxEdges` 10000) and the statechart colors inlined. The component picture is `docs/images/components.svg`, rendered the same way.
+Source files: `docs/statechart/FolioWindow.tla`, `FolioWindow.cfg`, `view.mjs`, `chart.mmd`, and `chart.svg`. `view.mjs` supplies the labels, the groups, and the colors. `chart.mmd` is regenerated from the spec and that view with the statechart script (`scripts/statechart FolioWindow.tla --view view.mjs --out DIR`, with mise on `PATH`). `chart.svg` is that Mermaid rendered with pele 1.9.0 (`limit` 1000000, `outputLimit` 8000000, `maxEdges` 10000) and the statechart colors inlined. The component picture is `docs/images/components.svg`. It is the same graph as the mermaid above it, laid out by hand in those colors so the five layers read on a page. `classDef` is not used for the layer colors, because a `classDef` fill is painted as an inline style and a dark page cannot restyle it.
 
 ### Data flow for Ask
 
@@ -383,8 +417,8 @@ Anything that uses `FolioPanel.run` (Ask, drill, preview, commit draft, index, r
 
 ## Limitations and what was not verified
 
-- No live model call was made for this write-up. Citation chips were not clicked in a running IDE, and the commit box was not filled in a running IDE. The screenshots are from an earlier `runIde` session of this tool window.
-- There is no screenshot of Commit, and no dark screenshot of Files or Test.
+- No live model call was made for this write-up. Citation chips were not clicked in a running IDE, and the commit box was not filled in a running IDE. The Islands screenshots are from an earlier `runIde` session, before the theme. A headless paint of the themed panel exists for Ask, Files, Test, and Setup in light and dark. Icon glyphs do not draw in that paint.
+- There is no Islands screenshot of Commit, and no Islands dark screenshot of Files or Test.
 - The chat keeps every card. There is no clear button and no cap.
 - Ask, Preview, and Draft in the tool window are disabled with no key. The editor and VCS actions are not. They still open the tool window and call the panel. With no key, Ask, preview, and the commit draft return the missing-key sentence and do not call HTTP. The spinner still runs for that path and then stops.
 - **Write test file** turns on only when the last preview call succeeded and the reply contains `org.junit` or `class `. That check is only on the model reply. Failure text is shown as it is and does not enable Write, even when it contains those words. A reply that is not a test is shown with the note "The reply was not a JUnit test." and Write stays off. The no-directory sentence is a status line. It does not replace the preview, so it is not written.
@@ -408,14 +442,14 @@ docs/course-ta-plugin-plan.md
 
 ## Testing
 
-`./gradlew test buildPlugin` with JDK 25 completes successfully. The suite is **81 tests, 0 failures**.
+`./gradlew test buildPlugin` with JDK 25 completes successfully. The suite is **82 tests, 0 failures**.
 
 | Test class | Tests |
 | --- | ---: |
 | `CourseIndexTest` | 33 |
 | `HttpChatClientTest` | 10 |
 | `CommitMessageActionTest` | 9 |
-| `FolioPanelTest` | 9 |
+| `FolioPanelTest` | 10 |
 | `AskerTest` | 7 |
 | `CourseFileParserTest` | 7 |
 | `GenerateTestActionTest` | 3 |

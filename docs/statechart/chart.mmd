@@ -45,11 +45,13 @@ stateDiagram-v2
   }
   state "Course files" as s23 {
     s24: Indexing
+    s25: Files ready, key not stored
   }
   [*] --> s1
   [*] --> s4
   [*] --> s5
   s1 --> s2: you type an API key
+  s1 --> s24: you index files
   s4 --> s1: you clear the API key
   s7 --> s9: the model answers
   s7 --> s10: the ask fails
@@ -60,8 +62,10 @@ stateDiagram-v2
   s17 --> s19: the preview fails
   s17 --> s20: the reply is not a test
   s17 --> s22: the model shows a preview
+  s24 --> s25: indexing finishes
   s24 --> s4: the index is empty
   s24 --> s5: indexing finishes
+  s25 --> s24: you index files
   s22 --> s21: you click Write test file
   s3 --> s7: you click Ask
   s3 --> s12: you click Draft commit messages
@@ -86,3 +90,4 @@ stateDiagram-v2
   class s21 teal
   class s22 teal
   class s24 orange
+  class s25 tan
