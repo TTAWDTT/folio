@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="pele pele-flowchart" viewBox="0 0 854 672" width="854" height="672" style="max-width:100%;height:auto;--_bg:var(--pele-bg,#fff);--_fg:var(--pele-fg,#1f1f1f);--_m:var(--pele-muted,#6e6e6e);--_l:var(--pele-line,#1f1f1f);--_s:var(--pele-surface,#f3f3f3);--_a:var(--pele-surface-alt,#e6e6e6);--_b:var(--pele-border,#8a8a8a);--_c:var(--pele-accent,#5b7bd5);color:var(--_fg);--_r:var(--pele-radius,4px);--_fm:var(--pele-font-mono,monospace);font:16px sans-serif;letter-spacing:normal;word-spacing:normal;text-transform:none;direction:ltr;font-family:var(--pele-font,sans-serif)" fill="var(--_fg)" role="graphics-document document" aria-roledescription="flowchart"><style><![CDATA[
+.pele {
+  --pele-bg: #ffffff;
+  --pele-fg: #1c1c1c;
+  --pele-muted: #656565;
+  --pele-line: #808080;
+  --pele-surface: #fcfcfc;
+  --pele-surface-alt: #f1f1f1;
+  --pele-border: #c9c9c9;
+}
+.pele .blue rect { fill: #c3e0ff; }
+.pele .orange rect { fill: #f0d3bf; }
+.pele .purple rect { fill: #e3d5ff; }
+.pele .yellow rect { fill: #f0dcbf; }
+.pele .teal rect { fill: #bfe3df; }
+.pele .tan rect { fill: #e5d9ce; }
+.pele .pink rect { fill: #ffcbe6; }
+.pele .breaks rect {
+  fill: #ffecee !important;
+  stroke: #e72e3b !important;
+  stroke-width: 2.5px !important;
+}
+.pele .breaks text {
+  fill: #cd2834 !important;
+}
+.pele .mayBreak rect {
+  fill: #fff3e6 !important;
+  stroke: #e8730c !important;
+  stroke-width: 2.5px !important;
+}
+.pele .mayBreak text {
+  fill: #b85a06 !important;
+}
+.pele .bugPath rect {
+  stroke: #1680f3 !important;
+  stroke-width: 2.5px !important;
+}
+.pele .repeats rect {
+  stroke: #9b35d6 !important;
+  stroke-width: 2.5px !important;
+  stroke-dasharray: 6 3;
+}
+@media (prefers-color-scheme: dark) {
+  .pele {
+    --pele-bg: #1f1f1f;
+    --pele-fg: #f5f5f5;
+    --pele-muted: #acacac;
+    --pele-line: #939393;
+    --pele-surface: #121212;
+    --pele-surface-alt: #2c2c2c;
+    --pele-border: #4e4e4e;
+  }
+  .pele .blue rect { fill: #1b3857; }
+  .pele .orange rect { fill: #573117; }
+  .pele .purple rect { fill: #3c2e57; }
+  .pele .yellow rect { fill: #573d17; }
+  .pele .teal rect { fill: #174641; }
+  .pele .tan rect { fill: #3d3127; }
+  .pele .pink rect { fill: #57233e; }
+  .pele .breaks rect {
+    fill: #2e2021 !important;
+    stroke: #cf2b35 !important;
+  }
+  .pele .breaks text {
+    fill: #ff6463 !important;
+  }
+  .pele .mayBreak rect {
+    fill: #2e2619 !important;
+    stroke: #d0700f !important;
+  }
+  .pele .mayBreak text {
+    fill: #ffa257 !important;
+  }
+  .pele .bugPath rect {
+    stroke: #116dd2 !important;
+  }
+  .pele .repeats rect {
+    stroke: #9a3fcf !important;
+  }
+}
+]]></style><g class="pele-edges" fill="none" stroke="var(--_l)" stroke-linecap="round"><g class="pele-edge" data-id="L_Editor_Factory_0"><path d="M439.1,56L439.1,97"/><path class="pele-marker" d="M439.1,104L435.74,96L442.46,96Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge" data-id="L_Factory_Panel_0"><path d="M439.1,152L439.1,193"/><path class="pele-marker" d="M439.1,200L435.74,192L442.46,192Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge" data-id="L_Panel_Chrome_0"><path d="M399.47,248C399.47,265.36 337.21,276 235.63,276C134.04,276 71.78,290.82 71.78,315L71.78,321"/><path class="pele-marker" d="M71.78,328L68.42,320L75.14,320Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge" data-id="L_Panel_Settings_0"><path d="M415.47,248C415.47,272.8 389.11,288 346.09,288C303.08,288 276.72,298.26 276.72,315L276.72,321"/><path class="pele-marker" d="M276.72,328L273.36,320L280.08,320Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge" data-id="L_Panel_Index_0"><path d="M431.47,248L431.47,288C431.47,308 406.99,308 406.99,328L406.99,417"/><path class="pele-marker" d="M406.99,424L403.63,416L410.35,416Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge" data-id="L_Panel_Asker_0"><path d="M447.47,248L447.47,288C447.47,301.5 473.49,301.5 473.49,315L473.49,321"/><path class="pele-marker" d="M473.49,328L470.13,320L476.85,320Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge" data-id="L_Panel_Tests_0"><path d="M463.47,248C463.47,272.8 492.6,288 540.13,288C587.66,288 616.79,298.26 616.79,315L616.79,321"/><path class="pele-marker" d="M616.79,328L613.43,320L620.15,320Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge" data-id="L_Panel_Commits_0"><path d="M479.47,248C479.47,265.36 536.22,276 628.81,276C721.4,276 778.14,290.82 778.14,315L778.14,321"/><path class="pele-marker" d="M778.14,328L774.78,320L781.5,320Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge" data-id="L_Index_Parser_0"><path d="M424.86,472C424.86,489.5 352.86,489.5 352.86,507L352.86,513"/><path class="pele-marker" d="M352.86,520L349.5,512L356.22,512Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge" data-id="L_Parser_Chunks_0"><path d="M352.86,568L352.86,609"/><path class="pele-marker" d="M352.86,616L349.5,608L356.22,608Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge" data-id="L_Index_Tokens_0"><path d="M447.56,472C447.56,489.5 517.33,489.5 517.33,507L517.33,513"/><path class="pele-marker" d="M517.33,520L513.97,512L520.69,512Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge" data-id="L_Asker_Index_0"><path d="M457.54,376L457.54,417"/><path class="pele-marker" d="M457.54,424L454.18,416L460.9,416Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge" data-id="L_Asker_Http_0"><path d="M473.54,376C473.54,393.5 598.78,393.5 598.78,411L598.78,417"/><path class="pele-marker" d="M598.78,424L595.42,416L602.14,416Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge" data-id="L_Tests_Http_0"><path d="M616.79,376L616.79,417"/><path class="pele-marker" d="M616.79,424L613.43,416L620.15,416Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge" data-id="L_Commits_Http_0"><path d="M767.26,376C767.26,393.5 634.81,393.5 634.81,411L634.81,417"/><path class="pele-marker" d="M634.81,424L631.45,416L638.17,416Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge" data-id="L_Commits_Box_0"><path d="M786.14,376L786.14,417"/><path class="pele-marker" d="M786.14,424L782.78,416L789.5,416Z" fill="var(--_l)" stroke="none"/></g></g><g class="pele-nodes"><g class="pele-node pele-shape-rect" data-id="Editor" transform="translate(439.1,32)"><rect x="-100.7" y="-24" width="201.41" height="48" fill="var(--_s)" stroke="var(--_b)" style="rx:var(--_r)"/><text class="pele-label" x="0" y="5.6" text-anchor="middle">Editor and VCS actions</text></g><g class="pele-node pele-shape-rect" data-id="Factory" transform="translate(439.1,128)"><rect x="-106.02" y="-24" width="212.03" height="48" fill="var(--_s)" stroke="var(--_b)" style="rx:var(--_r)"/><text class="pele-label" x="0" y="5.6" text-anchor="middle">FolioToolWindowFactory</text></g><g class="pele-node pele-shape-rect" data-id="Panel" transform="translate(439.1,224)"><rect x="-55.79" y="-24" width="111.58" height="48" fill="var(--_s)" stroke="var(--_b)" style="rx:var(--_r)"/><text class="pele-label" x="0" y="5.6" text-anchor="middle">FolioPanel</text></g><g class="pele-node pele-shape-rect" data-id="Chrome" transform="translate(71.78,352)"><rect x="-63.78" y="-24" width="127.57" height="48" fill="var(--_s)" stroke="var(--_b)" style="rx:var(--_r)"/><text class="pele-label" x="0" y="5.6" text-anchor="middle">FolioChrome</text></g><g class="pele-node pele-shape-rect" data-id="Settings" transform="translate(276.72,352)"><rect x="-101.15" y="-24" width="202.3" height="48" fill="var(--_s)" stroke="var(--_b)" style="rx:var(--_r)"/><text class="pele-label" x="0" y="5.6" text-anchor="middle">TaSettings and Secrets</text></g><g class="pele-node pele-shape-rect" data-id="Index" transform="translate(436.21,448)"><rect x="-63.35" y="-24" width="126.7" height="48" fill="var(--_s)" stroke="var(--_b)" style="rx:var(--_r)"/><text class="pele-label" x="0" y="5.6" text-anchor="middle">CourseIndex</text></g><g class="pele-node pele-shape-rect" data-id="Asker" transform="translate(473.49,352)"><rect x="-38.45" y="-24" width="76.9" height="48" fill="var(--_s)" stroke="var(--_b)" style="rx:var(--_r)"/><text class="pele-label" x="0" y="5.6" text-anchor="middle">Asker</text></g><g class="pele-node pele-shape-rect" data-id="Tests" transform="translate(616.79,352)"><rect x="-50.9" y="-24" width="101.79" height="48" fill="var(--_s)" stroke="var(--_b)" style="rx:var(--_r)"/><text class="pele-label" x="0" y="5.6" text-anchor="middle">TestDraft</text></g><g class="pele-node pele-shape-rect" data-id="Commits" transform="translate(778.14,352)"><rect x="-62.89" y="-24" width="125.78" height="48" fill="var(--_s)" stroke="var(--_b)" style="rx:var(--_r)"/><text class="pele-label" x="0" y="5.6" text-anchor="middle">CommitDraft</text></g><g class="pele-node pele-shape-rect" data-id="Parser" transform="translate(352.86,544)"><rect x="-80.23" y="-24" width="160.46" height="48" fill="var(--_s)" stroke="var(--_b)" style="rx:var(--_r)"/><text class="pele-label" x="0" y="5.6" text-anchor="middle">CourseFileParser</text></g><g class="pele-node pele-shape-rect" data-id="Chunks" transform="translate(352.86,640)"><rect x="-70.9" y="-24" width="141.81" height="48" fill="var(--_s)" stroke="var(--_b)" style="rx:var(--_r)"/><text class="pele-label" x="0" y="5.6" text-anchor="middle">CourseChunks</text></g><g class="pele-node pele-shape-rect" data-id="Tokens" transform="translate(517.33,544)"><rect x="-44.23" y="-24" width="88.46" height="48" fill="var(--_s)" stroke="var(--_b)" style="rx:var(--_r)"/><text class="pele-label" x="0" y="5.6" text-anchor="middle">Tokens</text></g><g class="pele-node pele-shape-rect" data-id="Http" transform="translate(616.79,448)"><rect x="-70.02" y="-24" width="140.03" height="48" fill="var(--_s)" stroke="var(--_b)" style="rx:var(--_r)"/><text class="pele-label" x="0" y="5.6" text-anchor="middle">HttpChatClient</text></g><g class="pele-node pele-shape-rect" data-id="Box" transform="translate(786.14,448)"><rect x="-59.34" y="-24" width="118.67" height="48" fill="var(--_s)" stroke="var(--_b)" style="rx:var(--_r)"/><text class="pele-label" x="0" y="5.6" text-anchor="middle">CommitBox</text></g></g></svg>

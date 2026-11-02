@@ -190,93 +190,160 @@ Among chunks that clear the half-coverage bar, Folio keeps those whose score is 
 
 ### Components
 
+The tool window owns the panel. Indexing, Ask, test generation, and commit drafting hang off that panel, and the editor actions call the same panel.
+
+![Folio components](docs/images/components.svg)
+
+<details>
+<summary>Component diagram source</summary>
+
 ```mermaid
-flowchart LR
-  subgraph window [Tool window]
-    Factory[FolioToolWindowFactory]
-    Panel[FolioPanel]
-    Chrome[FolioChrome]
-  end
-  Factory --> Panel
-  Panel --> Chrome
+flowchart TB
+  Editor[Editor and VCS actions] --> Factory[FolioToolWindowFactory]
+  Factory --> Panel[FolioPanel]
+  Panel --> Chrome[FolioChrome]
   Panel --> Settings[TaSettings and Secrets]
   Panel --> Index[CourseIndex]
-  Panel --> Parser[CourseFileParser]
-  Parser --> Chunks[CourseChunks]
-  Index --> Tokens[Tokens]
   Panel --> Asker
+  Panel --> Tests[TestDraft]
+  Panel --> Commits[CommitDraft]
+  Index --> Parser[CourseFileParser]
+  Parser --> Chunks[CourseChunks]
+  Index --> Tokens
   Asker --> Index
   Asker --> Http[HttpChatClient]
-  Panel --> Tests[TestDraft]
   Tests --> Http
-  Panel --> Commits[CommitDraft]
   Commits --> Http
   Commits --> Box[CommitBox]
-  Editor[Editor and VCS actions] --> Panel
 ```
+
+</details>
 
 ### Tool-window statechart
 
-The chart is the lifecycle a person sees: the API key, the course files, and a model call, side by side. Ask, Preview test, and Draft commit stay off while the badge is **No API key**. Indexing and a model call share the spinner in this chart, and only one of them runs at a time. **Indexing** and **Working** are the states where the spinner is showing.
+The chart is the path a person walks, not three dials side by side. Read it from the top.
 
-The checked rules are in `docs/statechart/FolioWindow.tla`. TLC found no break: the three LLM buttons match the key, a running call was started with a typed or stored key, the spinner is on exactly while a call or indexing is in progress, an empty Save does not drop a stored key, and Write copies the transcript only after the last preview succeeded, so a failed preview's error text is not the test file.
+There are three places to start, drawn as arrows from the black dot. A fresh window starts at **No API key**. Opening the window again can start at **Key saved** or at **Files ready**, which is the saved key and the saved index. There is no restore arrow.
 
-The chart draws the API key, the course files, and the model call. It does not draw empty Save or Write test file, because those steps stay inside one chart state. Both are still in the spec. The model also leaves out the editor and VCS actions (they can still call the panel when the buttons are off; with no key they return the missing-key sentence and do not call HTTP, but the spinner still runs), overlapping `run` calls (the real spinner is a counter), clearing or typing over a key while a call is already running (the model keeps the key until the call ends; the window lets you edit it and the in-flight call still finishes), chat cards, citation chips, and the commit box, and whether indexing finds files (it may finish ready or empty). The target directory is not a variable: Write in the model assumes one is known, and the panel separately refuses when the editor action never set one. `showNote` clears the success flag in the panel and is not a step here. Ask and Draft share one purpose, because neither writes the test transcript.
+**Setup** is tan: type a key, clear the field, or save it. **Ready** is where the saved key waits, with or without course files. From that box the four buttons diverge: **you click Ask**, **you click Preview test**, **you click Draft commit messages**, and **you index files**. Ask, Test, and Commit are separate boxes. **Finished** inside each box is an outcome. The arrow out of Finished is that same button again. **Preview shown** sits next to Finished because **you click Write test file** is a different step. **Preview failed** is inside Finished and has no Write arrow.
+
+Color is the phase. Tan is setup, before a key is saved. Orange is the spinner: indexing, asking, generating a preview, or drafting. Teal is a saved key, files ready, or a successful result. Pink is a failed ask, preview, or draft.
+
+The checked rules are in `docs/statechart/FolioWindow.tla`. TLC reached 67 states and 308 steps and found no break. The chart draws 15 states and 20 arrows.
+
+- The Ask, Preview, and Draft buttons are enabled exactly when a key is typed or stored.
+- A running call was started with a typed or stored key.
+- The spinner is on exactly while a call or indexing is in progress.
+- An empty Save does not drop a stored key.
+- Write copies the transcript only after the last preview succeeded, so a failed preview is not the test file.
+
+The chart hides steps that repeat a drawn arrow or that do not change the box you are looking at. They are still in the spec.
+
+- Empty Save, and Write again after the file is already written. The box does not change.
+- Remove a file. It enters Indexing the same way as indexing again.
+- Ask, Preview, and Draft while the key is typed but not saved. The buttons do turn on. The chart shows those clicks after Save, from Ready.
+- From a finished Ask, Test, or Commit, the other features' buttons, and indexing. The chart draws only the same button again.
+- From Preview shown, another Ask, Preview, or Draft. The drawn step is Write.
+- Clearing the key, clearing the field, or saving, when you do that from a result rather than from Setup or Key saved.
+
+The model also leaves out the editor and VCS actions. They can still call the panel when the tool-window buttons are off. With no key they return the missing-key sentence and do not call HTTP, but the spinner still runs. It leaves out overlapping `run` calls, changing the key while a call is already running, indexing before a key is stored, cancelling a call, `showNote`, and the target directory. Write in the model assumes a directory is known. The panel also refuses when the editor action never set one. Clearing the key after files are indexed is left out. The window allows it, and the files stay. Starting Ask, Preview, or Draft clears the test transcript in the model. The panel keeps the previous preview on screen until that call returns. Chat cards and the wording of a commit message are not states. The chart's "message in the commit box" is only that the draft succeeded.
+
+![Folio tool window](docs/statechart/chart.svg)
+
+<details>
+<summary>Statechart source</summary>
 
 ```mermaid
 ---
 title: "Folio tool window"
 ---
 stateDiagram-v2
-  direction LR
   state "Legend" as legend {
-    lg0: Working
+    lg0: Setup
+    lg1: Working
+    lg2: Ready
+    lg3: Error
   }
-  class lg0 orange
-  state "At the same time" as all {
-    state "API key" as r0 {
-      s0: No API key
-      s1: Key typed, not saved
-      s2: Key ready
-      [*] --> s0
-      s0 --> s1: you type an API key
-      s0 --> s2: the window restores a saved key or the window restores a saved key and indexed files [when Course files is No files and Model call is Idle]
-      s1 --> s0: you clear the field [when Model call is not Working]
-      s1 --> s2: you save settings
-      s2 --> s0: you clear the API key [when Model call is not Working]
-    }
-    --
-    state "Course files" as r1 {
-      s3: No files
-      s4: Indexing
-      s5: Files ready
-      [*] --> s3
-      s3 --> s4: you index files [when Model call is not Working]
-      s3 --> s5: the window restores indexed files or the window restores a saved key and indexed files [when API key is No API key and Model call is Idle]
-      s4 --> s3: the index is empty
-      s4 --> s5: indexing finishes
-      s5 --> s4: you index files or you remove a file [when Model call is not Working]
-    }
-    --
-    state "Model call" as r2 {
-      s6: Idle
-      s7: Working
-      s8: Answered
-      s9: Failed
-      [*] --> s6
-      s6 --> s7: you ask, preview, or draft [when API key is not No API key and Course files is not Indexing]
-      s7 --> s6: the call is canceled
-      s7 --> s8: the model answers
-      s7 --> s9: the call fails
-      s8 --> s7: you ask, preview, or draft [when API key is not No API key and Course files is not Indexing]
-      s9 --> s7: you ask, preview, or draft [when API key is not No API key and Course files is not Indexing]
+  class lg0 tan
+  class lg1 orange
+  class lg2 teal
+  class lg3 pink
+  state "Setup" as s0 {
+    s1: No API key
+    s2: Key typed, not saved
+  }
+  state "Ready" as s3 {
+    s4: Key saved
+    s5: Files ready
+  }
+  state "Ask" as s6 {
+    s7: Asking
+    state "Finished" as s8 {
+      s9: Answer with citations
+      s10: The ask failed
     }
   }
-  class s4 orange
+  state "Commit" as s11 {
+    s12: Drafting a message
+    state "Finished" as s13 {
+      s14: The draft failed
+      s15: Message in the commit box
+    }
+  }
+  state "Test" as s16 {
+    s17: Generating the preview
+    state "Finished" as s18 {
+      s19: Preview failed
+      s20: Test file written
+    }
+    s21: Preview shown
+  }
+  state "Course files" as s22 {
+    s23: Indexing
+  }
+  [*] --> s1
+  [*] --> s4
+  [*] --> s5
+  s1 --> s2: you type an API key
+  s4 --> s1: you clear the API key
+  s7 --> s9: the model answers
+  s7 --> s10: the ask fails
+  s12 --> s14: the draft fails
+  s12 --> s15: the message is in the commit box
+  s2 --> s1: you clear the field
+  s2 --> s4: you save settings
+  s17 --> s19: the preview fails
+  s17 --> s21: the model shows a preview
+  s23 --> s4: the index is empty
+  s23 --> s5: indexing finishes
+  s21 --> s20: you click Write test file
+  s3 --> s7: you click Ask
+  s3 --> s12: you click Draft commit messages
+  s3 --> s17: you click Preview test
+  s3 --> s23: you index files
+  s8 --> s7: you click Ask
+  s13 --> s12: you click Draft commit messages
+  s18 --> s17: you click Preview test
+  class s1 tan
+  class s2 tan
+  class s4 teal
+  class s5 teal
   class s7 orange
+  class s9 teal
+  class s10 pink
+  class s12 orange
+  class s14 pink
+  class s15 teal
+  class s17 orange
+  class s19 pink
+  class s20 teal
+  class s21 teal
+  class s23 orange
 ```
 
-Source files: `docs/statechart/FolioWindow.tla`, `FolioWindow.cfg`, `view.mjs`, and `chart.mmd`.
+</details>
+
+Source files: `docs/statechart/FolioWindow.tla`, `FolioWindow.cfg`, `view.mjs`, `chart.mmd`, and `chart.svg`. The component picture is `docs/images/components.svg`.
 
 ### Data flow for Ask
 
@@ -330,8 +397,8 @@ build.gradle.kts          Java 25, IntelliJ 2026.2.4, Tika, POI, Gson
 src/main/java/            plugin sources, packages above
 src/main/resources/       plugin.xml and the tool-window icons
 src/test/java/            JUnit 5
-docs/images/              Islands Light and Dark screenshots
-docs/statechart/          TLA+ spec, TLC config, view, chart.mmd
+docs/images/              Islands screenshots and the component diagram
+docs/statechart/          TLA+ spec, TLC config, view, chart.mmd, chart.svg
 docs/course-ta-plugin-plan.md
 ```
 

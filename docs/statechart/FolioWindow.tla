@@ -1,45 +1,57 @@
 ---- MODULE FolioWindow ----
-\* Folio tool window, as the user sees it.
-\* One activity at a time: indexing and a model call do not overlap.
-\* The editor and VCS actions are not in this model. They can still call the panel
-\* when the tool-window buttons are disabled.
-\* A key is not cleared while a call is running. The window does allow that; the
-\* in-flight call still finishes. Keeping the key lets CallNeedsKey mean
-\* "this call was started with a key" and fail when StartCall loses its guard.
+\* Folio tool window as a path the user walks.
+\* Setup, then course files, then Ask, Test, and Commit as separate steps.
+\* One activity at a time. Editor and VCS actions are not in this model.
+\* A key is not cleared while a call is running. The window does allow that;
+\* the in-flight call still finishes. Keeping the key lets CallNeedsKey fail
+\* when the call guard is removed.
+\* Indexing here starts only after a key is stored. The Index files button
+\* does not need a key; that path is left out.
+\* Starting Ask, Preview, or Draft clears the test transcript. The panel
+\* keeps the last preview on screen until the next preview replaces it.
+\* Cancelling a call is left out.
 
 VARIABLES
+  screen,     \* where the user is in the story
   key,        \* "none" | "typed" | "stored"
   index,      \* "empty" | "indexing" | "ready"
-  call,       \* "idle" | "running" | "answered" | "failed"
   secret,     \* TRUE when PasswordSafe holds a key
   spinning,   \* TRUE while the footer spinner is showing
   llmButtons, \* TRUE when Ask, Preview test, and Draft commit are enabled
-  preview,    \* "empty" | "test" | "error"  (what the Test transcript shows)
-  previewOk,  \* TRUE only after the last preview call returned a test
-  written,    \* "empty" | "test" | "error"  (the file Write last copied)
-  purpose,    \* "ask" | "preview"  (ask covers Ask and Draft; neither writes the transcript)
-  opened      \* TRUE after the first action, so restore runs only at open
+  call,       \* "idle" | "running" | "answered" | "failed"
+  purpose,    \* "idle" | "ask" | "preview" | "draft"
+  preview,    \* "empty" | "test" | "error"  (the Test transcript)
+  previewOk,  \* TRUE only after the last preview returned a test
+  written     \* "empty" | "test" | "error"  (the file Write last copied)
 
-vars == <<key, index, call, secret, spinning, llmButtons, preview, previewOk, written, purpose, opened>>
+vars == <<screen, key, index, secret, spinning, llmButtons, call, purpose, preview, previewOk, written>>
 
+Screens == {
+  "noKey", "typed", "saved",
+  "filesNoKey", "typedFiles", "savedFiles",
+  "indexing",
+  "asking", "askCited", "askFailed",
+  "generating", "previewShown", "previewFailed", "writtenFile",
+  "drafting", "commitPlaced", "commitFailed"
+  }
 Keys == {"none", "typed", "stored"}
 Indexes == {"empty", "indexing", "ready"}
 Calls == {"idle", "running", "answered", "failed"}
+Purposes == {"idle", "ask", "preview", "draft"}
 Texts == {"empty", "test", "error"}
-Purposes == {"ask", "preview"}
 
 TypeOK ==
+  /\ screen \in Screens
   /\ key \in Keys
   /\ index \in Indexes
-  /\ call \in Calls
   /\ secret \in BOOLEAN
   /\ spinning \in BOOLEAN
   /\ llmButtons \in BOOLEAN
+  /\ call \in Calls
+  /\ purpose \in Purposes
   /\ preview \in Texts
   /\ previewOk \in BOOLEAN
   /\ written \in Texts
-  /\ purpose \in Purposes
-  /\ opened \in BOOLEAN
 
 \* Ask, Preview test, and Draft commit are enabled exactly when a key is typed or stored.
 LlmButtonsNeedKey == llmButtons <=> (key # "none")
@@ -57,175 +69,194 @@ EmptySaveKeepsKey == secret <=> (key = "stored")
 \* file is never the error text a failed preview left behind.
 WriteMatchesPreview == written \in {"empty", "test"}
 
-\* `purpose` is "preview" only while that call is running.
-PurposeOnlyWhileRunning == purpose = "ask" \/ call = "running"
+\* A feature purpose is set only while that call is running.
+PurposeOnlyWhileRunning == purpose = "idle" \/ call = "running"
 
-idle == call # "running" /\ index # "indexing"
+atHub == screen \in {
+  "noKey", "typed", "saved",
+  "filesNoKey", "typedFiles", "savedFiles",
+  "askCited", "askFailed",
+  "previewShown", "previewFailed", "writtenFile",
+  "commitPlaced", "commitFailed"
+  }
 
-Init ==
-  /\ key = "none"
-  /\ index = "empty"
+\* The guard a mutation removes. Ask, Preview, and Draft all use it.
+MayCall == key # "none" /\ atHub
+
+rest ==
+  /\ call' = "idle"
+  /\ purpose' = "idle"
+  /\ spinning' = FALSE
+  /\ preview' = "empty"
+  /\ previewOk' = FALSE
+
+hub(k, ix) ==
+  CASE k = "none" /\ ix = "empty" -> "noKey"
+    [] k = "typed" /\ ix = "empty" -> "typed"
+    [] k = "stored" /\ ix = "empty" -> "saved"
+    [] k = "none" /\ ix = "ready" -> "filesNoKey"
+    [] k = "typed" /\ ix = "ready" -> "typedFiles"
+    [] OTHER -> "savedFiles"
+
+base ==
   /\ call = "idle"
-  /\ secret = FALSE
+  /\ purpose = "idle"
   /\ spinning = FALSE
-  /\ llmButtons = FALSE
   /\ preview = "empty"
   /\ previewOk = FALSE
   /\ written = "empty"
-  /\ purpose = "ask"
-  /\ opened = FALSE
+
+Init ==
+  \/ /\ screen = "noKey" /\ key = "none" /\ index = "empty"
+     /\ secret = FALSE /\ llmButtons = FALSE /\ base
+  \/ /\ screen = "saved" /\ key = "stored" /\ index = "empty"
+     /\ secret = TRUE /\ llmButtons = TRUE /\ base
+  \/ /\ screen = "savedFiles" /\ key = "stored" /\ index = "ready"
+     /\ secret = TRUE /\ llmButtons = TRUE /\ base
 
 YouTypeKey ==
   /\ key = "none"
+  /\ atHub
   /\ key' = "typed"
   /\ llmButtons' = TRUE
-  /\ opened' = TRUE
-  /\ UNCHANGED <<index, call, secret, spinning, preview, previewOk, written, purpose>>
+  /\ screen' = hub("typed", index)
+  /\ rest
+  /\ UNCHANGED <<index, secret, written>>
 
 YouEraseTypedKey ==
-  /\ call # "running"
   /\ key = "typed"
+  /\ index = "empty"
+  /\ atHub
   /\ key' = "none"
   /\ llmButtons' = FALSE
-  /\ opened' = TRUE
-  /\ UNCHANGED <<index, call, secret, spinning, preview, previewOk, written, purpose>>
+  /\ secret' = FALSE
+  /\ screen' = "noKey"
+  /\ rest
+  /\ UNCHANGED <<index, written>>
 
 YouSaveKey ==
   /\ key = "typed"
+  /\ atHub
   /\ key' = "stored"
   /\ secret' = TRUE
   /\ llmButtons' = TRUE
-  /\ opened' = TRUE
-  /\ UNCHANGED <<index, call, spinning, preview, previewOk, written, purpose>>
+  /\ screen' = hub("stored", index)
+  /\ rest
+  /\ UNCHANGED <<index, written>>
 
 \* The field is empty. The stored key is left as it is.
 YouSaveEmpty ==
   /\ key \in {"none", "stored"}
+  /\ atHub
   /\ secret' = secret
-  /\ opened' = TRUE
-  /\ UNCHANGED <<key, index, call, spinning, llmButtons, preview, previewOk, written, purpose>>
+  /\ UNCHANGED <<screen, key, index, spinning, llmButtons, call, purpose, preview, previewOk, written>>
 
+\* Clearing a stored key with no indexed files returns to No API key.
+\* The model does not clear the key once files are ready; the window does,
+\* and the indexed files stay.
 YouClearKey ==
-  /\ call # "running"
   /\ key = "stored"
+  /\ index = "empty"
+  /\ atHub
   /\ key' = "none"
   /\ secret' = FALSE
   /\ llmButtons' = FALSE
-  /\ opened' = TRUE
-  /\ UNCHANGED <<index, call, spinning, preview, previewOk, written, purpose>>
+  /\ screen' = "noKey"
+  /\ rest
+  /\ UNCHANGED <<index, written>>
 
 YouIndexFiles ==
-  /\ idle
+  /\ key = "stored"
+  /\ atHub
   /\ index \in {"empty", "ready"}
+  /\ screen' = "indexing"
   /\ index' = "indexing"
   /\ spinning' = TRUE
-  /\ opened' = TRUE
-  /\ UNCHANGED <<key, call, secret, llmButtons, preview, previewOk, written, purpose>>
+  /\ call' = "idle"
+  /\ purpose' = "idle"
+  /\ preview' = "empty"
+  /\ previewOk' = FALSE
+  /\ UNCHANGED <<key, secret, llmButtons, written>>
 
 YouRemoveFile ==
-  /\ idle
+  /\ key = "stored"
+  /\ atHub
   /\ index = "ready"
+  /\ screen' = "indexing"
   /\ index' = "indexing"
   /\ spinning' = TRUE
-  /\ opened' = TRUE
-  /\ UNCHANGED <<key, call, secret, llmButtons, preview, previewOk, written, purpose>>
+  /\ call' = "idle"
+  /\ purpose' = "idle"
+  /\ preview' = "empty"
+  /\ previewOk' = FALSE
+  /\ UNCHANGED <<key, secret, llmButtons, written>>
 
 IndexingFinishes ==
-  /\ index = "indexing"
+  /\ screen = "indexing"
   /\ index' = "ready"
   /\ spinning' = FALSE
-  /\ opened' = TRUE
-  /\ UNCHANGED <<key, call, secret, llmButtons, preview, previewOk, written, purpose>>
+  /\ screen' = hub(key, "ready")
+  /\ UNCHANGED <<key, secret, llmButtons, call, purpose, preview, previewOk, written>>
 
 IndexingFindsNothing ==
-  /\ index = "indexing"
+  /\ screen = "indexing"
   /\ index' = "empty"
   /\ spinning' = FALSE
-  /\ opened' = TRUE
-  /\ UNCHANGED <<key, call, secret, llmButtons, preview, previewOk, written, purpose>>
+  /\ screen' = hub(key, "empty")
+  /\ UNCHANGED <<key, secret, llmButtons, call, purpose, preview, previewOk, written>>
 
-\* Starting a preview clears the success flag immediately. The old transcript
-\* stays until the call returns, and Write is off while the flag is off.
-StartCall(nextPurpose) ==
-  /\ key # "none"
-  /\ idle
-  /\ call' = "running"
+BeginCall(nextScreen, nextPurpose) ==
+  /\ MayCall
+  /\ screen' = nextScreen
   /\ purpose' = nextPurpose
+  /\ call' = "running"
   /\ spinning' = TRUE
-  /\ previewOk' = IF nextPurpose = "preview" THEN FALSE ELSE previewOk
-  /\ opened' = TRUE
-  /\ UNCHANGED <<key, index, secret, llmButtons, preview, written>>
+  /\ preview' = "empty"
+  /\ previewOk' = FALSE
+  /\ UNCHANGED <<key, index, secret, llmButtons, written>>
 
-YouAsk == StartCall("ask")
-YouDraft == StartCall("ask")
-YouPreview == StartCall("preview")
+YouAsk == BeginCall("asking", "ask")
+YouPreview == BeginCall("generating", "preview")
+YouDraft == BeginCall("drafting", "draft")
 
 TheCallAnswers ==
   /\ call = "running"
   /\ call' = "answered"
-  /\ preview' = IF purpose = "preview" THEN "test" ELSE preview
-  /\ previewOk' = IF purpose = "preview" THEN TRUE ELSE previewOk
-  /\ purpose' = "ask"
+  /\ purpose' = "idle"
   /\ spinning' = FALSE
-  /\ opened' = TRUE
+  /\ screen' = CASE purpose = "ask" -> "askCited"
+                 [] purpose = "preview" -> "previewShown"
+                 [] OTHER -> "commitPlaced"
+  /\ preview' = IF purpose = "preview" THEN "test" ELSE "empty"
+  /\ previewOk' = (purpose = "preview")
   /\ UNCHANGED <<key, index, secret, llmButtons, written>>
 
 \* A failed preview leaves error text in the transcript and clears the success flag.
-\* Ask and Draft do not touch the test transcript.
+\* Ask and Draft do not leave a test in the transcript.
 TheCallFails ==
   /\ call = "running"
   /\ call' = "failed"
-  /\ preview' = IF purpose = "preview" THEN "error" ELSE preview
-  /\ previewOk' = IF purpose = "preview" THEN FALSE ELSE previewOk
-  /\ purpose' = "ask"
+  /\ purpose' = "idle"
   /\ spinning' = FALSE
-  /\ opened' = TRUE
+  /\ screen' = CASE purpose = "ask" -> "askFailed"
+                 [] purpose = "preview" -> "previewFailed"
+                 [] OTHER -> "commitFailed"
+  /\ preview' = IF purpose = "preview" THEN "error" ELSE "empty"
+  /\ previewOk' = FALSE
   /\ UNCHANGED <<key, index, secret, llmButtons, written>>
 
-YouCancelCall ==
-  /\ call = "running"
-  /\ call' = "idle"
-  /\ purpose' = "ask"
-  /\ spinning' = FALSE
-  /\ opened' = TRUE
-  /\ UNCHANGED <<key, index, secret, llmButtons, preview, previewOk, written>>
-
 \* Write copies whatever the transcript currently shows. The only guard is that
-\* the last preview succeeded. Removing it lets a failed preview be saved.
+\* the last preview succeeded. The failed-preview screen is included so that
+\* removing the guard lets error text be saved.
 YouWrite ==
+  /\ screen \in {"previewShown", "previewFailed", "writtenFile"}
   /\ previewOk
   /\ written' = preview
-  /\ opened' = TRUE
-  /\ UNCHANGED <<key, index, call, secret, spinning, llmButtons, preview, previewOk, purpose>>
-
-atOpen ==
-  /\ opened = FALSE
-  /\ key = "none"
-  /\ index = "empty"
-  /\ call = "idle"
-
-RestoreKey ==
-  /\ atOpen
-  /\ key' = "stored"
-  /\ secret' = TRUE
-  /\ llmButtons' = TRUE
-  /\ opened' = TRUE
-  /\ UNCHANGED <<index, call, spinning, preview, previewOk, written, purpose>>
-
-RestoreFiles ==
-  /\ atOpen
-  /\ index' = "ready"
-  /\ opened' = TRUE
-  /\ UNCHANGED <<key, call, secret, spinning, llmButtons, preview, previewOk, written, purpose>>
-
-RestoreBoth ==
-  /\ atOpen
-  /\ key' = "stored"
-  /\ secret' = TRUE
-  /\ llmButtons' = TRUE
-  /\ index' = "ready"
-  /\ opened' = TRUE
-  /\ UNCHANGED <<call, spinning, preview, previewOk, written, purpose>>
+  /\ screen' = "writtenFile"
+  /\ call' = "idle"
+  /\ purpose' = "idle"
+  /\ spinning' = FALSE
+  /\ UNCHANGED <<key, index, secret, llmButtons, preview, previewOk>>
 
 Next ==
   \/ YouTypeKey
@@ -242,11 +273,7 @@ Next ==
   \/ YouDraft
   \/ TheCallAnswers
   \/ TheCallFails
-  \/ YouCancelCall
   \/ YouWrite
-  \/ RestoreKey
-  \/ RestoreFiles
-  \/ RestoreBoth
 
 Spec == Init /\ [][Next]_vars
 

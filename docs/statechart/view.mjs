@@ -1,65 +1,97 @@
 export const title = "Folio tool window";
 
-const keyLabel = {
-  none: "No API key",
-  typed: "Key typed, not saved",
-  stored: "Key ready",
+const place = {
+  noKey: ["Setup", "No API key"],
+  typed: ["Setup", "Key typed, not saved"],
+  saved: ["Ready", "Key saved"],
+  filesNoKey: ["Course files", "Files ready, no key"],
+  typedFiles: ["Course files", "Files ready, key not saved"],
+  savedFiles: ["Ready", "Files ready"],
+  indexing: ["Course files", "Indexing"],
+  asking: ["Ask", "Asking"],
+  askCited: ["Ask", "Finished", "Answer with citations"],
+  askFailed: ["Ask", "Finished", "The ask failed"],
+  generating: ["Test", "Generating the preview"],
+  previewShown: ["Test", "Preview shown"],
+  previewFailed: ["Test", "Finished", "Preview failed"],
+  writtenFile: ["Test", "Finished", "Test file written"],
+  drafting: ["Commit", "Drafting a message"],
+  commitPlaced: ["Commit", "Finished", "Message in the commit box"],
+  commitFailed: ["Commit", "Finished", "The draft failed"],
 };
 
-const indexLabel = {
-  empty: "No files",
-  indexing: "Indexing",
-  ready: "Files ready",
-};
+export const state = (v) => place[v.screen] ?? ["Setup", "Bad key"];
 
-const callLabel = {
-  idle: "Idle",
-  running: "Working",
-  answered: "Answered",
-  failed: "Failed",
-};
-
-export const state = (v) => ({
-  "API key": keyLabel[v.key] ?? "Bad key",
-  "Course files": indexLabel[v.index],
-  "Model call": callLabel[v.call],
-});
-
-const labels = {
-  YouTypeKey: "you type an API key",
-  YouEraseTypedKey: "you clear the field",
-  YouSaveKey: "you save settings",
-  YouSaveEmpty: "you save settings with the key field empty",
-  YouClearKey: "you clear the API key",
-  YouIndexFiles: "you index files",
-  YouRemoveFile: "you remove a file",
-  IndexingFinishes: "indexing finishes",
-  IndexingFindsNothing: "the index is empty",
-  StartCall: "you ask, preview, or draft",
-  YouAsk: "you ask, preview, or draft",
-  YouPreview: "you ask, preview, or draft",
-  YouDraft: "you ask, preview, or draft",
-  TheCallAnswers: "the model answers",
-  TheCallFails: "the call fails",
-  YouCancelCall: "the call is canceled",
-  YouWrite: "you write the test file",
-  RestoreKey: "the window restores a saved key",
-  RestoreFiles: "the window restores indexed files",
-  RestoreBoth: "the window restores a saved key and indexed files",
-};
-
-export const step = (action) => (Object.hasOwn(labels, action) ? labels[action] : action);
+const leaf = (v) => state(v).at(-1);
 
 export const group = (v) => {
-  if (v.call === "running" || v.index === "indexing") return "Working";
-  if (v.call === "failed") return "Failed";
-  if (v.key === "none" && v.index === "empty" && v.call === "idle") return "Setup";
+  const name = leaf(v);
+  if (
+    name === "Indexing" ||
+    name === "Asking" ||
+    name === "Generating the preview" ||
+    name === "Drafting a message"
+  )
+    return "Working";
+  if (name === "The ask failed" || name === "Preview failed" || name === "The draft failed")
+    return "Error";
+  if (
+    name === "No API key" ||
+    name === "Key typed, not saved" ||
+    name === "Files ready, no key" ||
+    name === "Files ready, key not saved"
+  )
+    return "Setup";
   return "Ready";
 };
 
 export const colors = {
   Setup: "tan",
-  Ready: "teal",
   Working: "orange",
-  Failed: "pink",
+  Ready: "teal",
+  Error: "pink",
+};
+
+const answerLabel = {
+  askCited: "the model answers",
+  previewShown: "the model shows a preview",
+  commitPlaced: "the message is in the commit box",
+  askFailed: "the ask fails",
+  previewFailed: "the preview fails",
+  commitFailed: "the draft fails",
+};
+
+function beginLabel(screen) {
+  if (screen === "asking") return "you click Ask";
+  if (screen === "generating") return "you click Preview test";
+  if (screen === "drafting") return "you click Draft commit messages";
+  return null;
+}
+
+function showBegin(from, to) {
+  if (from === "saved" || from === "savedFiles" || from === "noKey") return true;
+  if ((from === "askCited" || from === "askFailed") && to === "asking") return true;
+  if ((from === "previewFailed" || from === "writtenFile") && to === "generating") return true;
+  if ((from === "commitPlaced" || from === "commitFailed") && to === "drafting") return true;
+  return false;
+}
+
+export const step = (action, from, to) => {
+  if (action === "YouSaveEmpty") return "you save settings with the key field empty";
+  if (action === "YouTypeKey") return from.screen === "noKey" ? "you type an API key" : null;
+  if (action === "YouEraseTypedKey") return from.screen === "typed" ? "you clear the field" : null;
+  if (action === "YouSaveKey") return from.screen === "typed" ? "you save settings" : null;
+  if (action === "YouClearKey") return from.screen === "saved" ? "you clear the API key" : null;
+  if (action === "YouIndexFiles")
+    return from.screen === "saved" || from.screen === "savedFiles" ? "you index files" : null;
+  if (action === "YouRemoveFile") return null;
+  if (action === "IndexingFinishes") return "indexing finishes";
+  if (action === "IndexingFindsNothing") return "the index is empty";
+  if (action === "BeginCall" || action === "YouAsk" || action === "YouPreview" || action === "YouDraft") {
+    const label = beginLabel(to.screen);
+    return label && showBegin(from.screen, to.screen) ? label : null;
+  }
+  if (action === "YouWrite") return "you click Write test file";
+  if (action === "TheCallAnswers" || action === "TheCallFails") return answerLabel[to.screen] ?? action;
+  return action;
 };
