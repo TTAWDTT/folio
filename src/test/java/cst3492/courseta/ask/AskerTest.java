@@ -171,6 +171,11 @@ class AskerTest {
         assertTrue(mapped.sources().isEmpty());
         assertFalse(mapped.text().contains("["));
         assertEquals("See.", mapped.text());
+
+        Asker.CitationMap comma = Asker.mapCitations(List.of(first), "Text, [9] only");
+        assertTrue(comma.sources().isEmpty());
+        assertEquals("Text, only", comma.text());
+        assertFalse(comma.text().contains("[9]"));
     }
 
     @Test
@@ -313,6 +318,7 @@ class AskerTest {
     @Test
     void quoteMarkerIsACitation() {
         assertMarkdownPrefixMaps("> [2]");
+        assertMarkdownPrefixMaps("> > [2]");
     }
 
     @Test
@@ -334,6 +340,10 @@ class AskerTest {
         assertEquals("_A_ [1]", mapped.text());
     }
 
+    /**
+     * A call argument is not a candidate, so it is never deleted.
+     * Removing that guard turns {@code foo(a, [5])} into {@code foo(a, )}.
+     */
     @Test
     void parenArgumentDoesNotLeaveADanglingMarker() {
         CourseChunk first = page("lecture-servlet.pdf", 1, "doGet");
@@ -341,18 +351,50 @@ class AskerTest {
         CourseChunk third = page("lecture-jpa.pdf", 3, "persistence");
         Asker.CitationMap mapped = Asker.mapCitations(List.of(first, second, third), "(a, [2]) and [3].");
         assertEquals(List.of(third), mapped.sources());
-        assertEquals("(a, ) and [1].", mapped.text());
+        assertEquals("(a, [2]) and [1].", mapped.text());
+
+        Asker.CitationMap call = Asker.mapCitations(List.of(first, second, third), "See [1]. foo(a, [5]).");
+        assertEquals(List.of(first), call.sources());
+        assertEquals("See [1]. foo(a, [5]).", call.text());
+
+        Asker.CitationMap alone = Asker.mapCitations(List.of(first, second), "g(x, [2])");
+        assertEquals(List.of(first, second), alone.sources());
+        assertEquals("g(x, [2])", alone.text());
     }
 
+    /**
+     * {@code (a, [2])} is not a candidate. Renumbering {@code [3]} to {@code [2]} would make
+     * that argument share a card number, so the whole answer stays as the model wrote it.
+     */
     @Test
     void danglingMarkerMustPointAtItsCard() {
         CourseChunk first = page("lecture-servlet.pdf", 1, "doGet");
         CourseChunk second = page("lecture-jpa.pdf", 2, "OneToMany");
         CourseChunk third = page("lecture-jpa.pdf", 3, "persistence");
-        Asker.CitationMap mapped = Asker.mapCitations(List.of(first, second, third),
-                "See [1] and [3]. Also (a, [2]).");
-        assertEquals(List.of(first, third), mapped.sources());
-        assertEquals("See [1] and [2]. Also (a, ).", mapped.text());
+        String text = "See [1] and [3]. Also (a, [2]).";
+        Asker.CitationMap mapped = Asker.mapCitations(List.of(first, second, third), text);
+        assertEquals(List.of(first, second, third), mapped.sources());
+        assertEquals(text, mapped.text());
+    }
+
+    /**
+     * Skipping the whole-answer fallback keeps a second {@code [2]} and drops a card.
+     * {@code new [2]} is not a candidate, and {@code [3]} would be rewritten to {@code [2]}.
+     */
+    @Test
+    void wholeAnswerFallsBackWhenANumberCollides() {
+        CourseChunk first = page("lecture-servlet.pdf", 1, "doGet");
+        CourseChunk second = page("lecture-jpa.pdf", 2, "OneToMany");
+        CourseChunk third = page("lecture-jpa.pdf", 3, "persistence");
+        String text = "word [1] then new [2] and [3].";
+        Asker.CitationMap mapped = Asker.mapCitations(List.of(first, second, third), text);
+        assertEquals(text, mapped.text());
+        assertEquals(List.of(first, second, third), mapped.sources());
+
+        String emphasis = "a**b** [1] see [2]";
+        Asker.CitationMap glued = Asker.mapCitations(List.of(first, second), emphasis);
+        assertEquals(emphasis, glued.text());
+        assertEquals(List.of(first, second), glued.sources());
     }
 
     @Test

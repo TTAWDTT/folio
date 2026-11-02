@@ -52,17 +52,21 @@ public final class Asker {
 
     /**
      * Keeps a cite only when its number names a retrieved chunk.
-     * The first time a valid number appears it becomes the next source, and the marker is rewritten
-     * so [1], [2] follow that list. A reply with no markers keeps every retrieved chunk and its text.
-     * After that, a citation-shaped marker outside code that does not name one of those cards is removed.
+     * The first time a valid number appears it becomes the next source, and every candidate
+     * with that same original number is rewritten to that same new number. A number that was
+     * not retrieved is removed only from a candidate. Indexes, calls, and expression lists
+     * are not candidates and are never edited.
+     * Afterwards the numbers written into candidate positions are exactly {@code 1..cards},
+     * and each one is that card. A single {@code [n]} left outside code collides when {@code n}
+     * is one of those cards and this pass did not write it. On a collision the original text
+     * is returned with every retrieved chunk, in retrieval order.
      */
     public static CitationMap mapCitations(List<CourseChunk> hits, String modelText) {
         List<CourseChunk> retrieved = hits == null ? List.of() : hits;
         String raw = modelText == null ? "" : modelText;
         List<int[]> code = codeSpans(raw);
         if (!hasProseCitation(raw, code)) {
-            String text = dropDanglingProse(raw, List.of(), retrieved, retrieved);
-            return new CitationMap(text, List.copyOf(retrieved));
+            return new CitationMap(raw, List.copyOf(retrieved));
         }
         StringBuilder out = new StringBuilder();
         List<CourseChunk> ordered = new ArrayList<>();
@@ -110,7 +114,10 @@ public final class Asker {
             cursor = matcher.end();
         }
         appendSlice(out, raw.substring(cursor), removed);
-        String text = dropDanglingProse(out.toString(), written, ordered, retrieved);
+        String text = out.toString();
+        if (!citationsMatchCards(text, ordered, written)) {
+            return new CitationMap(raw, List.copyOf(retrieved));
+        }
         return new CitationMap(text, List.copyOf(ordered));
     }
 
@@ -496,12 +503,16 @@ public final class Asker {
         return false;
     }
 
-    /** A {@code *}, {@code -}, or {@code >} that begins a line is a markdown marker, not an operator. */
+    /**
+     * A {@code *}, {@code -}, or {@code >} that begins a line is a markdown marker, not an operator.
+     * Extra copies of the same marker, as in {@code > > [1]}, still begin the line.
+     */
     private static boolean markdownPrefix(String raw, int at) {
+        char mark = raw.charAt(at);
         int index = at - 1;
         while (index >= 0) {
             char c = raw.charAt(index);
-            if (c == ' ' || c == '\t') {
+            if (c == ' ' || c == '\t' || c == mark) {
                 index--;
                 continue;
             }
@@ -550,38 +561,42 @@ public final class Asker {
     }
 
     /**
-     * A rewritten marker names its card. Any other citation-shaped {@code [n]} outside code
-     * must still be that same card's original number. Otherwise it is removed.
-     * Indexes, calls, and expression lists are left as written.
+     * Candidate positions must be exactly the cards {@code 1..sources}, and a single {@code [n]}
+     * outside code that this pass did not write must not reuse one of those numbers.
+     * A grouped expression list, an index, and an infix operator are not that {@code [n]}.
      */
-    private static String dropDanglingProse(String text, List<int[]> written,
-                                             List<CourseChunk> sources, List<CourseChunk> retrieved) {
+    private static boolean citationsMatchCards(String text, List<CourseChunk> sources, List<int[]> written) {
+        boolean[] seen = new boolean[sources.size() + 1];
         List<int[]> code = codeSpans(text);
         Matcher matcher = MARKER.matcher(text);
-        StringBuilder out = new StringBuilder();
-        int cursor = 0;
-        boolean removed = false;
-        boolean changed = false;
         while (matcher.find()) {
-            if (inside(code, matcher.start()) || covers(written, matcher.start(), matcher.end())) {
+            if (inside(code, matcher.start())) {
                 continue;
             }
-            if (!danglingProseMarker(text, matcher.start(), matcher.group(1), code)) {
+            if (covers(written, matcher.start(), matcher.end())) {
+                for (String part : matcher.group(1).split("\\s*,\\s*")) {
+                    int number = markerNumber(part);
+                    if (number < 1 || number > sources.size()) {
+                        return false;
+                    }
+                    seen[number] = true;
+                }
                 continue;
             }
-            if (namesItsCards(matcher.group(1), sources, retrieved)) {
+            if (matcher.group(1).indexOf(',') >= 0) {
                 continue;
             }
-            appendSlice(out, text.substring(cursor, matcher.start()), removed);
-            removed = true;
-            changed = true;
-            cursor = matcher.end();
+            int number = markerNumber(matcher.group(1));
+            if (number >= 1 && number <= sources.size() && readableAsCitation(text, matcher.start(), code)) {
+                return false;
+            }
         }
-        if (!changed) {
-            return text;
+        for (int number = 1; number <= sources.size(); number++) {
+            if (!seen[number]) {
+                return false;
+            }
         }
-        appendSlice(out, text.substring(cursor), removed);
-        return out.toString();
+        return true;
     }
 
     private static boolean covers(List<int[]> written, int start, int end) {
@@ -593,16 +608,21 @@ public final class Asker {
         return false;
     }
 
-    /** A lone {@code [n]} a reader would follow, which the rewriter did not emit. */
-    private static boolean danglingProseMarker(String text, int bracketAt, String body, List<int[]> code) {
-        if (inside(code, bracketAt)) {
+    /**
+     * A single bracket a reader can take as a card number.
+     * An index ({@code m[1]}, {@code foo()[1]}, {@code m[0][1]}) and an infix operator
+     * ({@code a * [1]}) are not. Emphasis glued to a word ({@code a**b** [1]}) is.
+     */
+    private static boolean readableAsCitation(String text, int bracketAt, List<int[]> code) {
+        if (bracketAt == 0) {
+            return true;
+        }
+        char previous = text.charAt(bracketAt - 1);
+        if (isIdent(previous) || previous == ')') {
             return false;
         }
-        if (bracketAt > 0) {
-            char previous = text.charAt(bracketAt - 1);
-            if (isIdent(previous) || previous == ')' || previous == ']') {
-                return false;
-            }
+        if (previous == ']') {
+            return closesCitation(text, bracketAt - 1, code);
         }
         int at = bracketAt - 1;
         while (at >= 0 && isInlineSpace(text.charAt(at))) {
@@ -612,30 +632,20 @@ public final class Asker {
             return true;
         }
         char token = text.charAt(at);
-        if ((token == '*' || token == '_') && closesEmphasis(text, at)) {
-            return true;
-        }
-        if (isExpressionToken(token)) {
-            return false;
-        }
-        if (token == ',') {
-            return body.indexOf(',') < 0;
-        }
-        return false;
+        return !isExpressionToken(token) || gluedEmphasis(text, at);
     }
 
-    /** {@code [k]} still names card k only when that card is the original chunk k. */
-    private static boolean namesItsCards(String body, List<CourseChunk> sources, List<CourseChunk> retrieved) {
-        for (String part : body.split("\\s*,\\s*")) {
-            int number = markerNumber(part);
-            if (number < 1 || number > sources.size() || number > retrieved.size()) {
-                return false;
-            }
-            if (sources.get(number - 1) != retrieved.get(number - 1)) {
-                return false;
-            }
+    /** A {@code *} or {@code _} run sitting against a word, as in {@code a**b** [1]}. */
+    private static boolean gluedEmphasis(String text, int at) {
+        char mark = text.charAt(at);
+        if (mark != '*' && mark != '_') {
+            return false;
         }
-        return true;
+        int start = at;
+        while (start > 0 && text.charAt(start - 1) == mark) {
+            start--;
+        }
+        return start > 0 && !isInlineSpace(text.charAt(start - 1));
     }
 
     private static boolean inside(List<int[]> spans, int index) {
