@@ -21,6 +21,10 @@ import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Flow;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.function.Consumer;
 
 public final class HttpChatClient implements ChatClient {
     private static final Gson GSON = new Gson();
@@ -29,18 +33,64 @@ public final class HttpChatClient implements ChatClient {
     public static final int MAX_REQUEST_CHARS = 100_000;
 
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(20)).build();
+    private final Duration deadline;
+
+    public HttpChatClient() {
+        this(Duration.ofSeconds(60));
+    }
+
+    HttpChatClient(Duration deadline) {
+        this.deadline = deadline;
+    }
+
+    @Override
+    public String stream(String baseUrl, String apiKey, String model, String system, String user,
+                         Consumer<String> onDelta) throws IOException {
+        if (Thread.currentThread().isInterrupted()) {
+            throw new IOException("chat call interrupted");
+        }
+        validateInput(apiKey, model, system, user);
+        StreamBody body = new StreamBody(onDelta, apiKey);
+        CompletableFuture<HttpResponse<String>> pending = null;
+        try {
+            JsonObject json = JsonParser.parseString(requestBody(model, system, user)).getAsJsonObject();
+            json.addProperty("stream", true);
+            HttpRequest request = HttpRequest.newBuilder(completionsUri(baseUrl))
+                    .timeout(deadline)
+                    .header("Authorization", "Bearer " + apiKey)
+                    .header("Content-Type", "application/json")
+                    .header("Accept", "text/event-stream, application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(GSON.toJson(json)))
+                    .build();
+            pending = http.sendAsync(request, info -> {
+                body.configure(info.statusCode(), info.headers().firstValue("Content-Type").orElse(""));
+                return body;
+            });
+            return pending.get(deadline.toNanos(), TimeUnit.NANOSECONDS).body();
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new IOException("chat call interrupted");
+        } catch (TimeoutException ex) {
+            throw new IOException("Chat request deadline exceeded.");
+        } catch (ExecutionException ex) {
+            Throwable cause = ex.getCause();
+            throw safeFailure(cause.getMessage(), apiKey);
+        } catch (IllegalArgumentException ex) {
+            throw new IOException("Invalid chat endpoint or request configuration.");
+        } finally {
+            body.close();
+            if (pending != null && !pending.isDone()) {
+                pending.cancel(true);
+            }
+        }
+    }
 
     @Override
     public String complete(String baseUrl, String apiKey, String model, String system, String user) throws IOException {
         if (Thread.currentThread().isInterrupted()) {
             throw new IOException("chat call interrupted");
         }
-        if (apiKey == null || apiKey.indexOf('\r') >= 0 || apiKey.indexOf('\n') >= 0) {
-            throw new IOException("The API key is missing or has invalid header characters.");
-        }
-        if ((long) length(model) + length(system) + length(user) > MAX_REQUEST_CHARS) {
-            throw new IOException("Chat input exceeds " + MAX_REQUEST_CHARS + " characters.");
-        }
+        validateInput(apiKey, model, system, user);
         try {
             HttpRequest request = HttpRequest.newBuilder(completionsUri(baseUrl))
                     .timeout(Duration.ofSeconds(60))
@@ -60,15 +110,216 @@ public final class HttpChatClient implements ChatClient {
         } catch (IllegalArgumentException ex) {
             throw new IOException("Invalid chat endpoint or request configuration.");
         } catch (IOException ex) {
-            String detail = redact(ex.getMessage() == null ? "Chat request failed." : ex.getMessage(), apiKey);
-            if (detail.length() > ERROR_BODY_LIMIT + 20) {
-                int end = ERROR_BODY_LIMIT + 20;
-                if (Character.isHighSurrogate(detail.charAt(end - 1))) {
-                    end--;
-                }
-                detail = detail.substring(0, end) + "...";
+            throw safeFailure(ex.getMessage(), apiKey);
+        }
+    }
+
+    private static void validateInput(String apiKey, String model, String system, String user) throws IOException {
+        if (apiKey == null || apiKey.indexOf('\r') >= 0 || apiKey.indexOf('\n') >= 0) {
+            throw new IOException("The API key is missing or has invalid header characters.");
+        }
+        if ((long) length(model) + length(system) + length(user) > MAX_REQUEST_CHARS) {
+            throw new IOException("Chat input exceeds " + MAX_REQUEST_CHARS + " characters.");
+        }
+    }
+
+    private static IOException safeFailure(String message, String key) {
+        String detail = redact(message == null ? "Chat request failed." : message, key);
+        if (detail.length() > ERROR_BODY_LIMIT + 20) {
+            int end = ERROR_BODY_LIMIT + 20;
+            if (Character.isHighSurrogate(detail.charAt(end - 1))) {
+                end--;
             }
-            throw new IOException(detail);
+            detail = detail.substring(0, end) + "...";
+        }
+        return new IOException(detail);
+    }
+
+    private static final class StreamBody implements HttpResponse.BodySubscriber<String> {
+        private final CompletableFuture<String> result = new CompletableFuture<>();
+        private final ByteArrayOutputStream line = new ByteArrayOutputStream();
+        private final StringBuilder event = new StringBuilder();
+        private final StringBuilder text = new StringBuilder();
+        private final Consumer<String> onDelta;
+        private final String key;
+        private Flow.Subscription subscription;
+        private int status;
+        private int bytes;
+        private boolean sse;
+        private boolean afterCr;
+        private boolean firstLine = true;
+        private boolean done;
+        private boolean closed;
+
+        private StreamBody(Consumer<String> onDelta, String key) {
+            this.onDelta = onDelta;
+            this.key = key;
+        }
+
+        private synchronized void configure(int status, String contentType) {
+            this.status = status;
+            sse = status >= 200 && status < 300
+                    && contentType.toLowerCase(Locale.ROOT).contains("text/event-stream");
+        }
+
+        @Override
+        public CompletionStage<String> getBody() {
+            return result;
+        }
+
+        @Override
+        public synchronized void onSubscribe(Flow.Subscription value) {
+            subscription = value;
+            if (closed) {
+                value.cancel();
+            } else {
+                value.request(Long.MAX_VALUE);
+            }
+        }
+
+        @Override
+        public synchronized void onNext(List<ByteBuffer> buffers) {
+            if (closed || result.isDone()) {
+                return;
+            }
+            try {
+                for (ByteBuffer buffer : buffers) {
+                    if (buffer.remaining() > MAX_RESPONSE_BYTES - bytes) {
+                        throw new IOException("Chat response exceeds " + MAX_RESPONSE_BYTES + " bytes.");
+                    }
+                    bytes += buffer.remaining();
+                    while (buffer.hasRemaining()) {
+                        int value = Byte.toUnsignedInt(buffer.get());
+                        if (!sse) {
+                            line.write(value);
+                        } else if (value == '\r' || value == '\n') {
+                            if (value != '\n' || !afterCr) {
+                                readLine();
+                                if (done) {
+                                    return;
+                                }
+                            }
+                            afterCr = value == '\r';
+                        } else {
+                            afterCr = false;
+                            line.write(value);
+                        }
+                    }
+                }
+            } catch (IOException | RuntimeException ex) {
+                fail(ex);
+            }
+        }
+
+        private void readLine() throws IOException {
+            String value = line.toString(StandardCharsets.UTF_8);
+            line.reset();
+            if (firstLine && value.startsWith("\uFEFF")) {
+                value = value.substring(1);
+            }
+            firstLine = false;
+            if (value.isEmpty()) {
+                readEvent();
+            } else if (value.equals("data") || value.startsWith("data:")) {
+                String data = value.equals("data") ? "" : value.substring(5);
+                event.append(data.startsWith(" ") ? data.substring(1) : data).append('\n');
+            }
+        }
+
+        private void readEvent() throws IOException {
+            if (event.isEmpty()) {
+                return;
+            }
+            String data = event.substring(0, event.length() - 1);
+            event.setLength(0);
+            if (done) {
+                return;
+            }
+            if (data.equals("[DONE]")) {
+                done = true;
+                result.complete(text.toString());
+                subscription.cancel();
+                return;
+            }
+            try {
+                JsonObject root = JsonParser.parseString(data).getAsJsonObject();
+                if (root.has("error")) {
+                    throw new IOException("Chat stream error: " + errorDetail(data));
+                }
+                JsonArray choices = root.getAsJsonArray("choices");
+                if (choices == null) {
+                    throw new IOException("Chat stream event has no choices.");
+                }
+                if (choices.isEmpty()) {
+                    return;
+                }
+                JsonObject choice = choices.get(0).getAsJsonObject();
+                JsonElement reason = choice.get("finish_reason");
+                if (reason != null && !reason.isJsonNull()
+                        && !reason.getAsString().equals("stop")) {
+                    throw new IOException("Chat stream stopped with " + reason.getAsString() + ".");
+                }
+                JsonObject delta = choice.getAsJsonObject("delta");
+                JsonElement content = delta == null ? null : delta.get("content");
+                if (content == null || content.isJsonNull()) {
+                    return;
+                }
+                if (!content.isJsonPrimitive() || !content.getAsJsonPrimitive().isString()) {
+                    throw new IOException("Chat stream content was not text.");
+                }
+                publish(content.getAsString());
+            } catch (JsonSyntaxException | IllegalStateException | ClassCastException | UnsupportedOperationException ex) {
+                throw new IOException("Chat response was not a chat stream.");
+            }
+        }
+
+        private void publish(String delta) {
+            if (!delta.isEmpty()) {
+                text.append(delta);
+                onDelta.accept(delta);
+            }
+        }
+
+        @Override
+        public synchronized void onError(Throwable error) {
+            fail(error);
+        }
+
+        @Override
+        public synchronized void onComplete() {
+            if (closed || result.isDone()) {
+                return;
+            }
+            try {
+                if (sse) {
+                    if (!done) {
+                        throw new IOException("Chat stream ended before [DONE].");
+                    }
+                } else {
+                    String body = line.toString(StandardCharsets.UTF_8);
+                    if (status < 200 || status >= 300) {
+                        throw new IOException(describeHttpError(status, body, key));
+                    }
+                    publish(readContent(body));
+                }
+                result.complete(text.toString());
+            } catch (IOException | RuntimeException ex) {
+                fail(ex);
+            }
+        }
+
+        private void fail(Throwable error) {
+            if (subscription != null) {
+                subscription.cancel();
+            }
+            result.completeExceptionally(error);
+        }
+
+        private synchronized void close() {
+            closed = true;
+            if (subscription != null) {
+                subscription.cancel();
+            }
         }
     }
 

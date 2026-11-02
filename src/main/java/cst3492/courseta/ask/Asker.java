@@ -8,10 +8,18 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public final class Asker {
+    public enum Stage { RETRIEVING, GENERATING }
+
+    public sealed interface Update {
+        record Phase(Stage stage) implements Update {}
+        record Delta(String text) implements Update {}
+    }
+
     public static final String MISSING_KEY =
             "No API key is configured. Add an API key in the Folio tool window and save settings.";
     public static final String NO_VALID_CITE =
@@ -34,6 +42,11 @@ public final class Asker {
 
     public static Answer ask(CourseSearch index, ChatClient chat, String baseUrl, String apiKey, String model,
                              String question, String selection, String conversation) throws Exception {
+        return ask(index, chat, baseUrl, apiKey, model, question, selection, conversation, null);
+    }
+
+    public static Answer ask(CourseSearch index, ChatClient chat, String baseUrl, String apiKey, String model,
+                             String question, String selection, String conversation, Consumer<Update> onUpdate) throws Exception {
         long currentChars = (question == null ? 0L : question.length()) + (selection == null ? 0L : selection.length());
         if (currentChars > MAX_CURRENT_INPUT_CHARS) {
             throw new IllegalArgumentException("Question and selected code exceed " + MAX_CURRENT_INPUT_CHARS
@@ -44,6 +57,9 @@ public final class Asker {
                     + " characters. Supply complete recent turns within the history limit.");
         }
         String lookup = selection == null || selection.isBlank() ? question : question + "\n" + selection;
+        if (onUpdate != null) {
+            onUpdate.accept(new Update.Phase(Stage.RETRIEVING));
+        }
         List<CourseChunk> hits = index.top(lookup, 4);
         if (apiKey == null || apiKey.isBlank()) {
             String missing = MISSING_KEY;
@@ -68,7 +84,14 @@ public final class Asker {
         if (Thread.currentThread().isInterrupted()) {
             throw new InterruptedException("Ask cancelled before sending.");
         }
-        String text = chat.complete(baseUrl, apiKey, model, system, user);
+        String text;
+        if (onUpdate == null) {
+            text = chat.complete(baseUrl, apiKey, model, system, user);
+        } else {
+            onUpdate.accept(new Update.Phase(Stage.GENERATING));
+            text = chat.stream(baseUrl, apiKey, model, system, user,
+                    delta -> onUpdate.accept(new Update.Delta(delta)));
+        }
         if (hits.isEmpty()) {
             CitationMap mapped = mapCitations(List.of(), text);
             return new Answer(Answer.Kind.GENERAL, Answer.GENERAL_SENTENCE + "\n" + mapped.text(), List.of(), true,
