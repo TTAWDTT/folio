@@ -11,6 +11,7 @@ import cst3492.courseta.index.ScopeKind;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import javax.swing.JButton;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -123,6 +124,37 @@ class FolioPanelTest {
         assertFalse(FolioPanel.previewReadyAfter(false, test));
         assertEquals(Scenario.MISSING, FolioPanel.previewTranscript("  "));
         assertFalse(FolioPanel.previewReadyAfter(false, Scenario.MISSING));
+    }
+
+    @Test
+    void customChromeSurvivesAThemeRefresh() {
+        JButton segment = FolioChrome.segment("Ask", null);
+        FolioChrome.paintSegment(segment, true);
+        segment.updateUI();
+        assertFalse(segment.isOpaque());
+        assertFalse(segment.isContentAreaFilled());
+        assertFalse(segment.isBorderPainted());
+        assertFalse(segment.isFocusPainted());
+        assertTrue(segment.getFont().isBold());
+
+        FolioChrome.WrapText text = new FolioChrome.WrapText("hello");
+        text.updateUI();
+        assertFalse(text.isOpaque());
+        assertFalse(text.isEditable());
+        assertTrue(text.getLineWrap());
+        assertEquals(0, text.getInsets().top);
+        assertEquals(0, text.getInsets().left);
+
+        JButton chip = new FolioChrome.ChipButton("Key", null);
+        chip.updateUI();
+        assertFalse(chip.isOpaque());
+        assertFalse(chip.isContentAreaFilled());
+        assertFalse(chip.isBorderPainted());
+        assertFalse(chip.isFocusPainted());
+
+        JButton gear = FolioChrome.gear(null);
+        gear.updateUI();
+        assertEquals("borderless", gear.getClientProperty("JButton.buttonType"));
     }
 
     @Test

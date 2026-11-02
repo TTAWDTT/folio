@@ -497,10 +497,8 @@ public final class FolioPanel extends JPanel {
         sectionDeck.add(filesTab(), "files");
         sectionDeck.add(testTab(), "test");
         sectionDeck.add(commitTab(), "commit");
-        JScrollPane scrolling = FolioChrome.scroll(sectionDeck);
-        scrolling.setHorizontalScrollBarPolicy(javax.swing.ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
         panel.add(bar, BorderLayout.NORTH);
-        panel.add(scrolling, BorderLayout.CENTER);
+        panel.add(sectionDeck, BorderLayout.CENTER);
         selectSection(TAB_ASK);
         return panel;
     }

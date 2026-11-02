@@ -10,13 +10,11 @@ import com.intellij.ui.components.JBScrollPane;
 import com.intellij.ui.components.JBTextArea;
 import com.intellij.util.ui.JBFont;
 import com.intellij.util.ui.JBUI;
-import com.intellij.util.ui.UIUtil;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.JComponent;
 import javax.swing.JPanel;
 import java.awt.BorderLayout;
-import java.awt.Font;
 
 public final class ScenarioDialog extends DialogWrapper {
     private final JBTextArea area = new JBTextArea(6, 42);
@@ -30,7 +28,6 @@ public final class ScenarioDialog extends DialogWrapper {
         area.setText(initialValue == null ? "" : initialValue);
         area.setCaretPosition(area.getText().length());
         area.setBorder(JBUI.Borders.empty(6, 8));
-        area.setFont(UIUtil.getFontWithFallback(Font.MONOSPACED, Font.PLAIN, area.getFont().getSize()));
         init();
     }
 

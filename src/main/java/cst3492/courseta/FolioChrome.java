@@ -68,7 +68,14 @@ final class FolioChrome {
     }
 
     static JButton gear(javax.swing.Icon icon) {
-        JButton button = new JButton(icon);
+        JButton button = new JButton(icon) {
+            @Override
+            public void updateUI() {
+                super.updateUI();
+                putClientProperty("JButton.buttonType", "borderless");
+                setMargin(JBUI.emptyInsets());
+            }
+        };
         button.putClientProperty("JButton.buttonType", "borderless");
         button.setMargin(JBUI.emptyInsets());
         button.setToolTipText("Settings");
@@ -76,22 +83,19 @@ final class FolioChrome {
     }
 
     static JButton segment(String text, Icon icon) {
-        JButton button = new JButton(text, icon);
-        button.setOpaque(false);
-        button.setContentAreaFilled(false);
-        button.setBorderPainted(false);
-        button.setFocusPainted(false);
-        button.setMargin(JBUI.insets(6, 8));
-        button.setFont(JBFont.medium());
-        return button;
+        return new SegmentButton(text, icon);
     }
 
     static void paintSegment(JButton button, boolean selected) {
         button.putClientProperty("folio.selected", selected);
-        button.setFont(selected ? JBFont.medium().asBold() : JBFont.medium());
-        button.setForeground(selected
-                ? JBUI.CurrentTheme.Label.foreground()
-                : JBUI.CurrentTheme.Label.disabledForeground());
+        if (button instanceof SegmentButton segment) {
+            segment.applyChrome();
+        } else {
+            button.setFont(selected ? JBFont.medium().asBold() : JBFont.medium());
+            button.setForeground(selected
+                    ? JBUI.CurrentTheme.Label.foreground()
+                    : JBUI.CurrentTheme.Label.disabledForeground());
+        }
         if (button.getParent() != null) {
             button.getParent().repaint();
         }
@@ -284,6 +288,16 @@ final class FolioChrome {
         }
 
         @Override
+        public void updateUI() {
+            super.updateUI();
+            setEditable(false);
+            setLineWrap(true);
+            setWrapStyleWord(true);
+            setOpaque(false);
+            setBorder(JBUI.Borders.empty());
+        }
+
+        @Override
         public Dimension getPreferredSize() {
             Dimension fallback = super.getPreferredSize();
             if (getUI() == null) {
@@ -402,6 +416,10 @@ final class FolioChrome {
             setOpaque(false);
             setContentAreaFilled(false);
             setBorderPainted(false);
+            setFocusPainted(false);
+            setFont(JBFont.small());
+            setBorder(JBUI.Borders.empty(4, 10));
+            setMargin(JBUI.emptyInsets());
         }
 
         @Override
@@ -418,8 +436,43 @@ final class FolioChrome {
         }
     }
 
+    /**
+     * Section button. The button UI installs a filled border on every theme change,
+     * so the flat segment style is applied again from {@link #updateUI()}.
+     */
+    static final class SegmentButton extends JButton {
+        SegmentButton(String text, Icon icon) {
+            super(text, icon);
+            applyChrome();
+        }
+
+        void applyChrome() {
+            setOpaque(false);
+            setContentAreaFilled(false);
+            setBorderPainted(false);
+            setFocusPainted(false);
+            setMargin(JBUI.insets(6, 8));
+            setBorder(JBUI.Borders.empty());
+            boolean selected = Boolean.TRUE.equals(getClientProperty("folio.selected"));
+            setFont(selected ? JBFont.medium().asBold() : JBFont.medium());
+            setForeground(selected
+                    ? JBUI.CurrentTheme.Label.foreground()
+                    : JBUI.CurrentTheme.Label.disabledForeground());
+        }
+
+        @Override
+        public void updateUI() {
+            super.updateUI();
+            applyChrome();
+        }
+    }
+
     /** Ask / Files / Test / Commit, drawn as one segmented control. */
     static final class SegmentBar extends JBPanel<SegmentBar> {
+        private static final Color TRACK = JBColor.namedColor(
+                "MainToolbar.background", new JBColor(0xEBECF0, 0x2B2D30));
+        private static final Color PILL = JBColor.namedColor(
+                "SegmentedButton.selectedButtonColor", new JBColor(0xFFFFFF, 0x3C3F41));
         private final JButton[] buttons;
 
         SegmentBar(JButton[] buttons) {
@@ -437,7 +490,7 @@ final class FolioChrome {
             Graphics2D g = (Graphics2D) graphics.create();
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             int arc = JBUI.scale(10);
-            g.setColor(new JBColor(0xEBECF0, 0x2B2D30));
+            g.setColor(TRACK);
             g.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, arc, arc);
             for (JButton button : buttons) {
                 if (!Boolean.TRUE.equals(button.getClientProperty("folio.selected"))) {
@@ -445,7 +498,7 @@ final class FolioChrome {
                 }
                 Rectangle bounds = button.getBounds();
                 int pill = JBUI.scale(8);
-                g.setColor(new JBColor(0xFFFFFF, 0x3C3F41));
+                g.setColor(PILL);
                 g.fillRoundRect(bounds.x, bounds.y, bounds.width, bounds.height, pill, pill);
             }
             g.dispose();

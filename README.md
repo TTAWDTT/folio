@@ -442,14 +442,14 @@ docs/course-ta-plugin-plan.md
 
 ## Testing
 
-`./gradlew test buildPlugin` with JDK 25 completes successfully. The suite is **81 tests, 0 failures**.
+`./gradlew test buildPlugin` with JDK 25 completes successfully. The suite is **82 tests, 0 failures**.
 
 | Test class | Tests |
 | --- | ---: |
 | `CourseIndexTest` | 33 |
 | `HttpChatClientTest` | 10 |
 | `CommitMessageActionTest` | 9 |
-| `FolioPanelTest` | 9 |
+| `FolioPanelTest` | 10 |
 | `AskerTest` | 7 |
 | `CourseFileParserTest` | 7 |
 | `GenerateTestActionTest` | 3 |
