@@ -45,14 +45,14 @@ class FolioSidebarTest {
                 deck.addNotify();
                 assertTrue(card.isShowing());
                 assertTrue(find(card, component -> component instanceof javax.swing.JLabel label
-                        && "Searching course files…".equals(label.getText())).isVisible());
+                        && "正在检索课件...".equals(label.getText())).isVisible());
                 assertNoMotion(card);
                 layout.show(deck, "other");
                 assertFalse(card.isShowing());
                 assertNoMotion(card);
                 layout.show(deck, "chat");
                 assertTrue(find(card, component -> component instanceof javax.swing.JLabel label
-                        && "Searching course files…".equals(label.getText())).isVisible());
+                        && "正在检索课件...".equals(label.getText())).isVisible());
                 assertNoMotion(card);
                 card.showAnswer("done", null);
                 var copy = (AbstractButton) find(card, component -> component instanceof AbstractButton button
@@ -196,7 +196,7 @@ class FolioSidebarTest {
                 workers.drain();
                 delivery.drain();
                 assertFalse(((JButton) find(panel, component -> component instanceof JButton button
-                        && "Write test file".equals(button.getText()))).isEnabled());
+                        && "写入文件".equals(button.getText()))).isEnabled());
                 JButton generate = (JButton) find(panel, component -> component instanceof JButton button
                         && "生成测试".equals(button.getText()));
                 assertNotNull(generate);
@@ -215,7 +215,7 @@ class FolioSidebarTest {
                 directory.setAccessible(true);
                 assertSame(original, directory.invoke(context));
                 assertFalse(((JButton) find(panel, component -> component instanceof JButton button
-                        && "Write test file".equals(button.getText()))).isEnabled());
+                        && "写入文件".equals(button.getText()))).isEnabled());
             } catch (ReflectiveOperationException ex) {
                 throw new AssertionError(ex);
             } finally {

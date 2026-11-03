@@ -9,8 +9,8 @@ import javax.swing.text.PlainDocument;
 
 final class FolioState {
     enum Mode {
-        ASK("问答", AllIcons.Actions.Find), DRILL("练习", AllIcons.FileTypes.Text),
-        TESTS("生成测试", AllIcons.Nodes.JunitTestMark), COMMIT("提交信息", AllIcons.Actions.Commit);
+        ASK("问答", AllIcons.General.Balloon), DRILL("练习", AllIcons.Actions.Edit),
+        TESTS("生成测试", FolioChrome.codeIcon()), COMMIT("提交信息", AllIcons.Vcs.Branch);
         final String label;
         final Icon icon;
         Mode(String label, Icon icon) { this.label = label; this.icon = icon; }

@@ -16,14 +16,18 @@ final class Conversation {
 
     void complete(long id, String question, String answer) {
         Turn previous = keyed.remove(id);
-        if (previous != null && turns.contains(previous)) {
-            Turn replacement = new Turn(question, answer);
-            turns.set(turns.indexOf(previous), replacement);
-            keyed.put(id, replacement);
-        } else {
-            complete(question, answer);
-            keyed.put(id, turns.getLast());
+        if (previous != null) {
+            for (int index = 0; index < turns.size(); index++) {
+                if (turns.get(index) == previous) {
+                    Turn replacement = new Turn(question, answer);
+                    turns.set(index, replacement);
+                    keyed.put(id, replacement);
+                    return;
+                }
+            }
         }
+        complete(question, answer);
+        keyed.put(id, turns.getLast());
     }
 
     void complete(String question, String answer) {

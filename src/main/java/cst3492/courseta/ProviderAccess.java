@@ -108,6 +108,8 @@ public final class ProviderAccess implements Disposable {
         return view;
     }
 
+    synchronized TaSettings.Values savedSettings() { return values; }
+
     synchronized ProviderConnection captureSaved() {
         return capture(values.baseUrl(), values.modelName(), "");
     }

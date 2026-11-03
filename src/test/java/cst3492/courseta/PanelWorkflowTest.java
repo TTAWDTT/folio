@@ -137,7 +137,7 @@ class PanelWorkflowTest {
         workers.drain();
         delivery.drain();
         assertNotNull(find(panel, component -> component instanceof javax.swing.text.JTextComponent text
-                && text.getText().contains("No API key is configured")));
+                && text.getText().contains("尚未配置模型 Key")));
         panel.dispose();
     }
 
@@ -180,15 +180,15 @@ class PanelWorkflowTest {
         String looksGeneral = Answer.GENERAL_SENTENCE + "\nUse a loop. [1]";
         card.showAnswer(looksGeneral, new Answer(Answer.Kind.CITED, looksGeneral, List.of(chunk), true, Answer.Evidence.INLINE));
         assertNotNull(find(card, component -> component instanceof javax.swing.JLabel label
-                && "Sources cited in the reply".equals(label.getText())));
+                && "回答引用的课件".equals(label.getText())));
         assertNull(find(card, component -> component instanceof javax.swing.text.JTextComponent text
-                && text.getText().equals(Answer.UNGROUNDED)));
+                && text.getText().equals("此回答基于通用知识，没有课件引用。")));
         card.showAnswer("Use a loop.", new Answer(Answer.Kind.GENERAL, "Use a loop.", List.of(), true, Answer.Evidence.GENERAL));
         assertNotNull(find(card, component -> component instanceof javax.swing.text.JTextComponent text
-                && text.getText().equals(Answer.UNGROUNDED)));
+                && text.getText().equals("此回答基于通用知识，没有课件引用。")));
         card.showAnswer("Use a loop. [1]", new Answer(Answer.Kind.CITED, "Use a loop. [1]", List.of(chunk), true, Answer.Evidence.RETRIEVED));
         assertNotNull(find(card, component -> component instanceof javax.swing.JLabel label
-                && "Retrieved material".equals(label.getText())));
+                && "检索到的课件".equals(label.getText())));
     }
 
     private static JTextField field(Component root, Predicate<JTextField> predicate) {

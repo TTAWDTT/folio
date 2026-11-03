@@ -142,6 +142,68 @@ class SidebarWorkflowV3Test {
         });
     }
 
+    @Test
+    void visibleTasksStayBoundedWithoutDiscardingSuccessfulAskContext() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            List<String> prompts = new ArrayList<>();
+            try (var f = new Fixture((base, key, model, system, user) -> { prompts.add(user); return "回答"; })) {
+                f.send("kept ask context");
+                f.drain();
+                for (int i = 0; i < 45; i++) { f.panel.drill("class Source" + i + " {}"); f.drain(); }
+                assertEquals(Conversation.MAX_TURNS, all(f.panel, FolioChrome.AnswerCard.class).size());
+                f.panel.ask("followup", "");
+                f.drain();
+                assertTrue(prompts.getLast().contains("kept ask context"));
+            }
+        });
+    }
+
+    @Test
+    void anAskAttachmentRetainsTheSelectionAndCompleteSourceSeparately() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            List<String> prompts = new ArrayList<>();
+            try (var f = new Fixture((base, key, model, system, user) -> { prompts.add(user); return "回答"; })) {
+                String complete = "class CompleteSource { int selected() { return 1; } int PRIVATE_UNSELECTED_MARKER; }";
+                f.panel.ask("first", "return 1;", CapturedCode.detached(complete, null));
+                f.drain();
+                assertTrue(prompts.getFirst().contains("Selected code:\nreturn 1;"));
+                assertFalse(prompts.getFirst().contains("PRIVATE_UNSELECTED_MARKER"));
+                f.send("second");
+                f.drain();
+                assertTrue(prompts.getLast().contains("Selected code:\nreturn 1;"));
+                assertFalse(prompts.getLast().contains("PRIVATE_UNSELECTED_MARKER"));
+            }
+        });
+    }
+
+    @Test
+    void malformedDrillKeepsTheActualModelReplyBeforeCitationMapping() {
+        var index = new cst3492.courseta.index.CourseIndex();
+        index.upsert(new cst3492.courseta.index.CourseChunk("one", "lecture.md", cst3492.courseta.index.ScopeKind.SECTION, 1, "Source class practice"));
+        String raw = "malformed model reply [99] ORIGINAL";
+        var failure = assertThrows(Drill.Malformed.class, () -> Drill.generate(index,
+                (base, key, model, system, user) -> raw, "https://fixture.example", "key", "model", "class Source {}", "", null));
+        assertEquals(raw, failure.raw());
+    }
+
+    @Test
+    void anotherForegroundTaskDisablesCompletedRetriesWithAnExplanation() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            try (var f = new Fixture((base, key, model, system, user) -> "回答")) {
+                f.send("first");
+                f.drain();
+                AbstractButton retry = button(f.panel, "重新生成");
+                assertTrue(retry.isEnabled());
+                f.send("second");
+                assertFalse(retry.isEnabled());
+                assertEquals("重新生成：请先停止当前任务", retry.getToolTipText());
+                f.drain();
+                assertTrue(retry.isEnabled());
+                assertEquals("重新生成", retry.getToolTipText());
+            }
+        });
+    }
+
     private static final class Fixture implements AutoCloseable {
         final FolioTasksTest.Queue workers = new FolioTasksTest.Queue();
         final FolioTasksTest.Queue delivery = new FolioTasksTest.Queue();

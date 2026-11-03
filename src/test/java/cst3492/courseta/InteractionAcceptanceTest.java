@@ -80,7 +80,7 @@ class InteractionAcceptanceTest {
             var card = referenceCard(opened);
             AbstractButton open = (AbstractButton) find(card, component -> component instanceof AbstractButton button
                     && button.getAccessibleContext().getAccessibleName() != null
-                    && button.getAccessibleContext().getAccessibleName().toLowerCase().contains("open")
+                    && button.getAccessibleContext().getAccessibleName().contains("打开")
                     && button.getAccessibleContext().getAccessibleName().contains("lecture.pdf"));
             assertNotNull(open, "Source navigation needs a named button, separate from selectable text");
             assertTrue(open.isFocusable());

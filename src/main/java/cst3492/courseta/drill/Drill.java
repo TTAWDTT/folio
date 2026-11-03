@@ -37,13 +37,29 @@ public final class Drill {
         String question = "根据选中的代码生成恰好三道练习题，每题提供真实解析。只返回 JSON，格式为 "
                 + "{\"questions\":[{\"question\":\"题目\",\"explanation\":\"解析\"}]}。"
                 + "引用课件时在字符串中使用 [n]。不要省略解析。用户要求：\n" + requirements;
-        Answer evidence = Asker.ask(index, chat, baseUrl, apiKey, model, question, selection, "", update -> {
+        class CapturingClient implements ChatClient {
+            String raw = "";
+            public String complete(String base, String key, String targetModel, String system, String user) throws java.io.IOException {
+                raw = chat.complete(base, key, targetModel, system, user);
+                return raw;
+            }
+            public String stream(String base, String key, String targetModel, String system, String user, Consumer<String> delta) throws java.io.IOException {
+                raw = chat.stream(base, key, targetModel, system, user, delta);
+                return raw;
+            }
+        }
+        CapturingClient captured = new CapturingClient();
+        Answer evidence = Asker.ask(index, captured, baseUrl, apiKey, model, question, selection, "", update -> {
             if (onUpdate != null && update instanceof Asker.Update.Phase) onUpdate.accept(update);
         });
         if (!evidence.calledModel()) return new Result(List.of(), evidence);
         String raw = evidence.text();
         if (raw.startsWith(Answer.GENERAL_SENTENCE)) raw = raw.substring(Answer.GENERAL_SENTENCE.length()).strip();
-        return new Result(parse(raw), evidence);
+        try { return new Result(parse(raw), evidence); }
+        catch (Malformed failure) {
+            String original = captured.raw == null ? "" : captured.raw;
+            throw new Malformed(original.substring(0, Math.min(original.length(), 48_000)));
+        }
     }
     public static List<Exercise> parse(String raw) {
         if (raw == null || raw.length() > 48_000) throw new Malformed(raw == null ? "" : raw.substring(0, 48_000));

@@ -128,6 +128,37 @@ class PopupGestureTest {
         });
     }
 
+    @Test
+    void thePopupIsPlacedAboveTheComposerInsteadOfAboveItsBottomTrigger() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            PopupFactory previous = PopupFactory.getSharedInstance();
+            AtomicInteger popupY = new AtomicInteger();
+            PopupFactory.setSharedInstance(new PopupFactory() {
+                @Override public Popup getPopup(Component owner, Component contents, int x, int y) {
+                    popupY.set(y);
+                    return new Popup() { public void show() {} public void hide() {} };
+                }
+            });
+            Anchor trigger = new Anchor();
+            var composer = new FolioChrome.Composer(new FolioChrome.PromptArea("输入"), new javax.swing.JPanel(new java.awt.GridBagLayout())) {
+                @Override public Point getLocationOnScreen() { return new Point(100, 500); }
+                @Override public boolean isShowing() { return true; }
+            };
+            composer.controls(trigger, new javax.swing.JButton());
+            composer.setSize(300, 104);
+            var popup = new FolioChrome.ModePopup(trigger, () -> {});
+            popup.add("问答", AllIcons.General.Balloon, () -> {});
+            try {
+                trigger.doClick(0);
+                assertEquals(500 - popup.menu().getPreferredSize().height - com.intellij.util.ui.JBUI.scale(18), popupY.get());
+            } finally {
+                popup.close();
+                FolioMotion.stopTree(composer, true);
+                PopupFactory.setSharedInstance(previous);
+            }
+        });
+    }
+
     private static void click(Anchor button, boolean consumed, boolean dragOut) throws Exception {
         MouseEvent press = mouse(button, MouseEvent.MOUSE_PRESSED, 5, 5);
         if (consumed) press.consume();

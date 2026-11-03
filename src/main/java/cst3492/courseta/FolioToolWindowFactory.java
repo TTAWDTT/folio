@@ -15,6 +15,7 @@ public final class FolioToolWindowFactory implements ToolWindowFactory {
     public void createToolWindowContent(@NotNull Project project, @NotNull ToolWindow toolWindow) {
         FolioPanel panel = new FolioPanel(project);
         FolioPanels.register(project, panel);
+        panel.useNativeHeader(toolWindow);
         Content content = ContentFactory.getInstance().createContent(panel, "", false);
         content.setDisposer(panel);
         toolWindow.getContentManager().addContent(content);

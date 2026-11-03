@@ -126,8 +126,9 @@ final class FolioChrome {
 
         @Override
         public Dimension getPreferredSize() {
+            if (Boolean.TRUE.equals(getClientProperty("folio.circle"))) return new Dimension(JBUI.scale(30), JBUI.scale(30));
             Dimension size = super.getPreferredSize();
-            return new Dimension(Math.max(size.width, JBUI.scale(26)), Math.max(size.height, JBUI.scale(26)));
+            return new Dimension(Math.max(size.width, JBUI.scale(28)), Math.max(size.height, JBUI.scale(28)));
         }
 
         @Override
@@ -191,7 +192,17 @@ final class FolioChrome {
 
     static final class ModePopup implements AutoCloseable {
         private final ActivationButton<PopupIntent> trigger;
-        private final JPopupMenu popup = new JPopupMenu();
+        private final JPopupMenu popup = new JPopupMenu() {
+            @Override public void updateUI() { super.updateUI(); setOpaque(false); }
+            @Override protected void paintComponent(Graphics graphics) {
+                Graphics2D g = (Graphics2D) graphics.create();
+                g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g.setColor(getBackground());
+                g.fillRoundRect(0, 0, getWidth(), getHeight(), JBUI.scale(24), JBUI.scale(24));
+                g.dispose();
+                super.paintComponent(graphics);
+            }
+        };
         private final Runnable restoreInput;
         private AWTEvent closedDuringTriggerDispatch;
         private boolean disposed;
@@ -215,7 +226,10 @@ final class FolioChrome {
                     restoreInput.run();
                 } else {
                     captureInput.run();
-                    popup.show(trigger, 0, -popup.getPreferredSize().height - JBUI.scale(6));
+                    Component composer = SwingUtilities.getAncestorOfClass(Composer.class, trigger);
+                    Component anchor = composer == null ? trigger : composer;
+                    popup.show(anchor, 0, -popup.getPreferredSize().height - JBUI.scale(18));
+                    updateTrigger();
                 }
             });
             popup.getActionMap().put("cancel", new javax.swing.AbstractAction() {
@@ -228,13 +242,13 @@ final class FolioChrome {
             popup.addPopupMenuListener(new PopupMenuListener() {
                 @Override
                 public void popupMenuWillBecomeVisible(PopupMenuEvent event) {
-                    updateTrigger();
+                    SwingUtilities.invokeLater(() -> updateTrigger());
                 }
 
                 @Override
                 public void popupMenuWillBecomeInvisible(PopupMenuEvent event) {
                     rememberTriggerDispatch();
-                    updateTrigger();
+                    SwingUtilities.invokeLater(() -> updateTrigger());
                 }
 
                 @Override
@@ -292,10 +306,8 @@ final class FolioChrome {
         }
 
         private void updateTrigger() {
-            SwingUtilities.invokeLater(() -> {
-                if (!disposed) trigger.setText(trigger.getClientProperty("folio.mode")
-                        + (popup.isVisible() ? " ⌃" : " ⌄"));
-            });
+            if (!disposed) trigger.setText(trigger.getClientProperty("folio.mode")
+                    + (popup.isVisible() ? " ⌃" : " ⌄"));
         }
 
         private void closePopup() {
@@ -389,6 +401,21 @@ final class FolioChrome {
         void draw(Graphics graphics) {
             Graphics2D g = (Graphics2D) graphics.create();
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            if (Boolean.TRUE.equals(button.getClientProperty("folio.circle"))) {
+                g.setColor(accent());
+                g.fillOval(0, 0, button.getWidth(), button.getHeight());
+                if (button.hasFocus()) {
+                    g.setColor(JBUI.CurrentTheme.Label.foreground());
+                    g.setStroke(new BasicStroke(JBUI.scale(2)));
+                    g.drawOval(1, 1, button.getWidth() - 3, button.getHeight() - 3);
+                }
+                g.dispose();
+                return;
+            }
+            if (Boolean.TRUE.equals(button.getClientProperty("folio.pill"))) {
+                g.setColor(userFill());
+                g.fillRoundRect(0, 0, button.getWidth(), button.getHeight(), JBUI.scale(24), JBUI.scale(24));
+            }
             float alpha = (float) ((primary ? 0.14 : 0) + tint.value() * 0.16);
             if (!button.isEnabled()) {
                 alpha *= 0.4f;
@@ -409,6 +436,11 @@ final class FolioChrome {
 
     private static final class CopyButton extends QuietButton {
         private final FolioMotion feedback;
+
+        @Override protected void paintComponent(Graphics graphics) {
+            if (Boolean.TRUE.equals(getClientProperty("folio.hoverOnly")) && !getModel().isRollover() && !hasFocus()) return;
+            super.paintComponent(graphics);
+        }
 
         CopyButton(Runnable copy, String description) {
             super("", AllIcons.Actions.Copy, false);
@@ -475,7 +507,7 @@ final class FolioChrome {
                     Graphics2D g = (Graphics2D) graphics.create();
                     g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                     g.setColor(surface == Surface.USER ? userFill() : answerFill());
-                    g.fillRoundRect(0, 0, getWidth(), getHeight(), JBUI.scale(8), JBUI.scale(8));
+                    g.fillRoundRect(0, 0, getWidth(), getHeight(), JBUI.scale(surface == Surface.USER ? 24 : 16), JBUI.scale(surface == Surface.USER ? 24 : 16));
                     g.dispose();
                 }
                 super.paintComponent(graphics);
@@ -552,7 +584,7 @@ final class FolioChrome {
                 Graphics2D g = (Graphics2D) graphics.create();
                 g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 g.setColor(answerFill());
-                int arc = JBUI.scale(12);
+                int arc = JBUI.scale(28);
                 g.fillRoundRect(1, 1, getWidth() - 2, getHeight() - 2, arc, arc);
                 g.setColor(field.hasFocus() ? accent() : JBColor.border());
                 g.setStroke(new BasicStroke(JBUI.scale(field.hasFocus() ? 2 : 1)));
@@ -621,8 +653,9 @@ final class FolioChrome {
         }
     }
 
-    static final class Composer extends Reveal {
+    static class Composer extends Reveal {
         private final PromptArea field;
+        private boolean controlsInstalled;
 
         Composer(PromptArea field, JComponent well) {
             super(well);
@@ -642,6 +675,7 @@ final class FolioChrome {
         }
 
         void controls(JComponent mode, JComponent send) {
+            controlsInstalled = true;
             child.removeAll();
             child.setBorder(JBUI.Borders.empty(10, 10, 8, 8));
             GridBagConstraints input = new GridBagConstraints();
@@ -651,20 +685,27 @@ final class FolioChrome {
             input.weightx = 1;
             input.weighty = 1;
             input.fill = GridBagConstraints.BOTH;
-            input.insets = JBUI.insetsBottom(16);
+            input.insets = JBUI.insetsBottom(20);
             child.add(scroll(field), input);
             GridBagConstraints modes = new GridBagConstraints();
             modes.gridx = 0;
             modes.gridy = 1;
             modes.weightx = 1;
             modes.anchor = GridBagConstraints.WEST;
+            mode.putClientProperty("folio.pill", true);
             child.add(mode, modes);
             GridBagConstraints action = new GridBagConstraints();
             action.gridx = 1;
             action.gridy = 1;
             action.anchor = GridBagConstraints.EAST;
+            send.putClientProperty("folio.circle", true);
             child.add(send, action);
-            child.setMinimumSize(new Dimension(1, JBUI.scale(100)));
+            child.setMinimumSize(new Dimension(1, JBUI.scale(104)));
+        }
+
+        @Override public Dimension getPreferredSize() {
+            Dimension size = super.getPreferredSize();
+            return new Dimension(size.width, controlsInstalled ? Math.max(JBUI.scale(104), size.height) : size.height);
         }
 
         void fitRows(int rows) {
@@ -699,6 +740,57 @@ final class FolioChrome {
         }
     }
 
+    static Icon codeIcon() {
+        return new Icon() {
+            public int getIconWidth() { return JBUI.scale(16); }
+            public int getIconHeight() { return JBUI.scale(16); }
+            public void paintIcon(Component owner, Graphics graphics, int x, int y) {
+                Graphics2D g = (Graphics2D) graphics.create();
+                g.translate(x, y);
+                g.scale(JBUI.scale(1f), JBUI.scale(1f));
+                g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g.setColor(owner.getForeground());
+                g.setStroke(new BasicStroke(1.3f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                g.drawLine(6, 4, 2, 8); g.drawLine(2, 8, 6, 12);
+                g.drawLine(10, 4, 14, 8); g.drawLine(14, 8, 10, 12);
+                g.dispose();
+            }
+        };
+    }
+
+    static Icon sendIcon(boolean stop) {
+        return new Icon() {
+            public int getIconWidth() { return JBUI.scale(16); }
+            public int getIconHeight() { return JBUI.scale(16); }
+            public void paintIcon(Component owner, Graphics graphics, int x, int y) {
+                Graphics2D g = (Graphics2D) graphics.create();
+                g.translate(x, y);
+                g.scale(JBUI.scale(1f), JBUI.scale(1f));
+                g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g.setColor(Color.WHITE);
+                g.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                if (stop) g.fillRoundRect(4, 4, 8, 8, 2, 2);
+                else { g.drawLine(8, 3, 8, 13); g.drawLine(8, 3, 3, 8); g.drawLine(8, 3, 13, 8); }
+                g.dispose();
+            }
+        };
+    }
+
+    static JComponent userBubble(String text, Runnable onCopy) {
+        JBPanel<?> bubble = card(Surface.USER);
+        bubble.setBorder(JBUI.Borders.empty(8, 12));
+        WrapText body = new WrapText(text);
+        bubble.add(body, BorderLayout.CENTER);
+        int width = text.lines().mapToInt(line -> body.getFontMetrics(body.getFont()).stringWidth(line)).max().orElse(0) + JBUI.scale(25);
+        BubbleRow row = new BubbleRow(bubble, width);
+        row.add(bubble);
+        JButton copy = copyButton("复制消息", onCopy);
+        copy.putClientProperty("folio.hoverOnly", true);
+        row.add(copy);
+        row.setBorder(JBUI.Borders.emptyBottom(6));
+        return row;
+    }
+
     static JComponent bubbleRow(JComponent bubble) {
         BubbleRow row = new BubbleRow(bubble);
         row.add(bubble);
@@ -707,9 +799,13 @@ final class FolioChrome {
 
     static final class Column extends JBPanel<Column> implements Scrollable {
         private final Component glue = Box.createVerticalGlue();
+        private final int gap;
 
-        Column() {
+        Column() { this(6); }
+
+        Column(int gap) {
             super();
+            this.gap = JBUI.scale(gap);
             setLayout(new ColumnLayout());
             setOpaque(false);
             setBorder(JBUI.Borders.empty(2, 2, 8, 2));
@@ -792,10 +888,9 @@ final class FolioChrome {
             int heightAt(Container parent, int width) {
                 Insets insets = parent.getInsets();
                 int inner = Math.max(1, width - insets.left - insets.right);
-                int gap = JBUI.scale(6);
                 int height = 0;
                 for (Component child : parent.getComponents()) {
-                    if (child == glue) {
+                    if (child == glue || !child.isVisible()) {
                         continue;
                     }
                     child.setSize(inner, 1);
@@ -810,9 +905,8 @@ final class FolioChrome {
                 int x = insets.left;
                 int width = Math.max(0, parent.getWidth() - insets.left - insets.right);
                 int y = insets.top;
-                int gap = JBUI.scale(6);
                 for (Component child : parent.getComponents()) {
-                    if (child == glue) {
+                    if (child == glue || !child.isVisible()) {
                         continue;
                     }
                     child.setSize(Math.max(width, 1), 1);
@@ -836,7 +930,7 @@ final class FolioChrome {
             setWrapStyleWord(true);
             setOpaque(false);
             setBorder(JBUI.Borders.empty());
-            setFont(JBFont.medium());
+            setFont(JBFont.label().deriveFont((float) JBUI.scale(15)));
             setColumns(24);
             addFocusListener(new FocusAdapter() {
                 @Override
@@ -946,7 +1040,7 @@ final class FolioChrome {
                 width = JBUI.scale(280);
             }
             View root = getUI().getRootView(this);
-            root.setSize(width, Integer.MAX_VALUE);
+            root.setSize(Math.max(1, width - 1), Integer.MAX_VALUE);
             int height = (int) Math.ceil(root.getPreferredSpan(View.Y_AXIS)) + getInsets().top + getInsets().bottom;
             if (getText().isEmpty()) {
                 height = Math.max(height, getFontMetrics(getFont()).getHeight());
@@ -958,13 +1052,22 @@ final class FolioChrome {
     static final class CodeText extends WrapText {
         CodeText(String text) {
             super(text);
-            setFont(codeFont(JBFont.medium().getSize()));
+            setFont(codeFont(JBUI.scale(13)));
+        }
+
+        @Override public Dimension getPreferredSize() {
+            if (getLineWrap()) return super.getPreferredSize();
+            FontMetrics metrics = getFontMetrics(getFont());
+            int width = getText().lines().mapToInt(metrics::stringWidth).max().orElse(0) + 1;
+            return new Dimension(width, Math.max(1, getLineCount()) * metrics.getHeight());
         }
 
         @Override
         public void updateUI() {
+            boolean wrapped = getLineWrap();
             super.updateUI();
-            setFont(codeFont(JBFont.medium().getSize()));
+            setLineWrap(wrapped);
+            setFont(codeFont(JBUI.scale(13)));
         }
     }
 
@@ -976,7 +1079,7 @@ final class FolioChrome {
         private final Reveal content = new Reveal(bodySlot);
         private final JPanel referenceSlot = new JPanel(new BorderLayout(0, JBUI.scale(4)));
         private final WrapText body = new WrapText("");
-        private final JBLabel activity = muted("Searching course files…");
+        private final JBLabel activity = muted("正在检索课件...");
         private final JToggleButton references = new QuietToggle();
         private final Reveal sourceReveal = new Reveal(sources);
         private final Consumer<CourseChunk> onSource;
@@ -1003,6 +1106,8 @@ final class FolioChrome {
             bodySlot.setOpaque(false);
             referenceSlot.setOpaque(false);
             references.putClientProperty("JButton.buttonType", "borderless");
+            references.putClientProperty("folio.pill", true);
+            references.setBorder(JBUI.Borders.empty(4, 10));
             references.setHorizontalAlignment(SwingConstants.LEADING);
             references.setMargin(JBUI.emptyInsets());
             references.setVisible(false);
@@ -1012,7 +1117,10 @@ final class FolioChrome {
                 describe(references, references.isSelected() ? "收起课件引用" : "展开课件引用");
                 refresh();
             });
-            referenceSlot.add(references, BorderLayout.NORTH);
+            JPanel referenceControl = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 0, 0));
+            referenceControl.setOpaque(false);
+            referenceControl.add(references);
+            referenceSlot.add(referenceControl, BorderLayout.NORTH);
             referenceSlot.add(sourceReveal, BorderLayout.CENTER);
             add(bannerSlot, BorderLayout.NORTH);
             JBPanel<?> answer = new JBPanel<>(new BorderLayout(0, JBUI.scale(4)));
@@ -1021,7 +1129,7 @@ final class FolioChrome {
                 answerCopy = copyButton("复制回答", () -> onCopy.accept(rawAnswer));
                 answerCopy.setEnabled(false);
                 describe(answerCopy, "复制回答");
-                answerCopy.getAccessibleContext().setAccessibleDescription("Available when the answer finishes.");
+                answerCopy.getAccessibleContext().setAccessibleDescription("复制回答：生成完成后可用");
                 actions.add(answerCopy);
             }
 
@@ -1060,6 +1168,14 @@ final class FolioChrome {
             actions.add(retry);
             bottom.add(actions, BorderLayout.SOUTH);
             add(bottom, BorderLayout.SOUTH);
+        }
+
+        void generationActive(boolean busy) {
+            boolean pending = state == State.RETRIEVING || state == State.GENERATING || state == State.STREAMING;
+            retry.setEnabled(!busy && !pending);
+            String reason = pending ? "正在重新生成" : busy ? "重新生成：请先停止当前任务" : "重新生成";
+            retry.setToolTipText(reason);
+            retry.getAccessibleContext().setAccessibleDescription(reason);
         }
 
         void onRetry(Runnable action) { retry.addActionListener(event -> action.run()); }
@@ -1169,7 +1285,7 @@ final class FolioChrome {
             describe(retry, "重新生成");
             if (answerCopy != null) {
                 answerCopy.setEnabled(true);
-                answerCopy.getAccessibleContext().setAccessibleDescription("Copy the completed answer.");
+                answerCopy.getAccessibleContext().setAccessibleDescription("复制完整回答");
             }
             bannerSlot.removeAll();
             sources.removeAll();
@@ -1184,16 +1300,19 @@ final class FolioChrome {
                         if (value.startsWith(Answer.GENERAL_SENTENCE)) {
                             value = value.substring(Answer.GENERAL_SENTENCE.length()).stripLeading();
                         }
-                        bannerSlot.add(banner(Answer.UNGROUNDED, Tone.WARNING), BorderLayout.CENTER);
+                        bannerSlot.add(banner("此回答基于通用知识，没有课件引用。", Tone.WARNING), BorderLayout.CENTER);
                     }
-                    case RETRIEVED -> bannerSlot.add(banner("Course material was retrieved. The reply has no mapped source citation.", Tone.INFO), BorderLayout.CENTER);
-                    case INVALID -> bannerSlot.add(banner("Some source markers are invalid. Cards show retrieved material.", Tone.WARNING), BorderLayout.CENTER);
-                    case AMBIGUOUS -> bannerSlot.add(banner("Source markers are ambiguous. Cards show retrieved material.", Tone.WARNING), BorderLayout.CENTER);
-                    case CONFIGURATION -> bannerSlot.add(banner("Model configuration is needed. Local course matches remain available below.", Tone.INFO), BorderLayout.CENTER);
+                    case RETRIEVED -> bannerSlot.add(banner("已检索课件，回复未映射到具体引用。", Tone.INFO), BorderLayout.CENTER);
+                    case INVALID -> bannerSlot.add(banner("部分引用标记无效，下面显示实际检索到的课件。", Tone.WARNING), BorderLayout.CENTER);
+                    case AMBIGUOUS -> bannerSlot.add(banner("引用标记有歧义，下面显示实际检索到的课件。", Tone.WARNING), BorderLayout.CENTER);
+                    case CONFIGURATION -> bannerSlot.add(banner("模型尚未配置，仍可查看本地检索到的课件。", Tone.INFO), BorderLayout.CENTER);
                     case INLINE -> { }
                 }
             }
+            if (answer != null && answer.evidence() == Answer.Evidence.CONFIGURATION)
+                value = value.replace(Asker.MISSING_KEY, "尚未配置模型 Key。可继续检索本地课件，或前往设置保存模型连接。");
             finalBody = value;
+            body.setFont(JBFont.label().deriveFont((float) JBUI.scale(16)));
             body.setBody(value);
             formatWhenReleased();
             references.setVisible(!hits.isEmpty());
@@ -1201,7 +1320,7 @@ final class FolioChrome {
             describe(references, "展开课件引用");
             if (!hits.isEmpty()) {
                 addSourceRow(mutedHeading(answer.evidence() == Answer.Evidence.INLINE
-                        ? "Sources cited in the reply" : "Retrieved material"), 0, JBUI.insets(0, 0, 2, 0));
+                        ? "回答引用的课件" : "检索到的课件"), 0, JBUI.insets(0, 0, 2, 0));
                 for (int i = 0; i < hits.size(); i++) {
                     CourseChunk chunk = hits.get(i);
                     JComponent card = sourceCard(i + 1, chunk, () -> onSource.accept(chunk));
@@ -1226,9 +1345,9 @@ final class FolioChrome {
             }
             body.setBody(provisional.toString());
             activity.setText(switch (state) {
-                case RETRIEVING -> "Searching course files…";
-                case GENERATING -> "Generating…";
-                case STREAMING -> "Receiving answer…";
+                case RETRIEVING -> "正在检索课件...";
+                case GENERATING -> "正在生成...";
+                case STREAMING -> "正在接收回答...";
                 case FINAL_RAW, FINAL_FORMATTED, STOPPED -> "";
             });
             refresh();
@@ -1272,12 +1391,55 @@ final class FolioChrome {
             refresh();
         }
 
+        private WrapText answerText(String text) {
+            WrapText paragraph = new WrapText(text);
+            paragraph.setFont(JBFont.label().deriveFont((float) JBUI.scale(16)));
+            return paragraph;
+        }
+
+        private JComponent codeBlock(String text) {
+            CodeText code = new CodeText(text);
+            code.setLineWrap(false);
+            JScrollPane viewport = scroll(code);
+            viewport.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_NEVER);
+            JPanel panel = new JPanel(null) {
+                @Override public Dimension getPreferredSize() {
+                    int width = getWidth() > 0 ? getWidth() : JBUI.scale(280);
+                    code.setSize(Math.max(1, width - JBUI.scale(24)), 1);
+                    int trailing = text.endsWith("\n") || text.endsWith("\r") ? code.getFontMetrics(code.getFont()).getHeight() : 0;
+                    int scrollbar = code.getPreferredSize().width > width - JBUI.scale(24)
+                            ? viewport.getHorizontalScrollBar().getPreferredSize().height : 0;
+                    return new Dimension(width, code.getPreferredSize().height - trailing + JBUI.scale(24) + scrollbar);
+                }
+                @Override public void doLayout() {
+                    viewport.setBounds(JBUI.scale(12), JBUI.scale(12), Math.max(1, getWidth() - JBUI.scale(24)), Math.max(1, getHeight() - JBUI.scale(24)));
+                    for (Component child : getComponents()) if (child != viewport)
+                        child.setBounds(getWidth() - JBUI.scale(30), JBUI.scale(2), JBUI.scale(28), JBUI.scale(28));
+                }
+                @Override protected void paintComponent(Graphics graphics) {
+                    Graphics2D g = (Graphics2D) graphics.create();
+                    g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                    g.setColor(answerFill());
+                    g.fillRoundRect(0, 0, getWidth(), getHeight(), JBUI.scale(16), JBUI.scale(16));
+                    g.dispose();
+                }
+            };
+            panel.setOpaque(false);
+            panel.add(viewport);
+            if (onCopy != null) {
+                JButton copy = copyButton("复制代码", () -> onCopy.accept(text));
+                copy.putClientProperty("folio.hoverOnly", true);
+                panel.add(copy);
+                panel.setComponentZOrder(copy, 0);
+            }
+            return panel;
+        }
+
         private JComponent formattedBody(String text) {
-            Column blocks = new Column();
+            Column blocks = new Column(10);
             blocks.setBorder(JBUI.Borders.empty());
             int cursor = 0;
             int fenceStart = -1;
-            int headerEnd = 0;
             int codeStart = 0;
             int nextLine = 0;
             while (nextLine < text.length()) {
@@ -1301,7 +1463,6 @@ final class FolioChrome {
                 if (fenceStart < 0) {
                     if (nextLine > lineEnd) {
                         fenceStart = lineStart;
-                        headerEnd = lineEnd;
                         codeStart = nextLine;
                     }
                     continue;
@@ -1314,26 +1475,16 @@ final class FolioChrome {
                     continue;
                 }
                 if (fenceStart > cursor) {
-                    blocks.addRow(new WrapText(text.substring(cursor, fenceStart).stripTrailing()));
+                    blocks.addRow(answerText(text.substring(cursor, fenceStart).stripTrailing()));
                 }
-                JPanel code = card(Surface.CODE);
-                JPanel head = new JPanel(new BorderLayout());
-                head.setOpaque(false);
-                head.add(muted(text.substring(fenceStart + 3, headerEnd).strip()), BorderLayout.WEST);
                 String codeText = text.substring(codeStart, lineStart);
-                if (onCopy != null) {
-                    JButton copy = copyButton("复制代码", () -> onCopy.accept(codeText));
-                    head.add(copy, BorderLayout.EAST);
-                }
-                code.add(head, BorderLayout.NORTH);
-                WrapText source = new CodeText(codeText);
-                code.add(source, BorderLayout.CENTER);
+                JComponent code = codeBlock(codeText);
                 blocks.addRow(code);
                 cursor = nextLine;
                 fenceStart = -1;
             }
             if (cursor < text.length()) {
-                blocks.addRow(new WrapText(text.substring(cursor)));
+                blocks.addRow(answerText(text.substring(cursor)));
             }
             return blocks;
         }
@@ -1367,6 +1518,14 @@ final class FolioChrome {
         return banner;
     }
 
+    private static String scopeText(CourseChunk chunk) {
+        return "第 " + chunk.scopeNumber() + switch (chunk.scopeKind()) {
+            case PAGE -> " 页";
+            case SLIDE -> " 张幻灯片";
+            case SECTION -> " 节";
+        };
+    }
+
     static JComponent sourceCard(int number, CourseChunk chunk, Runnable open) {
         JBPanel<?> card = new JBPanel<>(new BorderLayout(0, JBUI.scale(2)));
         card.setOpaque(false);
@@ -1375,20 +1534,20 @@ final class FolioChrome {
         JButton title = iconButton(null);
         title.setText("[" + number + "]  " + file);
         title.setHorizontalAlignment(SwingConstants.LEADING);
-        title.getAccessibleContext().setAccessibleName("Open " + file + " at " + Asker.scopePhrase(chunk));
+        describe(title, "打开 " + file + "，" + scopeText(chunk));
         title.addActionListener(event -> open.run());
         title.setFont(JBFont.small().asBold());
         title.setForeground(JBUI.CurrentTheme.Link.Foreground.ENABLED);
         card.add(title, BorderLayout.NORTH);
         JBPanel<?> detail = new JBPanel<>(new BorderLayout(0, JBUI.scale(2)));
         detail.setOpaque(false);
-        detail.add(muted(Asker.scopePhrase(chunk)), BorderLayout.NORTH);
+        detail.add(muted(scopeText(chunk)), BorderLayout.NORTH);
         WrapText excerpt = new WrapText(Asker.snippet(chunk));
         excerpt.setFont(JBFont.small());
         excerpt.setForeground(JBColor.namedColor("Component.infoForeground", JBColor.GRAY));
         detail.add(excerpt, BorderLayout.CENTER);
         card.add(detail, BorderLayout.CENTER);
-        card.setToolTipText("Open " + file + " at " + Asker.scopePhrase(chunk));
+        card.setToolTipText("课件摘录，可选择复制；点击标题打开来源。");
         return card;
     }
 
@@ -1398,16 +1557,16 @@ final class FolioChrome {
         panel.setBackground(UIUtil.getPanelBackground());
         panel.setBorder(JBUI.Borders.empty(4, 0));
         String file = Asker.citedFile(chunk.sourceDocument());
-        panel.add(sectionTitle(file.isEmpty() ? "Course file" : file), BorderLayout.NORTH);
+        panel.add(sectionTitle(file.isEmpty() ? "课件" : file), BorderLayout.NORTH);
         JBPanel<?> body = new JBPanel<>(new BorderLayout(0, JBUI.scale(8)));
         body.setOpaque(false);
         String note = missing
-                ? "This path is not on disk. The excerpt is the indexed chunk."
-                : "This file does not open as text in the editor. The excerpt is the indexed chunk.";
+                ? "原文件当前不可用，下面保留索引中的摘录。"
+                : "此文件无法在代码编辑器中打开，下面保留索引中的摘录。";
         body.add(banner(note, missing ? Tone.WARNING : Tone.INFO), BorderLayout.NORTH);
         JBPanel<?> excerpt = new JBPanel<>(new BorderLayout(0, JBUI.scale(6)));
         excerpt.setOpaque(false);
-        excerpt.add(muted(Asker.scopePhrase(chunk)), BorderLayout.NORTH);
+        excerpt.add(muted(scopeText(chunk)), BorderLayout.NORTH);
         WrapText text = new CodeText(chunk.text());
         JScrollPane scroll = fieldScroll(text);
         int textHeight = text.getPreferredSize().height + JBUI.scale(12);
@@ -1474,10 +1633,14 @@ final class FolioChrome {
 
     static final class BubbleRow extends JBPanel<BubbleRow> {
         private final JComponent bubble;
+        private final int userWidth;
 
-        BubbleRow(JComponent bubble) {
+        BubbleRow(JComponent bubble) { this(bubble, 0); }
+
+        BubbleRow(JComponent bubble, int userWidth) {
             super(new BorderLayout());
             this.bubble = bubble;
+            this.userWidth = userWidth;
             setLayout(new BubbleLayout());
             setOpaque(false);
         }
@@ -1516,12 +1679,14 @@ final class FolioChrome {
                 int inner = Math.max(0, parent.getWidth() - insets.left - insets.right);
                 int width = bubbleWidth(inner);
                 int height = bubbleHeight(inner);
-                int x = insets.left;
+                int x = insets.left + (userWidth > 0 ? inner - width : 0);
                 bubble.setBounds(x, insets.top, width, height);
+                for (Component child : parent.getComponents()) if (child != bubble)
+                    child.setBounds(Math.max(0, x - JBUI.scale(28)), insets.top, JBUI.scale(28), JBUI.scale(28));
             }
 
             private int bubbleWidth(int inner) {
-                return Math.max(1, inner);
+                return Math.max(1, userWidth > 0 ? Math.min(userWidth, inner * 9 / 10) : inner);
             }
 
             private int bubbleHeight(int inner) {
@@ -1540,35 +1705,19 @@ final class FolioChrome {
             super.removeNotify();
         }
 
-        private String placeholder;
-
         PromptArea(String placeholder) {
             super("", 1, 20);
-            this.placeholder = placeholder == null ? "" : placeholder;
+            setFont(JBFont.label().deriveFont((float) JBUI.scale(15)));
             setLineWrap(true);
             setWrapStyleWord(true);
             setOpaque(false);
             setBorder(JBUI.Borders.empty(2, 0));
+            setPlaceholder(placeholder);
         }
 
         void setPlaceholder(String placeholder) {
-            this.placeholder = placeholder;
+            getEmptyText().setText(placeholder == null ? "" : placeholder);
             repaint();
-        }
-
-        @Override
-        protected void paintComponent(Graphics graphics) {
-            super.paintComponent(graphics);
-            if (!getText().isEmpty() || placeholder.isEmpty()) {
-                return;
-            }
-            Graphics2D g = (Graphics2D) graphics.create();
-            g.setFont(getFont());
-            g.setColor(JBColor.namedColor("Component.infoForeground", JBColor.GRAY));
-            Insets insets = getInsets();
-            FontMetrics metrics = g.getFontMetrics();
-            g.drawString(placeholder, insets.left, insets.top + metrics.getAscent());
-            g.dispose();
         }
 
         @Override
@@ -1578,6 +1727,7 @@ final class FolioChrome {
             setWrapStyleWord(true);
             setOpaque(false);
             setBorder(JBUI.Borders.empty(2, 0));
+            setFont(JBFont.label().deriveFont((float) JBUI.scale(15)));
         }
     }
 
@@ -1600,6 +1750,8 @@ final class FolioChrome {
             this.tone = tone == null ? Tone.NEUTRAL : tone;
             message.setBody(text == null ? "" : text);
             setToolTipText(text);
+            mark.setToolTipText(text);
+            mark.getAccessibleContext().setAccessibleName(text);
             apply();
             revalidate();
             repaint();

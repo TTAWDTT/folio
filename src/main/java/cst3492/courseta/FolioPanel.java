@@ -93,7 +93,7 @@ public final class FolioPanel extends JPanel implements Disposable {
     private final JBTextField baseUrl = new JBTextField(TaSettings.DEFAULT_BASE_URL, 16);
     private final JBTextField model = new JBTextField(TaSettings.DEFAULT_MODEL, 16);
     private final JBPasswordField apiKey = new JBPasswordField();
-    private final FolioChrome.PromptArea question = new FolioChrome.PromptArea("Ask a course question");
+    private final FolioChrome.PromptArea question = new FolioChrome.PromptArea("继续提问，或粘贴代码...");
     private final JBTextArea transcript = new JBTextArea(12, 20);
     private final JBTextArea rawTranscript = new JBTextArea(12, 20);
     private final FolioChrome.WrapText previewStatus = new FolioChrome.WrapText("");
@@ -101,10 +101,12 @@ public final class FolioPanel extends JPanel implements Disposable {
     private final FolioChrome.StatusBanner statusBanner = new FolioChrome.StatusBanner();
     private final FolioChrome.ActivationButton<ComposerIntent> askButton = new FolioChrome.ActivationButton<>(AllIcons.Actions.MoveUp);
     private final FolioChrome.Composer composerChrome = FolioChrome.composer(question, askButton);
-    private final JButton writeButton = FolioChrome.secondary("Write test file", AllIcons.Actions.Execute);
-    private final JButton indexButton = FolioChrome.primary("Index files", AllIcons.Actions.AddFile);
-    private final JButton badge = new FolioChrome.ChipButton("No API key", AllIcons.General.Warning);
+    private final JButton writeButton = FolioChrome.secondary("写入文件", AllIcons.Actions.Execute);
+    private final JButton indexButton = FolioChrome.primary("导入课件", AllIcons.Actions.AddFile);
+    private final JButton badge = new FolioChrome.ChipButton("尚未配置模型 Key", AllIcons.General.Warning);
     private final JButton clearChatButton = FolioChrome.iconButton(AllIcons.Actions.GC);
+    private JPanel headerChrome;
+    private final JButton folderButton = FolioChrome.iconButton(AllIcons.Nodes.Folder);
     private final JButton gear = FolioChrome.gear(AllIcons.General.GearPlain);
     private final FolioChrome.WrapText settingsStatus = new FolioChrome.WrapText("");
     private final FolioChrome.WrapText endpointError = new FolioChrome.WrapText("");
@@ -121,12 +123,12 @@ public final class FolioPanel extends JPanel implements Disposable {
     private final Map<Long, Turn> turns = new LinkedHashMap<>();
     private Mode mode = Mode.ASK;
 
-    private final FolioChrome.Column chatColumn = new FolioChrome.Column();
+    private final FolioChrome.Column chatColumn = new FolioChrome.Column(12);
     private final FolioChrome.Column fileColumn = new FolioChrome.Column();
     private final JPanel chatEmpty = FolioChrome.emptyState(
             AllIcons.Actions.Find,
-            "Ask the course",
-            "Ask a lecture question. A source under the answer opens that course file.");
+            "从课程和代码开始",
+            "提问、生成练习，或为当前代码生成测试。");
     private final JPanel filesEmpty = new JBPanel<>(new BorderLayout(0, JBUI.scale(8)));
     private final JPanel contextStrip = new JPanel(new BorderLayout(JBUI.scale(4), 0));
     private final FolioChrome.WrapText contextLabel = new FolioChrome.WrapText("");
@@ -229,7 +231,7 @@ public final class FolioPanel extends JPanel implements Disposable {
         this.delivery = delivery;
         this.client = client;
         this.tasks = new FolioTasks(workers, delivery, this::alive, this::refreshActivity);
-        setBorder(JBUI.Borders.empty(6, 8));
+        setBorder(JBUI.Borders.empty(12));
         setOpaque(true);
         setBackground(com.intellij.util.ui.UIUtil.getPanelBackground());
         rawTranscript.setEditable(false);
@@ -276,7 +278,7 @@ public final class FolioPanel extends JPanel implements Disposable {
         shrinkable(baseUrl);
         shrinkable(model);
         shrinkable(apiKey);
-        badge.setToolTipText("Settings");
+        badge.setToolTipText("设置");
         badge.addActionListener(event -> toggleSettings());
         gear.addActionListener(event -> toggleSettings());
         fileToolbar.setOpaque(false);
@@ -284,16 +286,19 @@ public final class FolioPanel extends JPanel implements Disposable {
         filesEmpty.setOpaque(false);
         JPanel emptyFiles = FolioChrome.emptyState(
                 AllIcons.FileTypes.Text,
-                "No course files",
-                "Index course documents to search them from Ask.");
+                "尚未导入课件",
+                "导入 PDF、PPTX 或文本课件，即可在回答中引用。");
         indexRow.setOpaque(false);
         indexRow.setBorder(JBUI.Borders.emptyTop(8));
         indexRow.add(indexButton);
         emptyFiles.add(indexRow, BorderLayout.SOUTH);
         filesEmpty.add(emptyFiles, BorderLayout.NORTH);
         filesReport.setVisible(false);
+        statusBanner.setVisible(false);
 
-        add(header(), BorderLayout.NORTH);
+        headerChrome = header();
+        add(headerChrome, BorderLayout.NORTH);
+        chatColumn.setBorder(JBUI.Borders.empty(16, 6, 8, 6));
         add(sections(), BorderLayout.CENTER);
 
         DocumentListener keys = new DocumentListener() {
@@ -321,8 +326,8 @@ public final class FolioPanel extends JPanel implements Disposable {
             else if (intent instanceof ComposerIntent.Send send && send.mode() == mode
                     && send.revision() == drafts.current(mode).editor().revision) dispatchComposer();
         });
-        askButton.setToolTipText("Send");
-        askButton.getAccessibleContext().setAccessibleName("Send");
+        askButton.setToolTipText("发送消息");
+        askButton.getAccessibleContext().setAccessibleName("发送消息");
         askButton.setMargin(JBUI.emptyInsets());
         indexButton.addActionListener(event -> chooseFiles());
         FolioChrome.describe(modeButton, "选择模式");
@@ -340,6 +345,21 @@ public final class FolioPanel extends JPanel implements Disposable {
         loadStored();
     }
 
+    void useNativeHeader(com.intellij.openapi.wm.ToolWindow window) {
+        window.setTitleActions(List.of(headerAction(clearChatButton), headerAction(folderButton), headerAction(gear)));
+        remove(headerChrome);
+        revalidate();
+    }
+
+    private com.intellij.openapi.actionSystem.AnAction headerAction(JButton button) {
+        String name = button.getAccessibleContext().getAccessibleName();
+        return new com.intellij.openapi.actionSystem.AnAction(name, name, button.getIcon()) {
+            @Override public void actionPerformed(com.intellij.openapi.actionSystem.AnActionEvent event) {
+                if (alive()) button.doClick(0);
+            }
+        };
+    }
+
     static boolean llmActionsEnabled(boolean storedKey, int typedCharacters) {
         return storedKey || typedCharacters > 0;
     }
@@ -349,7 +369,7 @@ public final class FolioPanel extends JPanel implements Disposable {
             String model = modelName == null ? "" : modelName.strip();
             return model.isEmpty() ? "Key ready" : "Key ready · " + model;
         }
-        return typedCharacters > 0 ? "Key not saved" : "No API key";
+        return typedCharacters > 0 ? "Key not saved" : "尚未配置模型 Key";
     }
 
     /**
@@ -383,10 +403,12 @@ public final class FolioPanel extends JPanel implements Disposable {
 
     public void ask(String text, String selection, CapturedCode code) {
         selectMode(Mode.ASK);
-        drafts.ask.code = code;
+        drafts.ask.code = code == null || selection == null || selection.isBlank() ? code
+                : new CapturedCode(selection, code.completeSource(), code.origin(), code.testDirectory());
         question.setText(text == null ? "" : text);
+        refreshContext();
         if (busyLaunch()) return;
-        runAsk(selection, code == null ? null : context(code));
+        runAsk(selection, code == null ? null : context(code.withTarget(code.completeSource(), code.testDirectory())));
     }
 
     public String scenarioText() { return drafts.tests.editor.text(); }
@@ -394,7 +416,7 @@ public final class FolioPanel extends JPanel implements Disposable {
 
     public void showNote(String text) {
         tasks.clear(FolioTasks.Channel.TEST);
-        setStatus(text, FolioChrome.Tone.WARNING);
+        setStatus(Scenario.MISSING.equals(text) ? "请描述需要验证的行为，再生成测试。" : text, FolioChrome.Tone.WARNING);
         selectMode(Mode.TESTS);
     }
 
@@ -501,7 +523,7 @@ public final class FolioPanel extends JPanel implements Disposable {
     private JPanel header() {
         JPanel panel = new JPanel(new BorderLayout());
         panel.setOpaque(false);
-        panel.setBorder(JBUI.Borders.empty(0, 6, 8, 2));
+        panel.setBorder(JBUI.Borders.empty(0, 6, 6, 0));
         JBLabel title = FolioChrome.sectionTitle("Folio");
         title.setFont(title.getFont().deriveFont(Font.BOLD, 19f));
         panel.add(title, BorderLayout.WEST);
@@ -512,12 +534,11 @@ public final class FolioPanel extends JPanel implements Disposable {
         clearChatButton.addActionListener(event -> {
             if (turns.isEmpty() || Messages.showYesNoDialog(project, "开始新对话将清除当前记录，未发送草稿会保留。", "新对话", Messages.getQuestionIcon()) == Messages.YES) clearChat();
         });
-        JButton folder = FolioChrome.iconButton(AllIcons.Nodes.Folder);
-        FolioChrome.describe(folder, "课件");
-        folder.addActionListener(event -> showFiles());
+        FolioChrome.describe(folderButton, "课件");
+        folderButton.addActionListener(event -> showFiles());
         FolioChrome.describe(gear, "设置");
         actions.add(clearChatButton);
-        actions.add(folder);
+        actions.add(folderButton);
         actions.add(gear);
         panel.add(actions, BorderLayout.EAST);
         return panel;
@@ -556,13 +577,19 @@ public final class FolioPanel extends JPanel implements Disposable {
         save.addActionListener(event -> saveSettings());
         JButton cancel = FolioChrome.secondary("取消", AllIcons.Actions.Cancel);
         cancel.addActionListener(event -> backToChat());
-        JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, JBUI.scale(8), 0));
+        JPanel actions = new JPanel(new BorderLayout(JBUI.scale(8), 0));
         actions.setOpaque(false);
-        actions.add(save);
-        actions.add(cancel);
-        panel.addRow(actions);
-        panel.addRow(settingsStatus);
-        return panel;
+        actions.add(cancel, BorderLayout.WEST);
+        actions.add(save, BorderLayout.EAST);
+        JPanel footer = new JPanel(new BorderLayout(0, JBUI.scale(6)));
+        footer.setOpaque(false);
+        footer.add(settingsStatus, BorderLayout.NORTH);
+        footer.add(actions, BorderLayout.SOUTH);
+        JPanel form = new JPanel(new BorderLayout(0, JBUI.scale(10)));
+        form.setOpaque(false);
+        form.add(FolioChrome.scroll(panel), BorderLayout.CENTER);
+        form.add(footer, BorderLayout.SOUTH);
+        return form;
     }
 
     private JPanel sections() {
@@ -573,7 +600,7 @@ public final class FolioPanel extends JPanel implements Disposable {
         JPanel settings = new JPanel(new BorderLayout(0, JBUI.scale(8)));
         settings.setOpaque(false);
         settings.add(pageBack("设置"), BorderLayout.NORTH);
-        settings.add(FolioChrome.scroll(settingsForm()), BorderLayout.CENTER);
+        settings.add(settingsForm(), BorderLayout.CENTER);
         sectionDeck.add(settings, "settings");
         return sectionDeck;
     }
@@ -594,22 +621,28 @@ public final class FolioPanel extends JPanel implements Disposable {
     private void showFiles() {
         leaveChat();
         route = new Route.Files();
+        headerChrome.setVisible(false);
         sections.show(sectionDeck, "files");
     }
 
     private void leaveChat() {
         saveCaret();
+        discardSettings();
         modePopup.reset();
     }
 
+    private void discardSettings() {
+        if (!(route instanceof Route.Settings)) return;
+        apiKey.setText("");
+        TaSettings.Values saved = provider.savedSettings();
+        baseUrl.setText(saved.baseUrl());
+        model.setText(saved.modelName());
+    }
+
     private void backToChat() {
-        if (route instanceof Route.Settings) {
-            apiKey.setText("");
-            ProviderConnection saved = provider.captureSaved();
-            baseUrl.setText(saved.baseUrl());
-            model.setText(saved.model());
-        }
+        discardSettings();
         route = new Route.Chat();
+        headerChrome.setVisible(true);
         sections.show(sectionDeck, "chat");
         restoreComposerPosition();
         chatViewport.layoutChanged();
@@ -634,6 +667,8 @@ public final class FolioPanel extends JPanel implements Disposable {
     }
 
     private void selectMode(Mode value) {
+        discardSettings();
+        headerChrome.setVisible(true);
         if (value != mode || question.getDocument() != drafts.current(value).editor().document) {
             saveCaret();
             mode = value;
@@ -643,7 +678,9 @@ public final class FolioPanel extends JPanel implements Disposable {
         route = new Route.Chat();
         sections.show(sectionDeck, "chat");
         modePopup.selected(value.label);
-        modeButton.setIcon(value.icon);
+        modeButton.setIcon(null);
+        modeButton.setFont(question.getFont().deriveFont((float) JBUI.scale(14)));
+        modeButton.setBorder(JBUI.Borders.empty(4, 10));
         question.setToolTipText("Enter 发送，Shift+Enter 换行");
         question.setPlaceholder(switch (value) {
             case ASK -> "继续提问，或粘贴代码...";
@@ -814,8 +851,10 @@ public final class FolioPanel extends JPanel implements Disposable {
         leaveChat();
         var edit = new SettingsEdit();
         route = new Route.Settings(edit);
+        headerChrome.setVisible(false);
         apiKey.setText("");
         settingsStatus.setBody("");
+        settingsStatus.setVisible(false);
         endpointError.setVisible(false);
         modelError.setVisible(false);
         keyStatus.setText(storedKey ? "已保存 Key" : "尚未保存 Key");
@@ -846,6 +885,7 @@ public final class FolioPanel extends JPanel implements Disposable {
         ProviderAccess.KeyChange change = !typed.isBlank() ? new ProviderAccess.KeyChange.Replace(typed)
                 : page.edit().removeKey ? new ProviderAccess.KeyChange.Remove() : new ProviderAccess.KeyChange.Keep();
         long revision = formRevision;
+        settingsStatus.setVisible(true);
         settingsStatus.setBody("正在保存设置...");
         var saving = provider.save(endpoint, name, change);
         long savedRevision = provider.view().revision();
@@ -980,7 +1020,7 @@ public final class FolioPanel extends JPanel implements Disposable {
 
     private JPanel reportCard() {
         JBPanel<?> card = FolioChrome.card(FolioChrome.Surface.GROUP);
-        card.add(FolioChrome.muted("Last index"), BorderLayout.NORTH);
+        card.add(FolioChrome.muted("索引结果"), BorderLayout.NORTH);
         card.add(filesReport, BorderLayout.CENTER);
         return card;
     }
@@ -1009,6 +1049,8 @@ public final class FolioPanel extends JPanel implements Disposable {
     private JPanel fileRow(String name, List<CourseChunk> chunks) {
         JBPanel<?> row = FolioChrome.card(FolioChrome.Surface.GROUP);
         JBLabel icon = new JBLabel(AllIcons.FileTypes.Text);
+        icon.setToolTipText("已索引的课件文档");
+        icon.getAccessibleContext().setAccessibleName("已索引的课件文档");
         icon.setBorder(JBUI.Borders.emptyRight(8));
         row.add(icon, BorderLayout.WEST);
         JBPanel<?> text = new JBPanel<>(new BorderLayout());
@@ -1018,7 +1060,7 @@ public final class FolioPanel extends JPanel implements Disposable {
         title.setToolTipText(name);
         text.add(title, BorderLayout.NORTH);
         String location = fileLocation(name);
-        String meta = fileMeta(chunks);
+        String meta = fileMeta(chunks).replace("pages", "页").replace("page", "页").replace("slides", "张幻灯片").replace("slide", "张幻灯片").replace("sections", "节").replace("section", "节").replace("chunks", "个片段").replace("chunk", "个片段") + " · 已索引";
         text.add(FolioChrome.muted(location.isEmpty() ? meta : location + " · " + meta), BorderLayout.SOUTH);
         row.add(text, BorderLayout.CENTER);
         JButton more = FolioChrome.iconButton(AllIcons.Actions.More);
@@ -1072,14 +1114,15 @@ public final class FolioPanel extends JPanel implements Disposable {
         String asked = question.getText();
         String selected = selection == null ? drafts.ask.code == null ? "" : drafts.ask.code.text() : selection;
         if (asked.isBlank() && selected.isBlank()) return;
-        TestContext captured = testContext != null ? testContext : drafts.ask.code == null ? null : context(drafts.ask.code);
+        TestContext captured = testContext != null ? testContext : drafts.ask.code == null ? null
+                : context(drafts.ask.code.withTarget(drafts.ask.code.completeSource(), drafts.ask.code.testDirectory()));
         start(new Request.Ask(providerTarget(), asked, selected, conversation.context(), library.snapshot().index(), captured),
                 asked.isBlank() ? "选中的代码" : asked);
     }
 
     private ProviderTarget providerTarget() {
-        ProviderConnection connection = provider.captureSaved();
-        return new ProviderTarget(connection.baseUrl(), connection.model());
+        TaSettings.Values saved = provider.savedSettings();
+        return new ProviderTarget(saved.baseUrl(), saved.modelName());
     }
 
     private Attempt activeAttempt() {
@@ -1092,13 +1135,26 @@ public final class FolioPanel extends JPanel implements Disposable {
 
     private void start(Request request, String bubble) {
         if (activeAttempt() != null) return;
+        ProviderConnection connection;
+        try { connection = provider.capture(request.provider().endpoint(), request.provider().model(), ""); }
+        catch (IllegalStateException error) { setStatus("设置仍在加载或保存，请稍后重试。", FolioChrome.Tone.INFO); return; }
         Turn turn = new Turn(request, bubble);
         turns.put(turn.id, turn);
+        while (turns.size() > Conversation.MAX_TURNS) {
+            Long oldest = turns.keySet().iterator().next();
+            turns.remove(oldest);
+            for (int row = 0; row < 2; row++) {
+                JComponent removed = chatRows.removeFirst();
+                stopRowMotion(removed);
+                FolioMotion.stopTree(removed, true);
+                chatColumn.remove(removed);
+            }
+        }
         var editor = drafts.current(request.mode()).editor();
         turn.clearedText = editor.text();
         editor.text("");
         turn.clearedRevision = editor.revision;
-        retry(turn);
+        beginAttempt(turn, connection);
     }
 
     private void retry(Turn turn) {
@@ -1106,6 +1162,13 @@ public final class FolioPanel extends JPanel implements Disposable {
         ProviderConnection connection;
         try { connection = provider.capture(turn.request.provider().endpoint(), turn.request.provider().model(), ""); }
         catch (IllegalStateException error) { turn.card.fail(error.getMessage()); return; }
+        turn.clearedRevision = -1;
+        turn.clearedText = null;
+        beginAttempt(turn, connection);
+    }
+
+    private void beginAttempt(Turn turn, ProviderConnection connection) {
+        turn.test = null;
         Attempt attempt = new Attempt(turn.id, ++turn.attempt);
         generation = new Generation.Starting(attempt);
         turn.card.begin();
@@ -1204,6 +1267,8 @@ public final class FolioPanel extends JPanel implements Disposable {
         generation = new Generation.Idle();
         Turn turn = turns.get(attempt.turn());
         turn.card.stopped();
+        turn.clearedRevision = -1;
+        turn.clearedText = null;
         if (previous instanceof Generation.Running running) running.handle().cancel();
         refreshActivity();
     }
@@ -1299,7 +1364,7 @@ public final class FolioPanel extends JPanel implements Disposable {
         if (editable && file != null) {
             OpenFileDescriptor descriptor = new OpenFileDescriptor(project, file, offset);
             if (FileEditorManager.getInstance(project).openTextEditor(descriptor, true) != null) {
-                setStatus("Opened " + Asker.citedFile(path) + " at " + Asker.scopePhrase(chunk), FolioChrome.Tone.SUCCESS);
+                setStatus("已打开 " + Asker.citedFile(path) + "，位置 " + chunk.scopeNumber(), FolioChrome.Tone.SUCCESS);
                 return;
             }
         }
@@ -1334,16 +1399,7 @@ public final class FolioPanel extends JPanel implements Disposable {
     }
 
     private static JComponent userCard(String text) {
-        JBPanel<?> card = FolioChrome.card(FolioChrome.Surface.USER);
-        JPanel head = new JPanel(new BorderLayout());
-        head.setOpaque(false);
-        head.add(FolioChrome.accentLabel("You", null), BorderLayout.WEST);
-        JButton copy = FolioChrome.copyButton(() -> copyChecked(text));
-        copy.getAccessibleContext().setAccessibleName("Copy message");
-        head.add(copy, BorderLayout.EAST);
-        card.add(head, BorderLayout.NORTH);
-        card.add(new FolioChrome.WrapText(text), BorderLayout.CENTER);
-        return FolioChrome.bubbleRow(card);
+        return FolioChrome.userBubble(text, () -> copyChecked(text));
     }
 
     private void runGenerate(TestContext context) {
@@ -1355,16 +1411,18 @@ public final class FolioPanel extends JPanel implements Disposable {
     }
 
     private void openTestPreview(Turn turn) {
-        if (turn.test == null) return;
+        if (turn.test == null || !turns.containsKey(turn.id)) return;
         leaveChat();
         route = new Route.TestPreview(turn.id, turn.attempt);
+        headerChrome.setVisible(false);
         TestPreview preview = turn.test.value();
         previewStatus.setBody("");
+        previewStatus.setVisible(false);
         rawTranscript.setText(preview.raw());
         if (preview instanceof TestPreview.Valid valid) {
             transcript.setText(valid.generated().code());
             previewTarget.setBody("源代码：" + valid.context().captured().description() + "\n目标："
-                    + targetText(valid.context().directory(), valid.generated().fileName()) + "\n" + valid.generated().validation());
+                    + targetText(valid.context().directory(), valid.generated().fileName()) + "\n已检查 Java 语法与 JUnit 注解，尚未编译或运行。");
         } else {
             transcript.setText("");
             previewTarget.setBody(((TestPreview.Invalid) preview).reason());
@@ -1374,7 +1432,7 @@ public final class FolioPanel extends JPanel implements Disposable {
     }
 
     private static String targetText(VirtualFile directory, String fileName) {
-        return directory == null ? "Unbound preview: " + fileName : directory.getPath() + "/" + fileName;
+        return directory == null ? "未绑定目录的预览：" + fileName : directory.getPath() + "/" + fileName;
     }
 
     private void writePreview() {
@@ -1382,10 +1440,11 @@ public final class FolioPanel extends JPanel implements Disposable {
         Turn turn = turns.get(previewRoute.turn());
         if (turn == null || turn.attempt != previewRoute.attempt()) return;
         FolioTasks.Accepted<TestPreview> result = turn.test;
+        previewStatus.setVisible(true);
         try {
             boolean used = tasks.use(FolioTasks.Channel.TEST, result, preview -> {
                 if (!(preview instanceof TestPreview.Valid valid) || valid.context().directory() == null) {
-                    throw new IllegalStateException("Select a class or method and preview a test before writing.");
+                    throw new IllegalStateException("请先选择源码，生成有效测试并确认目标目录。");
                 }
                 VirtualFile created = valid.generated().write(project, valid.context().directory(), valid.context().captured());
                 previewStatus.setBody("已写入 " + created.getPath());
@@ -1401,10 +1460,10 @@ public final class FolioPanel extends JPanel implements Disposable {
     private JComponent showCommitCandidates(CommitResult result) {
         FolioChrome.Column column = new FolioChrome.Column();
         StringBuilder view = new StringBuilder();
-        view.append(result.staged().files()).append(" staged files across ")
-                .append(result.staged().roots().size()).append(" Git roots.\n")
-                .append(result.estimate().characters()).append(" diff characters; estimated ")
-                .append(result.estimate().calls()).append(" model calls.\n");
+        view.append(result.staged().files()).append(" 个暂存文件，分布于 ")
+                .append(result.staged().roots().size()).append(" 个 Git 仓库。\n")
+                .append(result.estimate().characters()).append(" 个改动字符，预计 ")
+                .append(result.estimate().calls()).append(" 次模型调用。\n");
         for (Path root : result.staged().roots()) {
             view.append(root).append('\n');
         }
@@ -1417,11 +1476,11 @@ public final class FolioPanel extends JPanel implements Disposable {
             card.add(new FolioChrome.WrapText((i + 1) + ". " + message), BorderLayout.CENTER);
             JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, JBUI.scale(8), 0));
             actions.setOpaque(false);
-            JButton copy = FolioChrome.secondary("Copy", AllIcons.Actions.Copy);
+            JButton copy = FolioChrome.secondary("复制", AllIcons.Actions.Copy);
             copy.addActionListener(event -> useCommitCandidate(accepted, message, false));
             actions.add(copy);
             if (result.input().target().exists()) {
-                JButton fill = FolioChrome.secondary("Fill commit box", AllIcons.Actions.Execute);
+                JButton fill = FolioChrome.secondary("填入提交框", AllIcons.Actions.Execute);
                 fill.addActionListener(event -> useCommitCandidate(accepted, message, true));
                 actions.add(fill);
             }
@@ -1429,7 +1488,7 @@ public final class FolioPanel extends JPanel implements Disposable {
             column.addRow(card);
         }
         JBPanel<?> diff = FolioChrome.card(FolioChrome.Surface.CODE);
-        diff.add(FolioChrome.sectionTitle("Captured staged diff"), BorderLayout.NORTH);
+        diff.add(FolioChrome.sectionTitle("捕获的暂存改动"), BorderLayout.NORTH);
         FolioChrome.WrapText changes = new FolioChrome.WrapText(result.staged().diff());
         changes.setFont(FolioChrome.codeFont(changes.getFont().getSize()));
         diff.add(changes, BorderLayout.CENTER);
@@ -1444,26 +1503,26 @@ public final class FolioPanel extends JPanel implements Disposable {
                     boolean current = tasks.use(FolioTasks.Channel.COMMIT, accepted, stillCurrent -> {
                         if (fill) {
                             boolean placed = stillCurrent.input().target().fill(message);
-                            setStatus(placed ? "Placed the candidate in the original commit box."
-                                    : "The commit box changed or closed. Its contents were kept.",
+                            setStatus(placed ? "已填入原提交框。"
+                                    : "原提交框已更改或关闭，未覆盖其内容。",
                                     placed ? FolioChrome.Tone.SUCCESS : FolioChrome.Tone.WARNING);
                         } else {
                             boolean copied = copy(message);
-                            setStatus(copied ? "Candidate copied." : "The clipboard is unavailable. Try Copy again.",
+                            setStatus(copied ? "已复制提交信息。" : "剪贴板当前不可用，请重试。",
                                     copied ? FolioChrome.Tone.SUCCESS : FolioChrome.Tone.WARNING);
                         }
                     });
                     if (!current) {
-                        setStatus("This draft was replaced. Generate again.", FolioChrome.Tone.WARNING);
+                        setStatus("此候选已失效，请重新生成。", FolioChrome.Tone.WARNING);
                     }
                 } else if (outcome instanceof FolioTasks.Outcome.Cancelled<GitDiffs.DeliveryState>) {
-                    setStatus("Cancelled.", FolioChrome.Tone.INFO);
+                    setStatus("已取消。", FolioChrome.Tone.INFO);
                 } else {
-                    setStatus("Staged changes changed or could not be checked. Generate again.", FolioChrome.Tone.WARNING);
+                    setStatus("暂存内容已变化或无法验证，请重新生成。", FolioChrome.Tone.WARNING);
                 }
             });
         })) {
-            setStatus("This draft was replaced. Generate again.", FolioChrome.Tone.WARNING);
+            setStatus("此候选已失效，请重新生成。", FolioChrome.Tone.WARNING);
         }
     }
 
@@ -1474,7 +1533,7 @@ public final class FolioPanel extends JPanel implements Disposable {
 
     private static String outcomeText(FolioTasks.Outcome<?> outcome, ProviderConnection connection) {
         if (outcome instanceof FolioTasks.Outcome.Cancelled<?>) {
-            return "Cancelled.";
+            return "已取消。";
         }
         if (outcome instanceof FolioTasks.Outcome.Failure<?> failure) {
             return connection == null ? failureText(failure.cause()) : connection.failure(failure.cause());
@@ -1680,7 +1739,9 @@ public final class FolioPanel extends JPanel implements Disposable {
         catch (IllegalStateException error) { saved = new ProviderConnection("", "", ""); }
         storedKey = !saved.key().isBlank();
         refreshAskButton();
-        badge.setText(storedKey ? "" : "去设置");
+        badge.setText("去设置");
+        if (!storedKey && statusBanner.getToolTipText() == null) setStatus("尚未配置模型 Key，仍可检索本地课件。", FolioChrome.Tone.INFO);
+        else if (storedKey && "尚未配置模型 Key，仍可检索本地课件。".equals(statusBanner.getToolTipText())) setStatus("", FolioChrome.Tone.NEUTRAL);
         badge.setVisible(!storedKey && route instanceof Route.Chat);
         FolioChrome.describe(badge, "设置");
         badge.setIcon(storedKey ? AllIcons.General.GreenCheckmark : AllIcons.General.Warning);
@@ -1698,6 +1759,7 @@ public final class FolioPanel extends JPanel implements Disposable {
     }
 
     private void refreshActivity() {
+        for (Turn turn : turns.values()) turn.card.generationActive(activeAttempt() != null);
         indexButton.setEnabled(!libraryLoading);
         refreshAskButton();
         refreshWrite();
@@ -1711,8 +1773,8 @@ public final class FolioPanel extends JPanel implements Disposable {
     private void refreshAskButton() {
         boolean running = activeAttempt() != null;
         askButton.setEnabled(running || canSend());
-        askButton.setIcon(running ? AllIcons.Actions.Suspend : AllIcons.Actions.MoveUp);
-        askButton.setDisabledIcon(null);
+        askButton.setIcon(FolioChrome.sendIcon(running));
+        askButton.setDisabledIcon(!running && !canSend() ? FolioChrome.sendIcon(false) : null);
         FolioChrome.describe(askButton, running ? "停止生成" : "发送消息");
         askButton.setToolTipText(running ? "停止生成" : canSend() ? "发送消息" : "发送消息：请先输入内容");
     }

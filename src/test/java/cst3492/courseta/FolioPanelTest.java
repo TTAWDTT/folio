@@ -75,7 +75,7 @@ class FolioPanelTest {
                 fixture.workers.drain();
                 fixture.delivery.drain();
                 assertEquals(0, fixture.writes.get());
-                button(fixture.panel, "Fill commit box").doClick();
+                button(fixture.panel, "填入提交框").doClick();
                 fixture.workers.drain();
                 if (changeBeforeDelivery) {
                     fixture.stage("replacement after background validation");
@@ -95,7 +95,7 @@ class FolioPanelTest {
             fixture.workers.drain();
             fixture.delivery.drain();
             assertEquals(0, fixture.writes.get());
-            button(fixture.panel, "Fill commit box").doClick();
+            button(fixture.panel, "填入提交框").doClick();
             fixture.workers.drain();
             fixture.delivery.drain();
             assertEquals(1, fixture.writes.get());
@@ -179,7 +179,7 @@ class FolioPanelTest {
 
     @Test
     void badgeNamesAStoredKeyAndNotOneThatIsOnlyTyped() {
-        assertEquals("No API key", FolioPanel.badgeText(false, 0, "deepseek-flash"));
+        assertEquals("尚未配置模型 Key", FolioPanel.badgeText(false, 0, "deepseek-flash"));
         assertEquals("Key not saved", FolioPanel.badgeText(false, 4, "deepseek-flash"));
         assertEquals("Key ready · deepseek-flash", FolioPanel.badgeText(true, 0, " deepseek-flash "));
         assertEquals("Key ready", FolioPanel.badgeText(true, 8, "  "));
@@ -220,7 +220,7 @@ class FolioPanelTest {
     void arbitraryModelTextDoesNotEnableWriting() {
         FolioPanel panel = new FolioPanel(null);
         panel.showNote("import org.junit.Test; class FolioGeneratedTest {}");
-        JButton write = button(panel, "Write test file");
+        JButton write = button(panel, "写入文件");
         assertFalse(write.isEnabled());
         panel.showNote("HTTP 400: expected org.junit class");
         assertFalse(write.isEnabled());
@@ -705,7 +705,7 @@ class FolioPanelTest {
     }
 
     private static JScrollPane chatPane(Component component) {
-        if (component instanceof JScrollPane pane && containsText(pane.getViewport().getView(), "Ask the course")) {
+        if (component instanceof JScrollPane pane && containsText(pane.getViewport().getView(), "从课程和代码开始")) {
             return pane;
         }
         if (component instanceof Container container) {
