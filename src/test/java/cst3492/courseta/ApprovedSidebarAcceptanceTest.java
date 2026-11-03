@@ -168,7 +168,8 @@ class ApprovedSidebarAcceptanceTest {
         final FolioTasksTest.Queue workers = new FolioTasksTest.Queue();
         final FolioTasksTest.Queue delivery = new FolioTasksTest.Queue();
         final AtomicInteger calls = new AtomicInteger();
-        final FolioPanel panel = new FolioPanel(null, CourseLibrary.inMemory(), ProviderAccess.inMemory(),
+        final ProviderAccess provider = ProviderAccess.inMemory();
+        final FolioPanel panel = new FolioPanel(null, CourseLibrary.inMemory(), provider,
                 workers, delivery, (base, key, model, system, user) -> {
                     calls.incrementAndGet();
                     return "An interface defines a contract.";
@@ -177,7 +178,8 @@ class ApprovedSidebarAcceptanceTest {
         Fixture() {
             workers.drain();
             delivery.drain();
-            password(panel).setText("fixture-key");
+            provider.save(TaSettings.DEFAULT_BASE_URL, TaSettings.DEFAULT_MODEL, "fixture-key").join();
+            delivery.drain();
         }
 
         void send(String text) {
@@ -208,17 +210,6 @@ class ApprovedSidebarAcceptanceTest {
         if (component instanceof Container container) {
             for (Component child : container.getComponents()) {
                 JTextArea found = input(child);
-                if (found != null) return found;
-            }
-        }
-        return null;
-    }
-
-    private static javax.swing.JPasswordField password(Component component) {
-        if (component instanceof javax.swing.JPasswordField field) return field;
-        if (component instanceof Container container) {
-            for (Component child : container.getComponents()) {
-                var found = password(child);
                 if (found != null) return found;
             }
         }
