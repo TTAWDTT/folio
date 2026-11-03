@@ -14,6 +14,11 @@ import cst3492.courseta.ask.Asker;
 import cst3492.courseta.index.CourseChunk;
 
 import javax.swing.Box;
+import javax.swing.AbstractButton;
+import javax.swing.ButtonModel;
+import java.awt.AlphaComposite;
+import java.awt.BasicStroke;
+import java.awt.EventQueue;
 import javax.swing.Icon;
 import javax.swing.JButton;
 import javax.swing.JComponent;
@@ -22,7 +27,6 @@ import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.Scrollable;
 import javax.swing.JToggleButton;
-import javax.swing.Timer;
 import javax.swing.UIManager;
 import javax.swing.SwingConstants;
 import javax.swing.text.View;
@@ -36,7 +40,6 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Container;
-import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.FontMetrics;
 import java.awt.Insets;
@@ -50,12 +53,12 @@ import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.awt.event.HierarchyEvent;
 import java.util.List;
 import java.util.function.Consumer;
 
 final class FolioChrome {
     enum Tone { NEUTRAL, INFO, SUCCESS, WARNING, ERROR }
+    enum Surface { GROUP, USER, CODE }
 
     private FolioChrome() {
     }
@@ -69,45 +72,174 @@ final class FolioChrome {
         return UIUtil.getFontWithFallback(Font.MONOSPACED, Font.PLAIN, size);
     }
 
-    static JButton primary(String text, javax.swing.Icon icon) {
-        JButton button = new JButton(text, icon);
-        button.putClientProperty("JButton.buttonType", "default");
-        return button;
+    static JButton primary(String text, Icon icon) {
+        return new QuietButton(text, icon, true);
     }
 
-    static JButton secondary(String text, javax.swing.Icon icon) {
-        return new JButton(text, icon);
+    static JButton secondary(String text, Icon icon) {
+        return new QuietButton(text, icon, false);
     }
 
-    static JButton gear(javax.swing.Icon icon) {
+    static JButton gear(Icon icon) {
         JButton button = iconButton(icon);
         button.setToolTipText("Settings");
+        button.getAccessibleContext().setAccessibleName("Settings");
         return button;
     }
 
-    /** Small borderless icon button. Theme changes put the filled button chrome back, so updateUI clears it. */
-    static JButton iconButton(javax.swing.Icon icon) {
-        JButton button = new JButton(icon) {
-            @Override
-            public void updateUI() {
-                super.updateUI();
-                putClientProperty("JButton.buttonType", "borderless");
-                setMargin(JBUI.emptyInsets());
-                setOpaque(false);
-                setContentAreaFilled(false);
-                setBorderPainted(false);
-            }
-        };
-        button.putClientProperty("JButton.buttonType", "borderless");
-        button.setMargin(JBUI.emptyInsets());
-        return button;
+    static JButton iconButton(Icon icon) {
+        return new QuietButton("", icon, false);
     }
+
+    static final class CopyFailedException extends RuntimeException {}
 
     static JButton copyButton(Runnable copy) {
-        JButton button = iconButton(AllIcons.Actions.Copy);
-        button.setToolTipText("Copy");
-        button.addActionListener(event -> copy.run());
-        return button;
+        return new CopyButton(copy);
+    }
+
+    private static class QuietButton extends JButton {
+        private final ButtonPaint paint;
+
+        QuietButton(String text, Icon icon, boolean primary) {
+            super(text, icon);
+            paint = new ButtonPaint(this, primary);
+        }
+
+        @Override
+        public void updateUI() {
+            super.updateUI();
+            quiet(this);
+            if (paint != null) {
+                paint.tint.settle();
+            }
+        }
+
+        @Override
+        public Dimension getPreferredSize() {
+            Dimension size = super.getPreferredSize();
+            return new Dimension(Math.max(size.width, JBUI.scale(26)), Math.max(size.height, JBUI.scale(26)));
+        }
+
+        @Override
+        protected void paintComponent(Graphics graphics) {
+            if (paint != null) {
+                paint.draw(graphics);
+            }
+            super.paintComponent(graphics);
+        }
+    }
+
+    private static final class QuietToggle extends JToggleButton {
+        private final ButtonPaint paint = new ButtonPaint(this, false);
+
+        @Override
+        public void updateUI() {
+            super.updateUI();
+            quiet(this);
+            if (paint != null) {
+                paint.tint.settle();
+            }
+            setIcon(UIManager.getIcon(isSelected() ? "Tree.expandedIcon" : "Tree.collapsedIcon"));
+        }
+
+        @Override
+        protected void paintComponent(Graphics graphics) {
+            paint.draw(graphics);
+            super.paintComponent(graphics);
+        }
+    }
+
+    private static void quiet(AbstractButton button) {
+        button.putClientProperty("JButton.buttonType", "borderless");
+        button.setOpaque(false);
+        button.setContentAreaFilled(false);
+        button.setBorderPainted(false);
+        button.setFocusPainted(false);
+        button.setRolloverEnabled(true);
+        button.setMargin(JBUI.emptyInsets());
+        button.setBorder(JBUI.Borders.empty(4, 6));
+    }
+
+    private static final class ButtonPaint {
+        private final AbstractButton button;
+        private final boolean primary;
+        private final FolioMotion tint;
+
+        ButtonPaint(AbstractButton button, boolean primary) {
+            this.button = button;
+            this.primary = primary;
+            tint = new FolioMotion(button, 0, value -> button.repaint());
+            button.getModel().addChangeListener(event -> {
+                ButtonModel model = button.getModel();
+                double target = !model.isEnabled() ? 0 : model.isPressed() && model.isArmed() ? 1
+                        : model.isSelected() ? 0.7 : model.isRollover() ? 0.45 : 0;
+                tint.to(target, model.isPressed() ? 0 : 90);
+            });
+            button.addFocusListener(new FocusAdapter() {
+                @Override
+                public void focusGained(FocusEvent event) {
+                    for (Container parent = button.getParent(); parent != null; parent = parent.getParent()) {
+                        if (parent instanceof Reveal reveal) {
+                            reveal.height.settle();
+                        }
+                    }
+                    button.repaint();
+                }
+
+                @Override
+                public void focusLost(FocusEvent event) {
+                    button.repaint();
+                }
+            });
+        }
+
+        void draw(Graphics graphics) {
+            Graphics2D g = (Graphics2D) graphics.create();
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            float alpha = (float) ((primary ? 0.14 : 0) + tint.value() * 0.16);
+            if (!button.isEnabled()) {
+                alpha *= 0.4f;
+            }
+            g.setComposite(AlphaComposite.SrcOver.derive(alpha));
+            g.setColor(primary ? accent() : JBUI.CurrentTheme.Label.foreground());
+            int arc = JBUI.scale(8);
+            g.fillRoundRect(1, 1, button.getWidth() - 2, button.getHeight() - 2, arc, arc);
+            g.setComposite(AlphaComposite.SrcOver);
+            if (button.hasFocus()) {
+                g.setColor(accent());
+                g.setStroke(new BasicStroke(JBUI.scale(2)));
+                g.drawRoundRect(1, 1, button.getWidth() - 3, button.getHeight() - 3, arc, arc);
+            }
+            g.dispose();
+        }
+    }
+
+    private static final class CopyButton extends QuietButton {
+        private final FolioMotion feedback = new FolioMotion(this, 0, value -> {
+            if (value >= 1) {
+                setIcon(AllIcons.Actions.Copy);
+                setToolTipText("Copy");
+            }
+        });
+
+        CopyButton(Runnable copy) {
+            super("", AllIcons.Actions.Copy, false);
+            setToolTipText("Copy");
+            getAccessibleContext().setAccessibleName("Copy");
+            addActionListener(event -> {
+                boolean copied = true;
+                try {
+                    copy.run();
+                } catch (CopyFailedException ex) {
+                    copied = false;
+                }
+                setIcon(copied ? AllIcons.General.GreenCheckmark : AllIcons.General.Warning);
+                String outcome = copied ? "Copied" : "Copy failed. Try again.";
+                setToolTipText(outcome);
+                getAccessibleContext().setAccessibleDescription(outcome);
+                feedback.hold(copied ? 900 : 1500);
+            });
+        }
     }
 
     static JBLabel sectionTitle(String text) {
@@ -142,13 +274,22 @@ final class FolioChrome {
         return "<html><body style='width:" + JBUI.scale(240) + "px'>" + safe + "</body></html>";
     }
 
-    static JBPanel<?> card(Color fill) {
-        JBPanel<?> panel = new JBPanel<>(new BorderLayout(0, JBUI.scale(6)));
-        panel.setOpaque(true);
-        panel.setBackground(fill);
-        panel.setBorder(JBUI.Borders.compound(
-                new RoundedLineBorder(JBColor.border(), JBUI.scale(6), JBUI.scale(1)),
-                JBUI.Borders.empty(6, 8)));
+    static JBPanel<?> card(Surface surface) {
+        JBPanel<?> panel = new JBPanel<>(new BorderLayout(0, JBUI.scale(6))) {
+            @Override
+            protected void paintComponent(Graphics graphics) {
+                if (surface != Surface.GROUP) {
+                    Graphics2D g = (Graphics2D) graphics.create();
+                    g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                    g.setColor(surface == Surface.USER ? userFill() : answerFill());
+                    g.fillRoundRect(0, 0, getWidth(), getHeight(), JBUI.scale(8), JBUI.scale(8));
+                    g.dispose();
+                }
+                super.paintComponent(graphics);
+            }
+        };
+        panel.setOpaque(false);
+        panel.setBorder(JBUI.Borders.empty(6, 8));
         return panel;
     }
 
@@ -211,24 +352,118 @@ final class FolioChrome {
         return panel;
     }
 
-    /**
-     * One rounded field with the send button inside it. The scroll pane has no border of its own,
-     * so the composer is a single surface.
-     */
-    static JComponent composer(JComponent field, JButton send) {
-        JBPanel<?> box = new JBPanel<>(new BorderLayout(JBUI.scale(4), 0));
-        box.setOpaque(true);
-        box.setBackground(answerFill());
-        box.setBorder(JBUI.Borders.compound(
-                new RoundedLineBorder(JBColor.border(), JBUI.scale(12), JBUI.scale(1)),
-                JBUI.Borders.empty(6, 8)));
-        JScrollPane scroll = scroll(field);
-        scroll.setOpaque(false);
-        scroll.getViewport().setOpaque(false);
-        box.add(scroll, BorderLayout.CENTER);
-        send.setMargin(JBUI.emptyInsets());
-        box.add(send, BorderLayout.EAST);
-        return box;
+    static Composer composer(PromptArea field, JButton send) {
+        JPanel well = new JPanel(new GridBagLayout()) {
+            @Override
+            protected void paintComponent(Graphics graphics) {
+                Graphics2D g = (Graphics2D) graphics.create();
+                g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g.setColor(answerFill());
+                int arc = JBUI.scale(12);
+                g.fillRoundRect(1, 1, getWidth() - 2, getHeight() - 2, arc, arc);
+                g.setColor(field.hasFocus() ? accent() : JBColor.border());
+                g.setStroke(new BasicStroke(JBUI.scale(field.hasFocus() ? 2 : 1)));
+                g.drawRoundRect(1, 1, getWidth() - 3, getHeight() - 3, arc, arc);
+                g.dispose();
+                super.paintComponent(graphics);
+            }
+        };
+        well.setOpaque(false);
+        well.setBorder(JBUI.Borders.empty(6, 8));
+        GridBagConstraints input = new GridBagConstraints();
+        input.gridx = 0;
+        input.weightx = 1;
+        input.weighty = 1;
+        input.fill = GridBagConstraints.BOTH;
+        well.add(scroll(field), input);
+        GridBagConstraints action = new GridBagConstraints();
+        action.gridx = 1;
+        action.weighty = 1;
+        action.anchor = GridBagConstraints.SOUTH;
+        action.insets = JBUI.insetsLeft(4);
+        well.add(send, action);
+        return new Composer(field, well);
+    }
+
+    static class Reveal extends JPanel {
+        private final JComponent child;
+        private final FolioMotion height = new FolioMotion(this, 0, value -> {
+            revalidate();
+            repaint();
+        });
+
+        Reveal(JComponent child) {
+            super(new BorderLayout());
+            this.child = child;
+            setOpaque(false);
+            add(child, BorderLayout.CENTER);
+        }
+
+        void reveal(boolean visible, boolean animate) {
+            child.setVisible(visible);
+            resize(animate);
+        }
+
+        void resize(boolean animate) {
+            if (!height.running()) {
+                height.to(getHeight(), 0);
+            }
+            int width = getWidth() > 0 ? getWidth() : JBUI.scale(280);
+            prepareWidth(child, width);
+            height.to(child.isVisible() ? child.getPreferredSize().height : 0, animate ? 120 : 0);
+        }
+
+        @Override
+        public Dimension getPreferredSize() {
+            Dimension natural = super.getPreferredSize();
+            return new Dimension(natural.width, height.running() ? (int) Math.round(height.value()) : natural.height);
+        }
+
+        @Override
+        public void updateUI() {
+            super.updateUI();
+            if (height != null) {
+                height.settle();
+            }
+        }
+    }
+
+    static final class Composer extends Reveal {
+        private final PromptArea field;
+
+        Composer(PromptArea field, JComponent well) {
+            super(well);
+            this.field = field;
+            field.addFocusListener(new FocusAdapter() {
+                @Override
+                public void focusGained(FocusEvent event) {
+                    resize(false);
+                    repaint();
+                }
+
+                @Override
+                public void focusLost(FocusEvent event) {
+                    repaint();
+                }
+            });
+        }
+
+        void fitRows(int rows) {
+            if (field.getRows() == rows) {
+                return;
+            }
+            field.setRows(rows);
+            boolean animate = !FolioPanel.imeComposing(field);
+            try {
+                var caret = field.modelToView2D(Math.min(field.getCaretPosition(), field.getDocument().getLength()));
+                if (caret != null && caret.getMaxY() > field.getVisibleRect().getMaxY()) {
+                    animate = false;
+                }
+            } catch (BadLocationException ex) {
+                animate = false;
+            }
+            resize(animate);
+        }
     }
 
     /** Gives every nested wrap field the width it will actually be laid out at, so its height is real. */
@@ -249,19 +484,6 @@ final class FolioChrome {
         BubbleRow row = new BubbleRow(bubble);
         row.add(bubble);
         return row;
-    }
-
-    static void styleBadge(JButton badge, boolean stored, boolean typed) {
-        if (!(badge instanceof ChipButton chip)) {
-            return;
-        }
-        if (stored) {
-            chip.setTone(JBUI.CurrentTheme.Banner.SUCCESS_BACKGROUND, JBUI.CurrentTheme.Banner.SUCCESS_BORDER_COLOR);
-        } else if (typed) {
-            chip.setTone(JBUI.CurrentTheme.Banner.INFO_BACKGROUND, JBUI.CurrentTheme.Banner.INFO_BORDER_COLOR);
-        } else {
-            chip.setTone(JBUI.CurrentTheme.Banner.WARNING_BACKGROUND, JBUI.CurrentTheme.Banner.WARNING_BORDER_COLOR);
-        }
     }
 
     static final class Column extends JBPanel<Column> implements Scrollable {
@@ -397,6 +619,16 @@ final class FolioChrome {
             setBorder(JBUI.Borders.empty());
             setFont(JBFont.medium());
             setColumns(24);
+            addFocusListener(new FocusAdapter() {
+                @Override
+                public void focusGained(FocusEvent event) {
+                    for (Container parent = getParent(); parent != null; parent = parent.getParent()) {
+                        if (parent instanceof Reveal reveal) {
+                            reveal.height.settle();
+                        }
+                    }
+                }
+            });
             setCaret(new DefaultCaret() {
                 @Override
                 protected void adjustVisibility(Rectangle location) {
@@ -521,32 +753,21 @@ final class FolioChrome {
         private enum State { RETRIEVING, GENERATING, STREAMING, FINAL_RAW, FINAL_FORMATTED, STOPPED }
         private final JPanel bannerSlot = new JPanel(new BorderLayout());
         private final JPanel sources = new JPanel(new GridBagLayout());
-        private final JPanel content = new JPanel(new BorderLayout());
+        private final JPanel bodySlot = new JPanel(new BorderLayout());
+        private final Reveal content = new Reveal(bodySlot);
         private final JPanel referenceSlot = new JPanel(new BorderLayout(0, JBUI.scale(4)));
         private final WrapText body = new WrapText("");
         private final JBLabel activity = muted("Searching course files…");
-        private final JToggleButton references = new JToggleButton() {
-            @Override
-            public void updateUI() {
-                super.updateUI();
-                setOpaque(false);
-                setContentAreaFilled(false);
-                setBorderPainted(false);
-                setMargin(JBUI.emptyInsets());
-                setIcon(UIManager.getIcon(isSelected() ? "Tree.expandedIcon" : "Tree.collapsedIcon"));
-            }
-        };
+        private final JToggleButton references = new QuietToggle();
+        private final Reveal sourceReveal = new Reveal(sources);
         private final Consumer<CourseChunk> onSource;
         private final Consumer<String> onCopy;
         private final StringBuilder provisional = new StringBuilder();
-        private final Timer pulse;
-        private final Timer expansion;
         private State state = State.RETRIEVING;
         private String rawAnswer = "";
         private String finalBody;
         private JButton answerCopy;
         private boolean selecting;
-        private int pulseFrame;
 
         AnswerCard(Consumer<CourseChunk> onSource, Consumer<String> onCopy) {
             super(new BorderLayout(0, JBUI.scale(4)));
@@ -557,30 +778,19 @@ final class FolioChrome {
             bannerSlot.setOpaque(false);
             sources.setOpaque(false);
             sources.setVisible(false);
-            content.setOpaque(false);
+            bodySlot.setOpaque(false);
             referenceSlot.setOpaque(false);
             references.putClientProperty("JButton.buttonType", "borderless");
             references.setHorizontalAlignment(SwingConstants.LEADING);
             references.setMargin(JBUI.emptyInsets());
             references.setVisible(false);
-            expansion = new Timer(160, event -> {
-                references.setForeground(JBUI.CurrentTheme.Label.foreground());
-            });
-            expansion.setRepeats(false);
             references.addActionListener(event -> {
-                sources.setVisible(references.isSelected());
+                sourceReveal.reveal(references.isSelected(), EventQueue.getCurrentEvent() instanceof MouseEvent);
                 references.setIcon(UIManager.getIcon(references.isSelected() ? "Tree.expandedIcon" : "Tree.collapsedIcon"));
-                references.setForeground(accent());
-                if (references.isSelected() && isShowing()) {
-                    expansion.restart();
-                } else {
-                    expansion.stop();
-                    references.setForeground(JBUI.CurrentTheme.Label.foreground());
-                }
                 refresh();
             });
             referenceSlot.add(references, BorderLayout.NORTH);
-            referenceSlot.add(sources, BorderLayout.CENTER);
+            referenceSlot.add(sourceReveal, BorderLayout.CENTER);
             add(bannerSlot, BorderLayout.NORTH);
             JBPanel<?> answer = new JBPanel<>(new BorderLayout(0, JBUI.scale(4)));
             answer.setOpaque(false);
@@ -595,7 +805,7 @@ final class FolioChrome {
                 head.add(answerCopy, BorderLayout.EAST);
             }
             answer.add(head, BorderLayout.NORTH);
-            content.add(body, BorderLayout.CENTER);
+            bodySlot.add(body, BorderLayout.CENTER);
             body.addCaretListener(event -> SwingUtilities.invokeLater(this::formatWhenReleased));
             body.addFocusListener(new FocusAdapter() {
                 @Override
@@ -619,20 +829,6 @@ final class FolioChrome {
             answer.add(activity, BorderLayout.SOUTH);
             add(answer, BorderLayout.CENTER);
             add(referenceSlot, BorderLayout.SOUTH);
-            pulse = new Timer(100, event -> {
-                pulseFrame++;
-                Color from = JBUI.CurrentTheme.Label.disabledForeground();
-                Color to = accent();
-                double amount = (Math.sin(pulseFrame * Math.PI / 6) + 1) / 2;
-                activity.setForeground(new Color((int) (from.getRed() * (1 - amount) + to.getRed() * amount),
-                        (int) (from.getGreen() * (1 - amount) + to.getGreen() * amount),
-                        (int) (from.getBlue() * (1 - amount) + to.getBlue() * amount)));
-            });
-            addHierarchyListener(event -> {
-                if ((event.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) != 0) {
-                    updateMotion();
-                }
-            });
         }
 
         @Override
@@ -723,8 +919,9 @@ final class FolioChrome {
                 return;
             }
             state = State.FINAL_FORMATTED;
-            content.removeAll();
-            content.add(formattedBody(finalBody), BorderLayout.CENTER);
+            bodySlot.removeAll();
+            bodySlot.add(formattedBody(finalBody), BorderLayout.CENTER);
+            content.resize(true);
             refresh();
         }
 
@@ -732,19 +929,7 @@ final class FolioChrome {
             if (state != State.FINAL_RAW && state != State.FINAL_FORMATTED) {
                 state = State.STOPPED;
             }
-            pulse.stop();
-            expansion.stop();
-        }
-
-        private void updateMotion() {
-            if (isShowing() && (state == State.RETRIEVING || state == State.GENERATING || state == State.STREAMING)) {
-                pulse.start();
-            } else {
-                pulse.stop();
-            }
-            if (!isShowing()) {
-                expansion.stop();
-            }
+            FolioMotion.stopTree(this, false);
         }
 
         void offerTest(Runnable action) {
@@ -754,19 +939,6 @@ final class FolioChrome {
             generate.addActionListener(event -> action.run());
             referenceSlot.add(generate, BorderLayout.SOUTH);
             refresh();
-        }
-
-        @Override
-        public void addNotify() {
-            super.addNotify();
-            updateMotion();
-        }
-
-        @Override
-        public void removeNotify() {
-            pulse.stop();
-            expansion.stop();
-            super.removeNotify();
         }
 
         private JComponent formattedBody(String text) {
@@ -813,13 +985,15 @@ final class FolioChrome {
                 if (fenceStart > cursor) {
                     blocks.addRow(new WrapText(text.substring(cursor, fenceStart).stripTrailing()));
                 }
-                JPanel code = card(answerFill());
+                JPanel code = card(Surface.CODE);
                 JPanel head = new JPanel(new BorderLayout());
                 head.setOpaque(false);
                 head.add(muted(text.substring(fenceStart + 3, headerEnd).strip()), BorderLayout.WEST);
                 String codeText = text.substring(codeStart, lineStart);
                 if (onCopy != null) {
-                    head.add(copyButton(() -> onCopy.accept(codeText)), BorderLayout.EAST);
+                    JButton copy = copyButton(() -> onCopy.accept(codeText));
+                    copy.getAccessibleContext().setAccessibleName("Copy code");
+                    head.add(copy, BorderLayout.EAST);
                 }
                 code.add(head, BorderLayout.NORTH);
                 WrapText source = new CodeText(codeText);
@@ -865,11 +1039,8 @@ final class FolioChrome {
 
     static JComponent sourceCard(int number, CourseChunk chunk, Runnable open) {
         JBPanel<?> card = new JBPanel<>(new BorderLayout(0, JBUI.scale(2)));
-        card.setOpaque(true);
-        card.setBackground(userFill());
-        card.setBorder(JBUI.Borders.compound(
-                new RoundedLineBorder(JBColor.border(), JBUI.scale(8), JBUI.scale(1)),
-                JBUI.Borders.empty(4, 6)));
+        card.setOpaque(false);
+        card.setBorder(JBUI.Borders.empty(4, 6));
         String file = Asker.citedFile(chunk.sourceDocument());
         JButton title = iconButton(null);
         title.setText("[" + number + "]  " + file);
@@ -917,23 +1088,15 @@ final class FolioChrome {
         return panel;
     }
 
-    /** Rounded key chip. Paints its own fill so the button UI does not flatten it. */
-    static final class ChipButton extends JButton {
-        private Color fill = JBColor.namedColor("Panel.background", JBColor.PanelBackground);
-        private Color edge = JBColor.border();
+    static final class ChipButton extends QuietButton {
         private String fullText = "";
         private boolean collapsed;
         private boolean adjusting;
 
         ChipButton(String text, Icon icon) {
-            super(icon);
+            super("", icon, false);
             fullText = text == null ? "" : text;
-            setOpaque(false);
-            setContentAreaFilled(false);
-            setBorderPainted(false);
-            setFocusPainted(false);
             setFont(JBFont.small());
-            setBorder(JBUI.Borders.empty(4, 10));
             setIconTextGap(JBUI.scale(6));
             setText(fullText);
         }
@@ -960,6 +1123,7 @@ final class FolioChrome {
         }
 
         private void applyLabel() {
+            getAccessibleContext().setAccessibleName(fullText);
             String shown = collapsed ? "" : fullText;
             if (shown.equals(getText() == null ? "" : getText())) {
                 return;
@@ -976,36 +1140,6 @@ final class FolioChrome {
             }
         }
 
-        void setTone(Color fill, Color edge) {
-            this.fill = fill;
-            this.edge = edge;
-            repaint();
-        }
-
-        @Override
-        public void updateUI() {
-            super.updateUI();
-            setOpaque(false);
-            setContentAreaFilled(false);
-            setBorderPainted(false);
-            setFocusPainted(false);
-            setFont(JBFont.small());
-            setBorder(JBUI.Borders.empty(4, 10));
-            setMargin(JBUI.emptyInsets());
-        }
-
-        @Override
-        protected void paintComponent(Graphics graphics) {
-            Graphics2D g = (Graphics2D) graphics.create();
-            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            int arc = JBUI.scale(12);
-            g.setColor(fill);
-            g.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, arc, arc);
-            g.setColor(edge);
-            g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, arc, arc);
-            g.dispose();
-            super.paintComponent(graphics);
-        }
     }
 
     static final class BubbleRow extends JBPanel<BubbleRow> {

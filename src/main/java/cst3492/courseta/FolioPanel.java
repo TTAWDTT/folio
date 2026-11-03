@@ -124,6 +124,7 @@ public final class FolioPanel extends JPanel implements Disposable {
     private final JBLabel progress = new JBLabel(AnimatedIcon.Default.INSTANCE);
     private final JBLabel working = FolioChrome.muted("Working…");
     private final JButton askButton = FolioChrome.iconButton(AllIcons.Actions.Execute);
+    private final FolioChrome.Composer composerChrome = FolioChrome.composer(question, askButton);
     private final JButton commitButton = FolioChrome.primary("Draft commit messages", AllIcons.Actions.Commit);
     private final JButton previewButton = FolioChrome.primary("Preview test", AllIcons.Nodes.JunitTestMark);
     private final JButton writeButton = FolioChrome.secondary("Write test file", AllIcons.Actions.Execute);
@@ -133,6 +134,7 @@ public final class FolioPanel extends JPanel implements Disposable {
     private final JButton clearChatButton = FolioChrome.iconButton(AllIcons.Actions.GC);
     private final JButton gear = FolioChrome.gear(AllIcons.General.GearPlain);
     private final JBPanel<?> settingsCard = new JBPanel<>(new BorderLayout());
+    private final FolioChrome.Reveal settingsReveal = new FolioChrome.Reveal(settingsCard);
     private final CardLayout sections = new CardLayout();
     private final JPanel sectionDeck = new JPanel(sections);
     private final JButton modeButton = FolioChrome.secondary("Ask ▾", AllIcons.Actions.Find);
@@ -269,7 +271,7 @@ public final class FolioPanel extends JPanel implements Disposable {
         badge.addActionListener(event -> toggleSettings());
         gear.addActionListener(event -> toggleSettings());
         settingsCard.setVisible(false);
-        JBPanel<?> setup = FolioChrome.card(FolioChrome.answerFill());
+        JBPanel<?> setup = FolioChrome.card(FolioChrome.Surface.GROUP);
         setup.add(FolioChrome.sectionTitle("Setup"), BorderLayout.NORTH);
         setup.add(settingsForm(), BorderLayout.CENTER);
         settingsCard.add(setup, BorderLayout.CENTER);
@@ -327,6 +329,7 @@ public final class FolioPanel extends JPanel implements Disposable {
         });
         askButton.addActionListener(event -> dispatchComposer());
         askButton.setToolTipText("Send");
+        askButton.getAccessibleContext().setAccessibleName("Send");
         askButton.setMargin(JBUI.emptyInsets());
         indexButton.addActionListener(event -> chooseFiles());
         commitButton.addActionListener(event -> draftCommit());
@@ -539,8 +542,7 @@ public final class FolioPanel extends JPanel implements Disposable {
     private JPanel header() {
         JBPanel<?> panel = new JBPanel<>(new BorderLayout(0, JBUI.scale(4)));
         panel.setOpaque(false);
-        panel.setBorder(JBUI.Borders.compound(
-                JBUI.Borders.customLineBottom(JBColor.border()), JBUI.Borders.emptyBottom(4)));
+        panel.setBorder(JBUI.Borders.emptyBottom(4));
         JPanel utilities = new JPanel(new BorderLayout());
         utilities.setOpaque(false);
         ((FolioChrome.ChipButton) badge).setCollapsed(true);
@@ -551,7 +553,7 @@ public final class FolioPanel extends JPanel implements Disposable {
         actions.add(gear);
         utilities.add(actions, BorderLayout.EAST);
         panel.add(utilities, BorderLayout.NORTH);
-        panel.add(settingsCard, BorderLayout.SOUTH);
+        panel.add(settingsReveal, BorderLayout.SOUTH);
         return panel;
     }
 
@@ -711,7 +713,7 @@ public final class FolioPanel extends JPanel implements Disposable {
         chatColumn.addRow(chatEmpty);
         JPanel composer = new JBPanel<>(new BorderLayout(0, JBUI.scale(4)));
         composer.setOpaque(false);
-        composer.add(FolioChrome.composer(question, askButton), BorderLayout.CENTER);
+        composer.add(composerChrome, BorderLayout.CENTER);
         panel.add(composer, BorderLayout.SOUTH);
         return panel;
     }
@@ -735,7 +737,7 @@ public final class FolioPanel extends JPanel implements Disposable {
     private JPanel testTab() {
         JBPanel<?> panel = new JBPanel<>(new BorderLayout(0, JBUI.scale(8)));
         panel.setBorder(JBUI.Borders.empty(8, 0, 0, 0));
-        JBPanel<?> top = FolioChrome.card(FolioChrome.answerFill());
+        JBPanel<?> top = FolioChrome.card(FolioChrome.Surface.GROUP);
         top.add(FolioChrome.sectionTitle("Scenario"), BorderLayout.NORTH);
         top.add(FolioChrome.hint("Select a Java class or method, describe the behaviour, then preview and write the test."), BorderLayout.CENTER);
         JBPanel<?> fields = new JBPanel<>(new BorderLayout(0, JBUI.scale(8)));
@@ -774,7 +776,7 @@ public final class FolioPanel extends JPanel implements Disposable {
     private JPanel commitTab() {
         JBPanel<?> panel = new JBPanel<>(new BorderLayout(0, JBUI.scale(8)));
         panel.setBorder(JBUI.Borders.emptyTop(8));
-        JBPanel<?> top = FolioChrome.card(FolioChrome.answerFill());
+        JBPanel<?> top = FolioChrome.card(FolioChrome.Surface.GROUP);
         top.add(FolioChrome.sectionTitle("Commit message"), BorderLayout.NORTH);
         top.add(FolioChrome.hint("Drafts cover all configured Git roots. The first candidate is copied when your clipboard is unchanged."), BorderLayout.CENTER);
         JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
@@ -791,10 +793,14 @@ public final class FolioPanel extends JPanel implements Disposable {
 
     private JPanel footer() {
         JBPanel<?> panel = new JBPanel<>(new BorderLayout(JBUI.scale(8), 0));
-        panel.setBorder(JBUI.Borders.compound(
-                JBUI.Borders.customLineTop(JBColor.border()),
-                JBUI.Borders.emptyTop(4)));
-        JBPanel<?> lead = new JBPanel<>(new FlowLayout(FlowLayout.LEFT, JBUI.scale(6), 0));
+        panel.setBorder(JBUI.Borders.emptyTop(4));
+        JBPanel<?> lead = new JBPanel<>(new FlowLayout(FlowLayout.LEFT, JBUI.scale(6), 0)) {
+            @Override
+            public Dimension getPreferredSize() {
+                Dimension size = super.getPreferredSize();
+                return new Dimension(size.width, Math.max(size.height, JBUI.scale(26)));
+            }
+        };
         lead.setOpaque(false);
         lead.add(progress);
         lead.add(working);
@@ -806,7 +812,11 @@ public final class FolioPanel extends JPanel implements Disposable {
 
     private void toggleSettings() {
         settingsOpen = !settingsOpen;
-        settingsCard.setVisible(settingsOpen);
+        if (!settingsOpen && SwingUtilities.isDescendingFrom(java.awt.KeyboardFocusManager
+                .getCurrentKeyboardFocusManager().getFocusOwner(), settingsCard)) {
+            gear.requestFocusInWindow();
+        }
+        settingsReveal.reveal(settingsOpen, java.awt.EventQueue.getCurrentEvent() instanceof java.awt.event.MouseEvent);
         gear.setToolTipText(settingsOpen ? "Hide settings" : "Settings");
         revalidate();
         repaint();
@@ -968,7 +978,7 @@ public final class FolioPanel extends JPanel implements Disposable {
     }
 
     private JPanel reportCard() {
-        JBPanel<?> card = FolioChrome.card(FolioChrome.answerFill());
+        JBPanel<?> card = FolioChrome.card(FolioChrome.Surface.GROUP);
         card.add(FolioChrome.muted("Last index"), BorderLayout.NORTH);
         card.add(filesReport, BorderLayout.CENTER);
         return card;
@@ -996,7 +1006,7 @@ public final class FolioPanel extends JPanel implements Disposable {
     }
 
     private JPanel fileRow(String name, List<CourseChunk> chunks) {
-        JBPanel<?> row = FolioChrome.card(FolioChrome.answerFill());
+        JBPanel<?> row = FolioChrome.card(FolioChrome.Surface.GROUP);
         JBLabel icon = new JBLabel(AllIcons.FileTypes.Text);
         icon.setBorder(JBUI.Borders.emptyRight(8));
         row.add(icon, BorderLayout.WEST);
@@ -1101,7 +1111,7 @@ public final class FolioPanel extends JPanel implements Disposable {
         chatColumn.addRow(user);
         chatRows.addLast(user);
         hideChatEmpty();
-        FolioChrome.AnswerCard card = new FolioChrome.AnswerCard(this::openSource, FolioPanel::copy);
+        FolioChrome.AnswerCard card = new FolioChrome.AnswerCard(this::openSource, FolioPanel::copyChecked);
         JComponent answer = FolioChrome.bubbleRow(card);
         chatColumn.addRow(answer);
         chatRows.addLast(answer);
@@ -1248,11 +1258,13 @@ public final class FolioPanel extends JPanel implements Disposable {
     }
 
     private static JComponent userCard(String text) {
-        JBPanel<?> card = FolioChrome.card(FolioChrome.userFill());
+        JBPanel<?> card = FolioChrome.card(FolioChrome.Surface.USER);
         JPanel head = new JPanel(new BorderLayout());
         head.setOpaque(false);
         head.add(FolioChrome.accentLabel("You", null), BorderLayout.WEST);
-        head.add(FolioChrome.copyButton(() -> copy(text)), BorderLayout.EAST);
+        JButton copy = FolioChrome.copyButton(() -> copyChecked(text));
+        copy.getAccessibleContext().setAccessibleName("Copy message");
+        head.add(copy, BorderLayout.EAST);
         card.add(head, BorderLayout.NORTH);
         card.add(new FolioChrome.WrapText(text), BorderLayout.CENTER);
         return FolioChrome.bubbleRow(card);
@@ -1338,7 +1350,7 @@ public final class FolioPanel extends JPanel implements Disposable {
 
     private void showCommitResult(String text) {
         commitColumn.clearRows();
-        JBPanel<?> card = FolioChrome.card(FolioChrome.answerFill());
+        JBPanel<?> card = FolioChrome.card(FolioChrome.Surface.GROUP);
         FolioChrome.WrapText body = new FolioChrome.WrapText(text);
         body.setFont(FolioChrome.codeFont(body.getFont().getSize()));
         card.add(body, BorderLayout.CENTER);
@@ -1376,7 +1388,7 @@ public final class FolioPanel extends JPanel implements Disposable {
         FolioTasks.Accepted<CommitResult> accepted = tasks.accepted(FolioTasks.Channel.COMMIT, CommitResult.class);
         for (int i = 0; i < result.messages().size(); i++) {
             String message = result.messages().get(i);
-            JBPanel<?> card = FolioChrome.card(FolioChrome.answerFill());
+            JBPanel<?> card = FolioChrome.card(FolioChrome.Surface.GROUP);
             card.add(new FolioChrome.WrapText((i + 1) + ". " + message), BorderLayout.CENTER);
             JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, JBUI.scale(8), 0));
             actions.setOpaque(false);
@@ -1391,7 +1403,7 @@ public final class FolioPanel extends JPanel implements Disposable {
             card.add(actions, BorderLayout.SOUTH);
             commitColumn.addRow(card);
         }
-        JBPanel<?> diff = FolioChrome.card(FolioChrome.answerFill());
+        JBPanel<?> diff = FolioChrome.card(FolioChrome.Surface.CODE);
         diff.add(FolioChrome.sectionTitle("Captured staged diff"), BorderLayout.NORTH);
         FolioChrome.WrapText changes = new FolioChrome.WrapText(result.staged().diff());
         changes.setFont(FolioChrome.codeFont(changes.getFont().getSize()));
@@ -1457,6 +1469,13 @@ public final class FolioPanel extends JPanel implements Disposable {
         private int extent;
         private int value;
         private ViewAnchor anchor;
+        private boolean submitted;
+        private long motionRevision;
+        private final FolioMotion motion = new FolioMotion(chatScroll, 0, position -> {
+            if (!closed && following && motionRevision == revision && chatScroll.isShowing()) {
+                writePosition((int) Math.round(position));
+            }
+        });
 
         private record ViewAnchor(List<Component> successors, int offset) {}
 
@@ -1478,11 +1497,20 @@ public final class FolioPanel extends JPanel implements Disposable {
                     }
                 } else if (moved) {
                     revision++;
+                    submitted = false;
+                    following = false;
+                    motion.settle();
                     following = nearTail();
                     rememberAnchor();
                 }
             });
             chatScroll.addMouseWheelListener(event -> readerGesture());
+            chatScroll.addHierarchyListener(event -> {
+                if ((event.getChangeFlags() & java.awt.event.HierarchyEvent.SHOWING_CHANGED) != 0
+                        && chatScroll.isShowing()) {
+                    layoutChanged();
+                }
+            });
             bar.addMouseListener(new java.awt.event.MouseAdapter() {
                 @Override
                 public void mousePressed(java.awt.event.MouseEvent event) {
@@ -1515,6 +1543,8 @@ public final class FolioPanel extends JPanel implements Disposable {
         private void readerGesture() {
             long gesture = ++revision;
             following = false;
+            submitted = false;
+            motion.settle();
             SwingUtilities.invokeLater(() -> {
                 if (!closed && revision == gesture) {
                     following = nearTail();
@@ -1542,7 +1572,10 @@ public final class FolioPanel extends JPanel implements Disposable {
         void follow(boolean submitted) {
             if (submitted) {
                 revision++;
+                following = false;
+                motion.settle();
                 following = true;
+                this.submitted = true;
                 anchor = null;
             } else {
                 following = following && nearTail();
@@ -1568,17 +1601,34 @@ public final class FolioPanel extends JPanel implements Disposable {
                         }
                     }
                 }
-                writing = true;
-                try {
-                    bar.setValue(target);
-                } finally {
-                    writing = false;
+                int distance = Math.abs(target - bar.getValue());
+                int catchUp = Math.min(JBUI.scale(96), Math.max(JBUI.scale(32), bar.getVisibleAmount() / 3));
+                if (!following || submitted || !chatScroll.isShowing() || distance > catchUp) {
+                    writePosition(target);
+                } else if (distance > 0) {
+                    motionRevision = revision;
+                    if (!motion.running()) {
+                        motion.to(bar.getValue(), 0);
+                    }
+                    motion.to(target, 140);
                 }
+                submitted = false;
             });
+        }
+
+        private void writePosition(int position) {
+            writing = true;
+            try {
+                chatScroll.getVerticalScrollBar().setValue(position);
+            } finally {
+                writing = false;
+            }
         }
 
         void cleared() {
             revision++;
+            following = false;
+            motion.settle();
             anchor = null;
             following = true;
         }
@@ -1587,6 +1637,7 @@ public final class FolioPanel extends JPanel implements Disposable {
         public void close() {
             closed = true;
             revision++;
+            motion.close();
             anchor = null;
         }
     }
@@ -1631,7 +1682,6 @@ public final class FolioPanel extends JPanel implements Disposable {
         };
         badge.setText(label);
         badge.setIcon(storedKey ? AllIcons.General.GreenCheckmark : AllIcons.General.Warning);
-        FolioChrome.styleBadge(badge, storedKey, apiKey.getPassword().length > 0);
     }
 
     private void refreshPreviewHint() {
@@ -1677,10 +1727,7 @@ public final class FolioPanel extends JPanel implements Disposable {
 
     private void fitComposer() {
         int shown = composerRows(visualRows(question), COMPOSER_MAX_ROWS);
-        if (question.getRows() != shown) {
-            question.setRows(shown);
-            question.revalidate();
-        }
+        composerChrome.fitRows(shown);
         refreshAskButton();
     }
 
@@ -1800,6 +1847,12 @@ public final class FolioPanel extends JPanel implements Disposable {
     }
 
 
+    private static void copyChecked(String text) {
+        if (!copy(text)) {
+            throw new FolioChrome.CopyFailedException();
+        }
+    }
+
     private static boolean copy(String text) {
         try {
             Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(text), null);
@@ -1827,6 +1880,7 @@ public final class FolioPanel extends JPanel implements Disposable {
         disposed = true;
         chatViewport.close();
         stopChatMotion();
+        FolioMotion.stopTree(this, true);
         tasks.close();
         closeSubscription(librarySubscription);
         closeSubscription(providerSubscription);

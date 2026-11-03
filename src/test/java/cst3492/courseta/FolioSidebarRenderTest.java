@@ -96,6 +96,7 @@ class FolioSidebarRenderTest {
                 assertNotNull(references);
                 references.doClick();
                 render(panel, "expanded-360", 360);
+                render(panel, "light-280", 280);
                 Map<String, Object> saved = new HashMap<>();
                 boolean dark = !JBColor.isBright();
                 try {

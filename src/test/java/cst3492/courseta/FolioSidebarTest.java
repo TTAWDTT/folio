@@ -15,7 +15,6 @@ import javax.swing.JButton;
 import javax.swing.JMenuItem;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
-import javax.swing.Timer;
 import javax.swing.text.JTextComponent;
 import java.awt.Component;
 import java.awt.Container;
@@ -34,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class FolioSidebarTest {
     @Test
-    void pendingMotionRunsOnlyWhileTheChatIsShowingAndNeverRestartsAfterCompletion() throws Exception {
+    void pendingActivityRemainsReadableWithoutAnIdleAnimationAndFinalCopySurvivesHiding() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             var card = new FolioChrome.AnswerCard(chunk -> {}, text -> {});
             assertNoMotion(card);
@@ -45,17 +44,26 @@ class FolioSidebarTest {
             try {
                 deck.addNotify();
                 assertTrue(card.isShowing());
-                assertTrue(activityRunning(card));
+                assertTrue(find(card, component -> component instanceof javax.swing.JLabel label
+                        && "Searching course files…".equals(label.getText())).isVisible());
+                assertNoMotion(card);
                 layout.show(deck, "other");
                 assertFalse(card.isShowing());
                 assertNoMotion(card);
                 layout.show(deck, "chat");
-                assertTrue(activityRunning(card));
-                card.showAnswer("done", null);
+                assertTrue(find(card, component -> component instanceof javax.swing.JLabel label
+                        && "Searching course files…".equals(label.getText())).isVisible());
                 assertNoMotion(card);
+                card.showAnswer("done", null);
+                var copy = (AbstractButton) find(card, component -> component instanceof AbstractButton button
+                        && "Copy answer".equals(button.getAccessibleContext().getAccessibleName()));
+                assertTrue(copy.isEnabled());
                 layout.show(deck, "other");
+                assertNoMotion(card);
                 layout.show(deck, "chat");
                 assertNoMotion(card);
+                assertTrue(copy.isEnabled());
+                assertTrue(text(card).contains("done"));
             } finally {
                 deck.removeNotify();
                 assertNoMotion(card);
@@ -256,26 +264,21 @@ class FolioSidebarTest {
         return panel;
     }
 
-    private static void assertNoMotion(FolioChrome.AnswerCard card) {
-        for (var field : card.getClass().getDeclaredFields()) {
-            if (field.getType() == Timer.class) {
+    private static void assertNoMotion(Component component) {
+        for (var field : component.getClass().getDeclaredFields()) {
+            if (field.getType() == FolioMotion.class) {
                 try {
                     field.setAccessible(true);
-                    assertFalse(((Timer) field.get(card)).isRunning(), field.getName());
+                    assertFalse(((FolioMotion) field.get(component)).running(), field.getName());
                 } catch (IllegalAccessException ex) {
                     throw new AssertionError(ex);
                 }
             }
         }
-    }
-
-    private static boolean activityRunning(FolioChrome.AnswerCard card) {
-        try {
-            var pulse = card.getClass().getDeclaredField("pulse");
-            pulse.setAccessible(true);
-            return ((Timer) pulse.get(card)).isRunning();
-        } catch (ReflectiveOperationException ex) {
-            throw new AssertionError(ex);
+        if (component instanceof Container container) {
+            for (Component child : container.getComponents()) {
+                assertNoMotion(child);
+            }
         }
     }
 
