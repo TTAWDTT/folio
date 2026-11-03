@@ -152,6 +152,7 @@ public final class FolioPanel extends JPanel implements Disposable {
     private final JBLabel previewHint = FolioChrome.muted("Preview a test before writing a file.");
     private final FolioChrome.WrapText filesReport = new FolioChrome.WrapText("");
     private final JScrollPane chatScroll = createChatScroll();
+    private final ChatViewport chatViewport = new ChatViewport();
     private final CourseLibrary library;
     private final ProviderAccess provider;
     private final ChatClient client;
@@ -1091,9 +1092,8 @@ public final class FolioPanel extends JPanel implements Disposable {
     }
 
     private void updateAnswer(FolioChrome.AnswerCard card, List<Asker.Update> updates) {
-        boolean follow = chatNearBottom();
         card.update(updates);
-        scrollChat(follow);
+        chatViewport.layoutChanged();
     }
 
     private FolioChrome.AnswerCard addExchange(String bubble) {
@@ -1116,7 +1116,6 @@ public final class FolioPanel extends JPanel implements Disposable {
 
     private void showAnswer(FolioChrome.AnswerCard card, FolioTasks.Outcome<Answer> outcome,
                             ProviderConnection connection, String asked, String historyQuestion) {
-        boolean follow = chatNearBottom();
         if (outcome instanceof FolioTasks.Outcome.Success<Answer> success) {
             Answer answer = success.value();
             card.showAnswer(answer.text(), answer);
@@ -1129,13 +1128,14 @@ public final class FolioPanel extends JPanel implements Disposable {
                 restoreQuestionIfBlank(asked);
             }
         }
-        scrollChat(follow);
+        chatViewport.layoutChanged();
     }
 
     void clearChat() {
         tasks.clear(FolioTasks.Channel.CHAT);
         stopChatMotion();
         conversation.clear();
+        chatViewport.cleared();
         chatRows.clear();
         chatColumn.clearRows();
         chatColumn.addRow(chatEmpty);
@@ -1444,25 +1444,151 @@ public final class FolioPanel extends JPanel implements Disposable {
         throw new IllegalArgumentException("Expected a failure or cancellation.");
     }
 
-    /** Scroll when the user just sent, or when they were already reading the latest line. */
     void scrollChat(boolean userJustSent) {
-        javax.swing.BoundedRangeModel model = chatScroll.getVerticalScrollBar().getModel();
-        boolean follow = followChatTail(userJustSent, model.getValue(), model.getExtent(), model.getMaximum(), JBUI.scale(32));
-        if (!follow) {
-            return;
-        }
-        SwingUtilities.invokeLater(() -> {
-            if (!alive()) {
-                return;
-            }
-            javax.swing.BoundedRangeModel latest = chatScroll.getVerticalScrollBar().getModel();
-            latest.setValue(latest.getMaximum());
-        });
+        chatViewport.follow(userJustSent);
     }
 
-    private boolean chatNearBottom() {
-        javax.swing.BoundedRangeModel model = chatScroll.getVerticalScrollBar().getModel();
-        return followChatTail(false, model.getValue(), model.getExtent(), model.getMaximum(), JBUI.scale(32));
+    private final class ChatViewport implements AutoCloseable {
+        private long revision;
+        private boolean following = true;
+        private boolean writing;
+        private boolean closed;
+        private int maximum;
+        private int extent;
+        private int value;
+        private ViewAnchor anchor;
+
+        private record ViewAnchor(List<Component> successors, int offset) {}
+
+        ChatViewport() {
+            var bar = chatScroll.getVerticalScrollBar();
+            bar.getModel().addChangeListener(event -> {
+                var model = bar.getModel();
+                boolean geometry = maximum != model.getMaximum() || extent != model.getExtent();
+                boolean moved = value != model.getValue();
+                maximum = model.getMaximum();
+                extent = model.getExtent();
+                value = model.getValue();
+                if (closed || writing) {
+                    return;
+                }
+                if (geometry) {
+                    if (chatScroll.isShowing()) {
+                        layoutChanged();
+                    }
+                } else if (moved) {
+                    revision++;
+                    following = nearTail();
+                    rememberAnchor();
+                }
+            });
+            chatScroll.addMouseWheelListener(event -> readerGesture());
+            bar.addMouseListener(new java.awt.event.MouseAdapter() {
+                @Override
+                public void mousePressed(java.awt.event.MouseEvent event) {
+                    readerGesture();
+                }
+            });
+            chatScroll.getViewport().addComponentListener(new ComponentAdapter() {
+                @Override
+                public void componentResized(ComponentEvent event) {
+                    if (chatScroll.isShowing()) {
+                        layoutChanged();
+                    }
+                }
+            });
+            chatColumn.addComponentListener(new ComponentAdapter() {
+                @Override
+                public void componentResized(ComponentEvent event) {
+                    if (chatScroll.isShowing()) {
+                        layoutChanged();
+                    }
+                }
+            });
+        }
+
+        private boolean nearTail() {
+            var model = chatScroll.getVerticalScrollBar().getModel();
+            return followChatTail(false, model.getValue(), model.getExtent(), model.getMaximum(), JBUI.scale(32));
+        }
+
+        private void readerGesture() {
+            long gesture = ++revision;
+            following = false;
+            SwingUtilities.invokeLater(() -> {
+                if (!closed && revision == gesture) {
+                    following = nearTail();
+                    rememberAnchor();
+                }
+            });
+        }
+
+        private void rememberAnchor() {
+            if (!chatScroll.isShowing() || chatScroll.getViewport().getExtentSize().height <= 0) {
+                anchor = null;
+                return;
+            }
+            int top = chatScroll.getViewport().getViewPosition().y;
+            Component[] rows = chatColumn.getComponents();
+            for (int i = 0; i < rows.length; i++) {
+                if (rows[i].getY() + rows[i].getHeight() > top) {
+                    anchor = new ViewAnchor(List.of(rows).subList(i, rows.length), top - rows[i].getY());
+                    return;
+                }
+            }
+            anchor = null;
+        }
+
+        void follow(boolean submitted) {
+            if (submitted) {
+                revision++;
+                following = true;
+                anchor = null;
+            } else {
+                following = following && nearTail();
+            }
+            layoutChanged();
+        }
+
+        void layoutChanged() {
+            long expected = revision;
+            SwingUtilities.invokeLater(() -> {
+                if (closed || !alive() || revision != expected) {
+                    return;
+                }
+                var bar = chatScroll.getVerticalScrollBar();
+                int target = bar.getValue();
+                if (following) {
+                    target = bar.getMaximum() - bar.getVisibleAmount();
+                } else if (anchor != null) {
+                    for (Component row : anchor.successors()) {
+                        if (row.getParent() == chatColumn) {
+                            target = row.getY() + (row == anchor.successors().getFirst() ? anchor.offset() : 0);
+                            break;
+                        }
+                    }
+                }
+                writing = true;
+                try {
+                    bar.setValue(target);
+                } finally {
+                    writing = false;
+                }
+            });
+        }
+
+        void cleared() {
+            revision++;
+            anchor = null;
+            following = true;
+        }
+
+        @Override
+        public void close() {
+            closed = true;
+            revision++;
+            anchor = null;
+        }
     }
 
     /** {@code userJustSent} always follows. Otherwise follow only within {@code slack} of the tail. */
@@ -1699,6 +1825,7 @@ public final class FolioPanel extends JPanel implements Disposable {
     @Override
     public void dispose() {
         disposed = true;
+        chatViewport.close();
         stopChatMotion();
         tasks.close();
         closeSubscription(librarySubscription);

@@ -26,6 +26,12 @@ import javax.swing.Timer;
 import javax.swing.UIManager;
 import javax.swing.SwingConstants;
 import javax.swing.text.View;
+import javax.swing.text.AbstractDocument;
+import javax.swing.text.BadLocationException;
+import javax.swing.text.DefaultCaret;
+import javax.swing.SwingUtilities;
+import java.awt.event.FocusAdapter;
+import java.awt.event.FocusEvent;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
@@ -44,7 +50,6 @@ import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.awt.event.MouseListener;
 import java.awt.event.HierarchyEvent;
 import java.util.List;
 import java.util.function.Consumer;
@@ -381,6 +386,8 @@ final class FolioChrome {
     }
 
     static class WrapText extends JBTextArea {
+        private boolean updatingBody;
+
         WrapText(String text) {
             super(text == null ? "" : text);
             setEditable(false);
@@ -390,11 +397,58 @@ final class FolioChrome {
             setBorder(JBUI.Borders.empty());
             setFont(JBFont.medium());
             setColumns(24);
+            setCaret(new DefaultCaret() {
+                @Override
+                protected void adjustVisibility(Rectangle location) {
+                    if (hasFocus() && !updatingBody) {
+                        super.adjustVisibility(location);
+                    }
+                }
+            });
         }
 
         void setBody(String text) {
-            setText(text == null ? "" : text);
-            setCaretPosition(0);
+            String next = text == null ? "" : text;
+            String previous = getText();
+            int prefix = 0;
+            while (prefix < previous.length() && prefix < next.length()
+                    && previous.charAt(prefix) == next.charAt(prefix)) {
+                prefix++;
+            }
+            int oldEnd = previous.length();
+            int newEnd = next.length();
+            while (oldEnd > prefix && newEnd > prefix
+                    && previous.charAt(oldEnd - 1) == next.charAt(newEnd - 1)) {
+                oldEnd--;
+                newEnd--;
+            }
+            if (prefix == oldEnd && prefix == newEnd) {
+                return;
+            }
+            int dot = getCaret().getDot();
+            int mark = getCaret().getMark();
+            DefaultCaret caret = (DefaultCaret) getCaret();
+            int policy = caret.getUpdatePolicy();
+            caret.setUpdatePolicy(DefaultCaret.NEVER_UPDATE);
+            updatingBody = true;
+            try {
+                ((AbstractDocument) getDocument()).replace(prefix, oldEnd - prefix,
+                        next.substring(prefix, newEnd), null);
+                caret.setDot(remap(mark, prefix, oldEnd, newEnd));
+                caret.moveDot(remap(dot, prefix, oldEnd, newEnd));
+            } catch (BadLocationException ex) {
+                throw new IllegalStateException(ex);
+            } finally {
+                caret.setUpdatePolicy(policy);
+                updatingBody = false;
+            }
+        }
+
+        private static int remap(int position, int start, int oldEnd, int newEnd) {
+            if (position <= start) {
+                return position;
+            }
+            return position >= oldEnd ? position + newEnd - oldEnd : Math.min(position, newEnd);
         }
 
         @Override
@@ -464,7 +518,7 @@ final class FolioChrome {
     }
 
     static final class AnswerCard extends JBPanel<AnswerCard> {
-        private enum State { RETRIEVING, GENERATING, STREAMING, FINAL }
+        private enum State { RETRIEVING, GENERATING, STREAMING, FINAL_RAW, FINAL_FORMATTED, STOPPED }
         private final JPanel bannerSlot = new JPanel(new BorderLayout());
         private final JPanel sources = new JPanel(new GridBagLayout());
         private final JPanel content = new JPanel(new BorderLayout());
@@ -489,6 +543,9 @@ final class FolioChrome {
         private final Timer expansion;
         private State state = State.RETRIEVING;
         private String rawAnswer = "";
+        private String finalBody;
+        private JButton answerCopy;
+        private boolean selecting;
         private int pulseFrame;
 
         AnswerCard(Consumer<CourseChunk> onSource, Consumer<String> onCopy) {
@@ -531,11 +588,33 @@ final class FolioChrome {
             head.setOpaque(false);
             head.add(mutedHeading("Folio"), BorderLayout.WEST);
             if (onCopy != null) {
-                JButton copy = copyButton(() -> onCopy.accept(rawAnswer));
-                head.add(copy, BorderLayout.EAST);
+                answerCopy = copyButton(() -> onCopy.accept(rawAnswer));
+                answerCopy.setEnabled(false);
+                answerCopy.getAccessibleContext().setAccessibleName("Copy answer");
+                answerCopy.getAccessibleContext().setAccessibleDescription("Available when the answer finishes.");
+                head.add(answerCopy, BorderLayout.EAST);
             }
             answer.add(head, BorderLayout.NORTH);
             content.add(body, BorderLayout.CENTER);
+            body.addCaretListener(event -> SwingUtilities.invokeLater(this::formatWhenReleased));
+            body.addFocusListener(new FocusAdapter() {
+                @Override
+                public void focusLost(FocusEvent event) {
+                    formatWhenReleased();
+                }
+            });
+            body.addMouseListener(new MouseAdapter() {
+                @Override
+                public void mousePressed(MouseEvent event) {
+                    selecting = SwingUtilities.isLeftMouseButton(event);
+                }
+
+                @Override
+                public void mouseReleased(MouseEvent event) {
+                    selecting = false;
+                    formatWhenReleased();
+                }
+            });
             answer.add(content, BorderLayout.CENTER);
             answer.add(activity, BorderLayout.SOUTH);
             add(answer, BorderLayout.CENTER);
@@ -570,6 +649,11 @@ final class FolioChrome {
             stopMotion();
             activity.setVisible(false);
             rawAnswer = text == null ? "" : text;
+            state = State.FINAL_RAW;
+            if (answerCopy != null) {
+                answerCopy.setEnabled(true);
+                answerCopy.getAccessibleContext().setAccessibleDescription("Copy the completed answer.");
+            }
             bannerSlot.removeAll();
             sources.removeAll();
             references.setSelected(false);
@@ -592,8 +676,9 @@ final class FolioChrome {
                     case INLINE -> { }
                 }
             }
-            content.removeAll();
-            content.add(formattedBody(value), BorderLayout.CENTER);
+            finalBody = value;
+            body.setBody(value);
+            formatWhenReleased();
             references.setVisible(!hits.isEmpty());
             references.setText(hits.size() + (hits.size() == 1 ? " course reference" : " course references"));
             references.getAccessibleContext().setAccessibleName(references.getText());
@@ -602,8 +687,7 @@ final class FolioChrome {
                         ? "Sources cited in the reply" : "Retrieved material"), 0, JBUI.insets(0, 0, 2, 0));
                 for (int i = 0; i < hits.size(); i++) {
                     CourseChunk chunk = hits.get(i);
-                    JComponent card = sourceCard(i + 1, chunk);
-                    onClick(card, () -> onSource.accept(chunk));
+                    JComponent card = sourceCard(i + 1, chunk, () -> onSource.accept(chunk));
                     boolean last = i == hits.size() - 1;
                     addSourceRow(card, i + 1, JBUI.insets(0, 0, last ? 0 : 4, 0));
                 }
@@ -612,7 +696,7 @@ final class FolioChrome {
         }
 
         void update(List<Asker.Update> updates) {
-            if (state == State.FINAL) {
+            if (state == State.FINAL_RAW || state == State.FINAL_FORMATTED || state == State.STOPPED) {
                 return;
             }
             for (Asker.Update update : updates) {
@@ -628,19 +712,32 @@ final class FolioChrome {
                 case RETRIEVING -> "Searching course files…";
                 case GENERATING -> "Generating…";
                 case STREAMING -> "Receiving answer…";
-                case FINAL -> "";
+                case FINAL_RAW, FINAL_FORMATTED, STOPPED -> "";
             });
             refresh();
         }
 
+        private void formatWhenReleased() {
+            if (state != State.FINAL_RAW || selecting || body.hasFocus()
+                    || body.getSelectionStart() != body.getSelectionEnd()) {
+                return;
+            }
+            state = State.FINAL_FORMATTED;
+            content.removeAll();
+            content.add(formattedBody(finalBody), BorderLayout.CENTER);
+            refresh();
+        }
+
         void stopMotion() {
-            state = State.FINAL;
+            if (state != State.FINAL_RAW && state != State.FINAL_FORMATTED) {
+                state = State.STOPPED;
+            }
             pulse.stop();
             expansion.stop();
         }
 
         private void updateMotion() {
-            if (isShowing() && state != State.FINAL) {
+            if (isShowing() && (state == State.RETRIEVING || state == State.GENERATING || state == State.STREAMING)) {
                 pulse.start();
             } else {
                 pulse.stop();
@@ -766,16 +863,19 @@ final class FolioChrome {
         return banner;
     }
 
-    static JComponent sourceCard(int number, CourseChunk chunk) {
+    static JComponent sourceCard(int number, CourseChunk chunk, Runnable open) {
         JBPanel<?> card = new JBPanel<>(new BorderLayout(0, JBUI.scale(2)));
         card.setOpaque(true);
         card.setBackground(userFill());
         card.setBorder(JBUI.Borders.compound(
                 new RoundedLineBorder(JBColor.border(), JBUI.scale(8), JBUI.scale(1)),
                 JBUI.Borders.empty(4, 6)));
-        card.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         String file = Asker.citedFile(chunk.sourceDocument());
-        JBLabel title = new JBLabel("[" + number + "]  " + file);
+        JButton title = iconButton(null);
+        title.setText("[" + number + "]  " + file);
+        title.setHorizontalAlignment(SwingConstants.LEADING);
+        title.getAccessibleContext().setAccessibleName("Open " + file + " at " + Asker.scopePhrase(chunk));
+        title.addActionListener(event -> open.run());
         title.setFont(JBFont.small().asBold());
         title.setForeground(JBUI.CurrentTheme.Link.Foreground.ENABLED);
         card.add(title, BorderLayout.NORTH);
@@ -789,26 +889,6 @@ final class FolioChrome {
         card.add(detail, BorderLayout.CENTER);
         card.setToolTipText("Open " + file + " at " + Asker.scopePhrase(chunk));
         return card;
-    }
-
-    static void onClick(Component component, Runnable action) {
-        MouseListener listener = new MouseAdapter() {
-            @Override
-            public void mouseClicked(MouseEvent event) {
-                action.run();
-            }
-        };
-        listen(component, listener);
-    }
-
-    private static void listen(Component component, MouseListener listener) {
-        component.addMouseListener(listener);
-        component.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        if (component instanceof Container container) {
-            for (Component child : container.getComponents()) {
-                listen(child, listener);
-            }
-        }
     }
 
     static JComponent sourcePreview(CourseChunk chunk, boolean missing) {
