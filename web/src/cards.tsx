@@ -12,21 +12,29 @@ function Details({ id, title, expansion, children }: { id: string; title: string
     <Disclosure.Content><Disclosure.Body className="details-body">{children}</Disclosure.Body></Disclosure.Content>
   </Disclosure>;
 }
+function excerptPreview(text: string) {
+  const flat = text.replace(/\s+/g, ' ').trim();
+  return flat.length > 180 ? flat.slice(0, 180) + '…' : flat;
+}
 function References({ citations, at, bridge, expansion }: { citations: Citation[]; at: Attempt; bridge: Bridge; expansion: Expansion }) {
   if (!citations.length) return null;
   return <Details id={`${at.turn}:references`} title={`课件 · ${citations.length} 处引用`} expansion={expansion}>
     <ol className="citations">{citations.map((citation, index) => <li key={`${citation.number}-${index}`}>
       <button className="source-title" onClick={() => void bridge.command({ kind: 'citation', at, index })}>[{citation.number}] {citation.title}</button>
-      <div className="muted source-location">{citation.location}</div><p className="excerpt">{citation.excerpt}</p>
+      <div className="muted source-location">{citation.location}</div><p className="excerpt">{excerptPreview(citation.excerpt)}</p>
     </li>)}</ol>
   </Details>;
 }
-const evidenceText = { GENERAL: '', INLINE: '根据所附代码回答', RETRIEVED: '', INVALID: '引用编号未能匹配课件，请核对来源。', AMBIGUOUS: '引用存在歧义，请核对课件。', CONFIGURATION: '当前为本地配置或课件检索结果。' };
+const evidenceText = { GENERAL: '', INLINE: '引用了检索到的课件', RETRIEVED: '', INVALID: '引用编号未能匹配课件，请核对来源。', AMBIGUOUS: '引用存在歧义，请核对课件。', CONFIGURATION: '当前为本地配置或课件检索结果。' };
 
 function AnswerBody({ body, card, bridge, expansion }: { body: Body; card: Card; bridge: Bridge; expansion: Expansion }) {
   const at = card.at;
   switch (body.kind) {
-    case 'stream': return <><div className="stream-status" role="status"><span className="activity-dot" />{body.phase}</div><div className="stream-text">{body.text}</div></>;
+    case 'stream': return <>
+      {body.reasoning ? <details className="thinking" open={body.phase === '正在思考'}><summary>思考</summary><div className="thinking-text">{body.reasoning}</div></details> : null}
+      <div className="stream-status" role="status"><span className="activity-dot" />{body.phase}</div>
+      {body.text ? <div className="stream-text">{body.text}</div> : null}
+    </>;
     case 'answer': return <><SafeMarkdown text={body.raw} at={at} bridge={bridge} />{evidenceText[body.evidence] && <p className="muted evidence">{evidenceText[body.evidence]}</p>}<References citations={body.citations} at={at} bridge={bridge} expansion={expansion} /></>;
     case 'practice': return <><div className="exercises">{body.exercises.map((exercise, index) => <section className="exercise" key={index}>
       <div className="exercise-number">练习 {index + 1}</div><SafeMarkdown text={exercise.question} at={at} bridge={bridge} actions={false} />

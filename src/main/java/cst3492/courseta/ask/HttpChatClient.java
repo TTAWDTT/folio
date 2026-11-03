@@ -46,11 +46,17 @@ public final class HttpChatClient implements ChatClient {
     @Override
     public String stream(String baseUrl, String apiKey, String model, String system, String user,
                          Consumer<String> onDelta) throws IOException {
+        return stream(baseUrl, apiKey, model, system, user, onDelta, ignored -> { });
+    }
+
+    @Override
+    public String stream(String baseUrl, String apiKey, String model, String system, String user,
+                         Consumer<String> onDelta, Consumer<String> onReasoning) throws IOException {
         if (Thread.currentThread().isInterrupted()) {
             throw new IOException("chat call interrupted");
         }
         validateInput(apiKey, model, system, user);
-        StreamBody body = new StreamBody(onDelta, apiKey);
+        StreamBody body = new StreamBody(onDelta, onReasoning, apiKey);
         CompletableFuture<HttpResponse<String>> pending = null;
         try {
             JsonObject json = JsonParser.parseString(requestBody(model, system, user)).getAsJsonObject();
@@ -141,6 +147,7 @@ public final class HttpChatClient implements ChatClient {
         private final StringBuilder event = new StringBuilder();
         private final StringBuilder text = new StringBuilder();
         private final Consumer<String> onDelta;
+        private final Consumer<String> onReasoning;
         private final String key;
         private Flow.Subscription subscription;
         private int status;
@@ -151,8 +158,9 @@ public final class HttpChatClient implements ChatClient {
         private boolean done;
         private boolean closed;
 
-        private StreamBody(Consumer<String> onDelta, String key) {
+        private StreamBody(Consumer<String> onDelta, Consumer<String> onReasoning, String key) {
             this.onDelta = onDelta;
+            this.onReasoning = onReasoning == null ? ignored -> { } : onReasoning;
             this.key = key;
         }
 
@@ -260,6 +268,7 @@ public final class HttpChatClient implements ChatClient {
                     throw new IOException("Chat stream stopped with " + reason.getAsString() + ".");
                 }
                 JsonObject delta = choice.getAsJsonObject("delta");
+                publishReasoning(delta);
                 JsonElement content = delta == null ? null : delta.get("content");
                 if (content == null || content.isJsonNull()) {
                     return;
@@ -277,6 +286,23 @@ public final class HttpChatClient implements ChatClient {
             if (!delta.isEmpty()) {
                 text.append(delta);
                 onDelta.accept(delta);
+            }
+        }
+
+        private void publishReasoning(JsonObject delta) throws IOException {
+            if (delta == null) {
+                return;
+            }
+            JsonElement value = delta.has("reasoning_content") ? delta.get("reasoning_content") : delta.get("reasoning");
+            if (value == null || value.isJsonNull()) {
+                return;
+            }
+            if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isString()) {
+                throw new IOException("Chat stream reasoning was not text.");
+            }
+            String reasoning = value.getAsString();
+            if (!reasoning.isEmpty()) {
+                onReasoning.accept(reasoning);
             }
         }
 

@@ -19,10 +19,8 @@ public record Answer(Kind kind, String text, List<CourseChunk> citations, boolea
         GENERAL, INLINE, RETRIEVED, INVALID, AMBIGUOUS, CONFIGURATION
     }
 
-    public static final String GENERAL_SENTENCE =
-            "Response is based on general knowledge; no specific course material is referenced.";
-    public static final String UNGROUNDED =
-            "This answer isn't grounded in course files. " + GENERAL_SENTENCE;
+    public static final String GENERAL_SENTENCE = "没有命中课件，以下内容不是课件引用。";
+    public static final String UNGROUNDED = "这个回答没有落在课件上。" + GENERAL_SENTENCE;
 
     public enum Kind {
         CITED,

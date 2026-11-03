@@ -106,6 +106,14 @@ final class FolioBrowser implements Disposable {
             @Override public boolean onBeforePopup(CefBrowser cef, CefFrame frame, String url, String name) { return true; }
         }, browser.getCefBrowser());
         component.add(browser.getComponent(), BorderLayout.CENTER);
+        browser.getComponent().setMinimumSize(new java.awt.Dimension(0, 0));
+        component.addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override public void componentResized(java.awt.event.ComponentEvent event) {
+                if (!disposed && browser != null && browser.getCefBrowser() != null) {
+                    browser.getCefBrowser().wasResized(component.getWidth(), component.getHeight());
+                }
+            }
+        });
         ApplicationManager.getApplication().getMessageBus().connect(this).subscribe(LafManagerListener.TOPIC, source -> updateTheme());
         themeTimer = new javax.swing.Timer(1000, event -> updateTheme()); themeTimer.start(); updateTheme();
         browser.loadURL(page);

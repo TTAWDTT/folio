@@ -57,6 +57,24 @@ class HttpChatStreamingTest {
     }
 
     @Test
+    void reasoningContentStaysOutOfTheAnswer() throws Exception {
+        String body = "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"先看课件\"}}]}\n\n"
+                + "data: {\"choices\":[{\"delta\":{\"content\":\"@Test\"}}]}\n\n"
+                + "data: [DONE]\n\n";
+        try (Fixture fixture = new Fixture(exchange -> {
+            byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, bytes.length);
+            exchange.getResponseBody().write(bytes);
+        })) {
+            List<String> deltas = new ArrayList<>();
+            List<String> reasoning = new ArrayList<>();
+            assertEquals("@Test", fixture.stream(new HttpChatClient(), deltas, reasoning));
+            assertEquals(List.of("@Test"), deltas);
+            assertEquals(List.of("先看课件"), reasoning);
+        }
+    }
+
+    @Test
     void truncationMalformedDataAndLengthFinishFailWithoutRetry() throws Exception {
         for (String body : List.of(
                 "data: {\"choices\":[{\"delta\":{\"content\":\"partial\"}}]}\n\n",
@@ -234,6 +252,11 @@ class HttpChatStreamingTest {
         private String stream(HttpChatClient client, List<String> deltas) throws IOException {
             return client.stream("http://127.0.0.1:" + server.getAddress().getPort(),
                     "fixture-key", "m", "s", "u", deltas::add);
+        }
+
+        private String stream(HttpChatClient client, List<String> deltas, List<String> reasoning) throws IOException {
+            return client.stream("http://127.0.0.1:" + server.getAddress().getPort(),
+                    "fixture-key", "m", "s", "u", deltas::add, reasoning::add);
         }
 
         @Override

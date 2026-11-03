@@ -184,7 +184,7 @@ final class FolioCodec {
             case Exercise exercise -> object("question", exercise.question(), "explanation", exercise.explanation());
             case Availability availability -> object("enabled", availability.enabled(), "reason", availability.reason());
             case Card card -> object("at", card.at(), "mode", card.mode(), "user", card.user(), "body", card.body(), "retry", card.retry(), "writeTest", card.writeTest(), "fillCommit", card.fillCommit(), "generateTests", card.generateTests());
-            case Body.Stream body -> object("kind", "stream", "phase", body.phase(), "text", body.text());
+            case Body.Stream body -> object("kind", "stream", "phase", body.phase(), "reasoning", body.reasoning(), "text", body.text());
             case Body.Answer body -> object("kind", "answer", "raw", body.raw(), "evidence", body.evidence(), "citations", body.citations());
             case Body.Practice body -> object("kind", "practice", "raw", body.raw(), "evidence", body.evidence(), "citations", body.citations(), "exercises", body.exercises());
             case Body.Test body -> object("kind", "test", "raw", body.raw(), "code", body.code(), "source", body.source(), "target", body.target(), "problem", body.problem());

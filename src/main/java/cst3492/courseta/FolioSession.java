@@ -125,6 +125,7 @@ public final class FolioSession implements Disposable {
         refreshSources();
         startFileTask("正在读取共享资料库", () -> { library.load(); return library.snapshot().warning(); });
     }
+    private static VirtualFile lastImportDir;
     private static Effects nativeEffects(Project project) {
         return new Effects() {
             public boolean copy(String text) {
@@ -134,7 +135,15 @@ public final class FolioSession implements Disposable {
             public void chooseFiles(Consumer<List<Path>> selected) {
                 FileChooserDescriptor descriptor = new FileChooserDescriptor(true, false, false, false, false, true);
                 descriptor.setTitle("导入共享课件");
-                FileChooser.chooseFiles(descriptor, project, null, files -> selected.accept(files.stream().map(file -> Path.of(file.getPath())).toList()));
+                descriptor.setDescription("选择 PDF、PPTX 或文本课件。可多选。");
+                descriptor.withFileFilter(file -> {
+                    String name = file.getName().toLowerCase(java.util.Locale.ROOT);
+                    return name.endsWith(".pdf") || name.endsWith(".pptx") || name.endsWith(".txt") || name.endsWith(".md") || name.endsWith(".docx");
+                });
+                FileChooser.chooseFiles(descriptor, project, lastImportDir, files -> {
+                    if (!files.isEmpty() && files.get(0).getParent() != null) lastImportDir = files.get(0).getParent();
+                    selected.accept(files.stream().map(file -> Path.of(file.getPath())).toList());
+                });
             }
             public boolean open(VirtualFile file, int offset) {
                 return project != null && FileEditorManager.getInstance(project).openTextEditor(new OpenFileDescriptor(project, file, offset), false) != null;
@@ -165,7 +174,24 @@ public final class FolioSession implements Disposable {
     List<Card> cards() { requireEdt(); return turns.values().stream().map(this::card).toList(); }
     private void publishShell() { if (alive()) output.accept(new Change.ShellChanged(shell())); }
     private void publish(Turn turn) { output.accept(new Change.CardChanged(card(turn))); }
-    private void status(String text) { notice = text; publishShell(); }
+    private javax.swing.Timer noticeTimer;
+    private boolean noticeSticky;
+    private void status(String text) { showNotice(text, true); }
+    private void info(String text) { showNotice(text, false); }
+    private void showNotice(String text, boolean sticky) {
+        notice = text == null ? "" : text;
+        noticeSticky = sticky;
+        if (noticeTimer != null) noticeTimer.stop();
+        if (!sticky && !notice.isEmpty() && SwingUtilities.isEventDispatchThread()) {
+            String snapshot = notice;
+            noticeTimer = new javax.swing.Timer(5000, event -> {
+                if (notice.equals(snapshot)) { notice = ""; publishShell(); }
+            });
+            noticeTimer.setRepeats(false);
+            noticeTimer.start();
+        }
+        publishShell();
+    }
     private Attempt activeAttempt() {
         return switch (generation) { case Generation.Idle ignored -> null; case Generation.Starting value -> value.at(); case Generation.Running value -> value.at(); };
     }
@@ -297,7 +323,7 @@ public final class FolioSession implements Disposable {
         Draft value = draft.value(); drafts.put(mode, new DraftState(new Draft("", 0, 0, value.revision() + 1, value.epoch(), value.context()), draft.code(), draft.target()));
         long id = ++sequence;
         String user = text.isBlank() ? switch (mode) { case ASK -> "选中的代码"; case DRILL -> code == null || code.text().isBlank() ? "生成练习" : code.text(); case TESTS -> "生成测试"; case COMMIT -> "根据暂存改动生成提交信息"; } : text;
-        Turn turn = new Turn(id, request, user, 0, new Body.Stream("准备生成", ""), List.of(), false, null, null, null, value.revision() + 1, value.epoch(), value.text());
+        Turn turn = new Turn(id, request, user, 0, new Body.Stream("准备生成", "", ""), List.of(), false, null, null, null, value.revision() + 1, value.epoch(), value.text());
         turns.put(id, turn);
         if (turns.size() > Conversation.MAX_TURNS) {
             Long oldest = turns.keySet().iterator().next(); Turn removed = turns.remove(oldest);
@@ -313,7 +339,7 @@ public final class FolioSession implements Disposable {
         beginAttempt(turn.settled(), connection);
     }
     private void beginAttempt(Turn original, ProviderConnection connection) {
-        Turn turn = new Turn(original.id(), original.request(), original.user(), original.attempt() + 1, new Body.Stream("准备生成", ""), List.of(), false, original.staged(), null, null, original.clearedRevision(), original.clearedEpoch(), original.clearedText());
+        Turn turn = new Turn(original.id(), original.request(), original.user(), original.attempt() + 1, new Body.Stream("准备生成", "", ""), List.of(), false, original.staged(), null, null, original.clearedRevision(), original.clearedEpoch(), original.clearedText());
         turns.put(turn.id(), turn); Attempt at = turn.at(); generation = new Generation.Starting(at); publish(turn); publishShell();
         switch (turn.request()) {
             case Request.Ask input -> runAttempt(turn, FolioTasks.Channel.CHAT, connection,
@@ -354,16 +380,22 @@ public final class FolioSession implements Disposable {
     }
     private <T> void runAttempt(Turn turn, FolioTasks.Channel channel, ProviderConnection connection, FolioTasks.EventWork<T> work, java.util.function.Function<T, Turn> complete) {
         Attempt at = turn.at();
+        if (!noticeSticky) notice = "";
         FolioTasks.Handle<T> handle = tasks.submit(channel, work, updates -> {
             if (!at.equals(activeAttempt())) return;
-            Turn current = turn(at); Body.Stream stream = (Body.Stream) current.body(); String text = stream.text(), phase = stream.phase();
+            Turn current = turn(at); Body.Stream stream = (Body.Stream) current.body(); String text = stream.text(), reasoning = stream.reasoning(), phase = stream.phase();
             for (Asker.Update update : updates) {
-                if (update instanceof Asker.Update.Delta delta) { output.accept(new Change.Text(at, text.length(), delta.text())); text += delta.text(); }
-                if (update instanceof Asker.Update.Phase next) phase = next.stage() == Asker.Stage.RETRIEVING ? "正在检索课件" : "正在生成";
+                if (update instanceof Asker.Update.Delta delta) { output.accept(new Change.Text(at, text.length(), delta.text())); text += delta.text(); phase = "正在生成"; }
+                if (update instanceof Asker.Update.Reasoning thought) { reasoning += thought.text(); phase = "正在思考"; }
+                if (update instanceof Asker.Update.Phase next) phase = switch (next.stage()) {
+                    case RETRIEVING -> "正在检索课件";
+                    case THINKING -> "正在思考";
+                    case GENERATING -> text.isEmpty() && !reasoning.isEmpty() ? "正在思考" : "正在生成";
+                };
             }
-            boolean phaseChanged = !phase.equals(stream.phase());
-            Turn next = current.display(new Body.Stream(phase, text), List.of()); turns.put(turn.id(), next);
-            if (phaseChanged) publish(next);
+            boolean changed = !phase.equals(stream.phase()) || !reasoning.equals(stream.reasoning());
+            Turn next = current.display(new Body.Stream(phase, reasoning, text), List.of()); turns.put(turn.id(), next);
+            if (changed) publish(next);
             changedReading(); publishShell();
         }, outcome -> {
             if (!at.equals(activeAttempt())) return;
@@ -417,7 +449,7 @@ public final class FolioSession implements Disposable {
                 yield at(codeBlocks(raw(turn.body())), command.index());
             } default -> throw new Stale();
         };
-        if (current(lease)) status(effects.copy(text) ? "已复制。" : "剪贴板当前不可用，请重试。");
+        if (current(lease)) { if (effects.copy(text)) info("已复制。"); else status("剪贴板当前不可用，请重试。"); }
     }
     private static String raw(Body body) {
         return switch (body) { case Body.Answer value -> value.raw(); case Body.Practice value -> value.raw(); case Body.Test value -> value.raw(); case Body.Failed value -> value.raw(); case Body.Stream value -> value.text(); case Body.Stopped value -> value.text(); default -> throw new Stale(); };
@@ -453,7 +485,7 @@ public final class FolioSession implements Disposable {
         if (!tasks.use(FolioTasks.Channel.TEST, turn.test(), result -> {
             if (!current(lease)) throw new Stale();
             if (result.generated() == null || result.context().directory() == null) throw new IllegalStateException("请先选择源码，生成有效测试并确认目标目录。");
-            VirtualFile created = result.generated().write(project, result.context().directory(), result.context().captured()); status("已写入 " + created.getPath());
+            VirtualFile created = result.generated().write(project, result.context().directory(), result.context().captured()); info("已写入 " + created.getPath());
         })) throw new Stale();
     }
     private void deliverCommit(Turn turn, int index, boolean fill, Lease lease) {
@@ -464,8 +496,8 @@ public final class FolioSession implements Disposable {
                 if (!(outcome instanceof FolioTasks.Outcome.Success<GitDiffs.DeliveryState> success) || !success.value().unchanged()) { status("暂存内容已变化或无法验证，请重新生成。"); return; }
                 if (!tasks.use(FolioTasks.Channel.COMMIT, turn.commit(), accepted -> {
                     if (!current(lease) || !success.value().unchanged()) return;
-                    if (fill) status(accepted.target().fill(message) ? "已填入原提交框。" : "原提交框已更改或关闭，未覆盖其内容。");
-                    else status(effects.copy(message) ? "已复制提交信息。" : "剪贴板当前不可用，请重试。");
+                    if (fill) { if (accepted.target().fill(message)) info("已填入原提交框。"); else status("原提交框已更改或关闭，未覆盖其内容。"); }
+                    else { if (effects.copy(message)) info("已复制提交信息。"); else status("剪贴板当前不可用，请重试。"); }
                 })) status("此候选已失效，请重新生成。");
             });
         })) throw new Stale();
@@ -476,7 +508,7 @@ public final class FolioSession implements Disposable {
         String edit = settings.edit(); settledForm = null; long saveRevision = provider.view().revision() + 1;
         provider.save(save.endpoint(), save.model(), save.credential()).whenComplete((saved, error) -> delivery.execute(() -> {
             if (!alive() || !(route instanceof Route.Settings current) || !current.edit().equals(edit) || provider.view().revision() != saveRevision) return;
-            if (error == null) { settledForm = save.formRevision(); notice = "设置已保存，尚未验证外部连接。"; } else notice = provider.view().warning(); publishShell();
+            if (error == null) { settledForm = save.formRevision(); info("设置已保存，尚未验证外部连接。"); } else { noticeSticky = true; notice = provider.view().warning(); publishShell(); }
         }));
         return Result.ok();
     }
@@ -521,7 +553,11 @@ public final class FolioSession implements Disposable {
         FolioTasks.Handle<String> handle = tasks.submit(FolioTasks.Channel.FILES, work, outcome -> {
             if (!Objects.equals(fileTaskId, id)) return;
             fileTaskId = null; fileHandle = null; refreshSources();
-            if (outcome instanceof FolioTasks.Outcome.Success<String> success) { notice = success.value(); if (!library.snapshot().warning().isBlank()) fileWarnings = List.of(library.snapshot().warning()); }
+            if (outcome instanceof FolioTasks.Outcome.Success<String> success) {
+                if (success.value() == null || success.value().isBlank()) { if (!noticeSticky) notice = ""; }
+                else info(success.value());
+                if (!library.snapshot().warning().isBlank()) fileWarnings = List.of(library.snapshot().warning());
+            }
             else { notice = outcome instanceof FolioTasks.Outcome.Failure<String> failure ? safe(failure.cause()) : "已取消。"; fileWarnings = List.of(notice); } publishShell();
         });
         if (Objects.equals(fileTaskId, id)) fileHandle = handle; publishShell();
@@ -535,7 +571,7 @@ public final class FolioSession implements Disposable {
             return new SourceResult(file, Asker.snippetOffset(new String(file.contentsToByteArray(), file.getCharset()), chunk.text()));
         }, outcome -> {
             if (!current(lease)) return;
-            if (outcome instanceof FolioTasks.Outcome.Success<SourceResult> success && success.value().file() != null && effects.open(success.value().file(), success.value().offset())) status("已打开 " + Asker.citedFile(chunk.sourceDocument()));
+            if (outcome instanceof FolioTasks.Outcome.Success<SourceResult> success && success.value().file() != null && effects.open(success.value().file(), success.value().offset())) info("已打开 " + Asker.citedFile(chunk.sourceDocument()));
             else sourcePreview(chunk);
         });
     }

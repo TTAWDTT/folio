@@ -82,7 +82,7 @@ export function Composer({ shell, bridge, drafts, disabled, onSent }: { shell: S
     <form aria-label="消息输入" className="composer" ref={form} onSubmit={event => event.preventDefault()}>
       {editor.canonical.context && <div className="context-chip"><Icon name="file" /><span>{editor.canonical.context}</span><IconButton name="移除代码上下文" icon="close" disabled={disabled} onPress={() => void bridge.command({ kind: 'removeContext', mode, revision: editor.canonical.revision })} /></div>}
       <div className="composer-field">
-        <TextArea ref={textarea} value={editor.value.text} onChange={() => drafts.edit(mode, value())} onBlur={() => drafts.edit(mode, value())} aria-label="消息" aria-description="Enter 发送，Shift+Enter 换行" className="composer-textarea" placeholder={placeholders[mode]} rows={2} disabled={disabled}
+        <TextArea ref={textarea} value={editor.value.text} onChange={() => drafts.edit(mode, value())} onBlur={() => drafts.edit(mode, value())} aria-label="消息" aria-description="Enter 发送，Shift+Enter 换行" className="composer-textarea" placeholder={placeholders[mode]} rows={2} disabled={disabled} spellCheck={false}
           onSelect={() => { if (!composing.current) drafts.edit(mode, value()); }}
           onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; drafts.edit(mode, value()); }}
           onKeyDown={event => {

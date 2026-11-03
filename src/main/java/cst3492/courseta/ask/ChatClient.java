@@ -12,4 +12,10 @@ public interface ChatClient {
                           Consumer<String> onDelta) throws IOException {
         return complete(baseUrl, apiKey, model, system, user);
     }
+
+    /** Answer deltas and reasoning deltas stay separate. The returned string is the answer only. */
+    default String stream(String baseUrl, String apiKey, String model, String system, String user,
+                          Consumer<String> onDelta, Consumer<String> onReasoning) throws IOException {
+        return stream(baseUrl, apiKey, model, system, user, onDelta);
+    }
 }

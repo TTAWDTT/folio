@@ -13,11 +13,12 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public final class Asker {
-    public enum Stage { RETRIEVING, GENERATING }
+    public enum Stage { RETRIEVING, THINKING, GENERATING }
 
     public sealed interface Update {
         record Phase(Stage stage) implements Update {}
         record Delta(String text) implements Update {}
+        record Reasoning(String text) implements Update {}
     }
 
     public static final String MISSING_KEY =
@@ -90,7 +91,8 @@ public final class Asker {
         } else {
             onUpdate.accept(new Update.Phase(Stage.GENERATING));
             text = chat.stream(baseUrl, apiKey, model, system, user,
-                    delta -> onUpdate.accept(new Update.Delta(delta)));
+                    delta -> onUpdate.accept(new Update.Delta(delta)),
+                    reasoning -> onUpdate.accept(new Update.Reasoning(reasoning)));
         }
         if (hits.isEmpty()) {
             CitationMap mapped = mapCitations(List.of(), text);

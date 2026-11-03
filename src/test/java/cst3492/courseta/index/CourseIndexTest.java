@@ -41,6 +41,18 @@ class CourseIndexTest {
     }
 
     @Test
+    void chineseQuestionAboutAnEnglishLectureStillHitsTheLectureTerm() {
+        CourseIndex index = new CourseIndex();
+        index.upsert(chunk("Lec-3.4-JUnit.pdf", 2, "JUnit runs @Test methods and reports assertion failures."));
+        index.upsert(chunk("Lec-1-Java-Fundamentals.pdf", 1, "A variable stores a value."));
+
+        List<CourseChunk> hit = index.top("根据课件，JUnit 5 的测试方法通常用哪个注解？请引用页码。", 4);
+
+        assertFalse(hit.isEmpty());
+        assertEquals("Lec-3.4-JUnit.pdf#PAGE#2", hit.get(0).id());
+    }
+
+    @Test
     void emptyQueryMatchesNothing() {
         CourseIndex index = new CourseIndex();
         index.upsert(chunk("a.pdf", 1, "alpha"));

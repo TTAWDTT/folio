@@ -90,7 +90,7 @@ public final class CourseIndex implements CourseSearch {
             return List.of();
         }
         Set<String> queryTerms = new LinkedHashSet<>(Tokens.terms(query));
-        List<List<String>> coverageGroups = Tokens.coverageGroups(query);
+        List<List<String>> coverageGroups = applicable(Tokens.coverageGroups(query));
         if (queryTerms.isEmpty() || coverageGroups.isEmpty() || totalTerms == 0) {
             return List.of();
         }
@@ -160,6 +160,40 @@ public final class CourseIndex implements CourseSearch {
 
     static boolean enoughCoverage(int matchedTerms, int queryTerms) {
         return queryTerms > 0 && matchedTerms >= queryTerms * MIN_COVERAGE;
+    }
+
+    /** An English lecture has no Chinese bigrams. A Chinese question around a Latin term
+     *  such as JUnit would otherwise require those bigrams and match nothing. When none of
+     *  the Chinese groups appear anywhere in the index, judge the Latin groups alone.
+     *  Unattested English words still count, so one shared word in a longer question misses. */
+    private List<List<String>> applicable(List<List<String>> groups) {
+        List<List<String>> latin = new ArrayList<>();
+        List<List<String>> han = new ArrayList<>();
+        for (List<String> group : groups) {
+            if (group.stream().allMatch(CourseIndex::latinTerm)) latin.add(group);
+            else han.add(group);
+        }
+        if (!han.isEmpty() && !anyAttested(han) && anyAttested(latin)) {
+            return latin;
+        }
+        return groups;
+    }
+
+    private boolean anyAttested(List<List<String>> groups) {
+        for (List<String> group : groups) {
+            for (String term : group) {
+                Map<String, Integer> posting = termFreq.get(term);
+                if (posting != null && !posting.isEmpty()) return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean latinTerm(String term) {
+        for (int i = 0; i < term.length(); i++) {
+            if (term.charAt(i) > 127) return false;
+        }
+        return !term.isEmpty();
     }
 
     public synchronized void save(Path file) throws IOException {
