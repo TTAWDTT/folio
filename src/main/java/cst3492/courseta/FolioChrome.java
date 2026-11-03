@@ -23,6 +23,12 @@ import javax.swing.Icon;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
+import javax.swing.JMenuItem;
+import javax.swing.event.PopupMenuEvent;
+import javax.swing.event.PopupMenuListener;
+import java.awt.AWTEvent;
+import java.util.function.Supplier;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.Scrollable;
@@ -127,6 +133,163 @@ final class FolioChrome {
             }
             super.paintComponent(graphics);
         }
+    }
+
+    static class ActivationButton<I> extends QuietButton {
+        private Supplier<I> capture;
+        private Consumer<I> activate;
+        private I pointerIntent;
+        private boolean pointerDispatch;
+
+        ActivationButton(Icon icon) {
+            super("", icon, false);
+        }
+
+        void bind(Supplier<I> capture, Consumer<I> activate) {
+            this.capture = capture;
+            this.activate = activate;
+        }
+
+        void clearActivation() {
+            pointerIntent = null;
+            pointerDispatch = false;
+            getModel().setArmed(false);
+            getModel().setPressed(false);
+        }
+
+        @Override
+        protected void processMouseEvent(MouseEvent event) {
+            if (event.getID() == MouseEvent.MOUSE_PRESSED && SwingUtilities.isLeftMouseButton(event)) {
+                pointerDispatch = true;
+                pointerIntent = isEnabled() && capture != null ? capture.get() : null;
+            }
+            try {
+                super.processMouseEvent(event);
+            } finally {
+                if (event.getID() == MouseEvent.MOUSE_RELEASED) {
+                    pointerIntent = null;
+                    pointerDispatch = false;
+                }
+            }
+        }
+
+        @Override
+        protected void fireActionPerformed(java.awt.event.ActionEvent event) {
+            I intent = pointerDispatch ? pointerIntent : capture == null ? null : capture.get();
+            if (intent != null && activate != null) {
+                activate.accept(intent);
+            }
+            super.fireActionPerformed(event);
+        }
+    }
+
+    enum PopupIntent { OPEN, CLOSE }
+
+    static final class ModePopup implements AutoCloseable {
+        private final ActivationButton<PopupIntent> trigger;
+        private final JPopupMenu popup = new JPopupMenu();
+        private final Runnable restoreInput;
+        private AWTEvent closedDuringTriggerDispatch;
+        private boolean disposed;
+
+        ModePopup(ActivationButton<PopupIntent> trigger, Runnable restoreInput) {
+            this.trigger = trigger;
+            this.restoreInput = restoreInput;
+            trigger.bind(() -> {
+                AWTEvent dispatch = EventQueue.getCurrentEvent();
+                boolean close = popup.isVisible() || closedDuringTriggerDispatch == dispatch;
+                closedDuringTriggerDispatch = null;
+                return close ? PopupIntent.CLOSE : PopupIntent.OPEN;
+            }, intent -> {
+                if (disposed) return;
+                if (intent == PopupIntent.CLOSE) {
+                    closePopup();
+                    restoreInput.run();
+                } else {
+                    popup.show(trigger, 0, -popup.getPreferredSize().height - JBUI.scale(6));
+                }
+            });
+            popup.addPopupMenuListener(new PopupMenuListener() {
+                @Override
+                public void popupMenuWillBecomeVisible(PopupMenuEvent event) {
+                    updateTrigger();
+                }
+
+                @Override
+                public void popupMenuWillBecomeInvisible(PopupMenuEvent event) {
+                    rememberTriggerDispatch();
+                    updateTrigger();
+                }
+
+                @Override
+                public void popupMenuCanceled(PopupMenuEvent event) {
+                    rememberTriggerDispatch();
+                }
+            });
+            trigger.addHierarchyListener(event -> {
+                if ((event.getChangeFlags() & java.awt.event.HierarchyEvent.SHOWING_CHANGED) != 0
+                        && !trigger.isShowing()) reset();
+            });
+        }
+
+        JPopupMenu menu() { return popup; }
+
+        void add(String label, Icon icon, Runnable action) {
+            JMenuItem item = new JMenuItem(label, icon);
+            describe(item, label);
+            item.addActionListener(event -> {
+                closePopup();
+                action.run();
+                restoreInput.run();
+            });
+            popup.add(item);
+        }
+
+        void selected(String label) {
+            for (Component component : popup.getComponents()) {
+                if (component instanceof JMenuItem item) item.setSelected(item.getText().equals(label));
+            }
+            trigger.putClientProperty("folio.mode", label);
+            updateTrigger();
+        }
+
+        private void rememberTriggerDispatch() {
+            AWTEvent event = EventQueue.getCurrentEvent();
+            if (!(event instanceof MouseEvent mouse) || !SwingUtilities.isLeftMouseButton(mouse)
+                    || !(mouse.getSource() instanceof Component source)) return;
+            java.awt.Point point = SwingUtilities.convertPoint(source, mouse.getPoint(), trigger);
+            if (trigger.contains(point)) closedDuringTriggerDispatch = event;
+        }
+
+        private void updateTrigger() {
+            SwingUtilities.invokeLater(() -> {
+                if (!disposed) trigger.setText(trigger.getClientProperty("folio.mode")
+                        + (popup.isVisible() ? " ⌃" : " ⌄"));
+            });
+        }
+
+        private void closePopup() {
+            popup.setVisible(false);
+            updateTrigger();
+        }
+
+        void reset() {
+            closePopup();
+            closedDuringTriggerDispatch = null;
+            trigger.clearActivation();
+        }
+
+        @Override
+        public void close() {
+            disposed = true;
+            reset();
+            FolioMotion.stopTree(trigger, true);
+        }
+    }
+
+    static void describe(AbstractButton button, String text) {
+        button.setToolTipText(text);
+        button.getAccessibleContext().setAccessibleName(text);
     }
 
     private static final class QuietToggle extends JToggleButton {
@@ -387,7 +550,7 @@ final class FolioChrome {
 
     static class Reveal extends JPanel {
         private final JComponent child;
-        private final FolioMotion height = new FolioMotion(this, 0, value -> {
+        final FolioMotion height = new FolioMotion(this, 0, value -> {
             revalidate();
             repaint();
         });
@@ -437,6 +600,7 @@ final class FolioChrome {
             field.addFocusListener(new FocusAdapter() {
                 @Override
                 public void focusGained(FocusEvent event) {
+                    height.settle();
                     resize(false);
                     repaint();
                 }
@@ -1204,6 +1368,12 @@ final class FolioChrome {
 
     /** Multi-line composer field. Paints a placeholder until the user types. */
     static final class PromptArea extends JBTextArea {
+        @Override
+        public void removeNotify() {
+            getCaret().setVisible(false);
+            super.removeNotify();
+        }
+
         private String placeholder;
 
         PromptArea(String placeholder) {
