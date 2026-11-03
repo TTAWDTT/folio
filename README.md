@@ -17,15 +17,17 @@ The plugin id is `cst3492.folio`, version `0.1.0`. The **Folio** tool window is 
 
 The composer supports Enter to send, Shift+Enter for a newline, and IME composition. It grows to six rows and then scrolls. A compact mode menu keeps **Ask**, **Tests**, **Commit**, **Drill**, and **Course files** reachable in a narrow sidebar. Settings remain in the header. Activity indicators run only while work is pending. The UI follows the IDE theme and zoom.
 
+Buttons keep native keyboard actions and show hover, press, and focus feedback. Reading older content suspends automatic following, including a follow update that was already queued. A new submission follows the latest turn. Short paint and height transitions stop when hidden or disposed. On macOS, movement respects the system Reduce Motion preference.
+
 ## Ask and citation behavior
 
 Ask and Drill request streaming responses. The sidebar appends actual incoming text and stops its activity indicator when the request completes, fails, or is cancelled. A provider that returns a normal JSON completion is displayed as a complete reply. Folio does not simulate a stream by revealing an already completed answer. Citation markers and source metadata are finalized after completion; provisional text is not completed conversation history.
 
-Completed replies render triple-backtick blocks as code. **Copy** beside the Folio answer label copies the full answer, including code fences. **Copy** inside a code block copies only that block's code. An unclosed fence stays visible as literal text.
+Completed replies render triple-backtick blocks as code. **Copy** beside the Folio answer label copies the full answer, including code fences. **Copy** inside a code block copies only that block's code. An unclosed fence stays visible as literal text. Answer Copy is disabled until completion. Copy controls briefly show success or a clipboard failure. Incoming text preserves an existing selection. Code formatting waits while the streamed text has focus or a selection. Release both to format the completed reply. Full-answer Copy is available immediately after completion.
 
 Retrieval is local BM25, without embeddings or a web search. Each request captures a read-only course-library snapshot, the current question, selected code, conversation context, and connection settings. Retrieval uses the current question and selection and returns at most four chunks. History is quoted context, not current citation evidence.
 
-References start collapsed. Expand the reference row to see the document, page, slide, or section, any chunk part, and an excerpt. Clicking a text file on disk opens the editor near the excerpt. PDFs, slide decks, other non-text files, and missing paths use an indexed-chunk preview.
+References start collapsed. Expand the reference row to see the document, page, slide, or section, any chunk part, and an excerpt. Activate the source title with the mouse or keyboard to open a text file on disk near its excerpt. The excerpt remains selectable and does not navigate when clicked. PDFs, slide decks, other non-text files, and missing paths use an indexed-chunk preview.
 
 The evidence label comes from `Answer.Evidence`:
 
@@ -212,7 +214,7 @@ The pre-change baseline ran 138 tests and built the plugin. Five supplied accept
 
 The deterministic tests cover shared-store commits and recovery, extraction fixtures, citation compatibility, staged-diff coverage, loopback HTTP boundaries, request identity, ordered settings, history, and existing keyboard/layout behavior. Real course-file checks preserved the 3-file, 85-page, 90-chunk denominator.
 
-No live model call was completed during this review. The school API requires the campus network, as confirmed by the user. Its address timed out on the current network. Computer use could not attach to the exact running IDEA process, so a full live walkthrough remains open for Password Safe, multiple projects, source navigation, test-root selection, and actual commit controls. PSI and headless Swing tests do not close those integration gaps. The gaps describe missing verification, not established product defects.
+No live campus-model call was completed during this review. The school API requires the campus network, as confirmed by the user. Its address timed out on the current network. A full live walkthrough remains open for Password Safe, multiple projects, source navigation, test-root selection, and actual commit controls. PSI and headless Swing tests do not close those integration gaps. The gaps describe missing verification, not established product defects.
 
 ## Historical screenshot gallery
 
