@@ -13,11 +13,12 @@ public final class FolioToolWindowFactory implements ToolWindowFactory {
 
     @Override
     public void createToolWindowContent(@NotNull Project project, @NotNull ToolWindow toolWindow) {
-        FolioPanel panel = new FolioPanel(project);
-        FolioPanels.register(project, panel);
-        panel.useNativeHeader(toolWindow);
-        Content content = ContentFactory.getInstance().createContent(panel, "", false);
-        content.setDisposer(panel);
+        FolioSession session = new FolioSession(project);
+        FolioBrowser browser = new FolioBrowser(session);
+        FolioPanels.register(project, session);
+        toolWindow.setTitleActions(java.util.List.of());
+        Content content = ContentFactory.getInstance().createContent(browser.component(), "", false);
+        content.setDisposer(browser);
         toolWindow.getContentManager().addContent(content);
         LOG.info("Folio tool window created");
     }

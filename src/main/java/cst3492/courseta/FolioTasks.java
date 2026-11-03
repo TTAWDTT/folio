@@ -254,6 +254,10 @@ final class FolioTasks implements AutoCloseable {
         return true;
     }
 
+    synchronized void forget(Accepted<?> result) {
+        if (result != null) accepted.values().removeIf(value -> value.taskId() == result.taskId());
+    }
+
     synchronized void clear(Channel channel) {
         epochs.merge(channel, 1L, Long::sum);
         accepted.remove(channel);

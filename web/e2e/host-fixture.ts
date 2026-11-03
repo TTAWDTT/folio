@@ -12,7 +12,7 @@ export const initialShell = (): Shell => ({
 });
 export const answer = (turn = 't-1', raw = '回答内容'): Card => ({
   at: { turn, number: 1 }, mode: 'ask', user: '示例问题', body: { kind: 'answer', raw, evidence: 'GENERAL', citations: [] },
-  retry: { enabled: true, reason: '' }, writeTest: { enabled: false, reason: '没有可写入的测试' }, fillCommit: { enabled: false, reason: '没有原始提交框' },
+  retry: { enabled: true, reason: '' }, writeTest: { enabled: false, reason: '没有可写入的测试' }, fillCommit: { enabled: false, reason: '没有原始提交框' }, generateTests: null,
 });
 
 class HostFixture {
@@ -49,6 +49,7 @@ class HostFixture {
         case 'mode': this.shell.mode = command.mode; break;
         case 'route': this.shell.route = command.to === 'settings' ? { kind: 'settings', edit: 'edit-1' } : { kind: command.to }; break;
         case 'cancelSettings': this.shell.route = { kind: 'chat' }; break;
+        case 'previewTest': this.shell.route = { kind: 'testPreview', at: command.at, tab: command.tab }; break;
         case 'edit': {
           const current = this.shell.drafts[command.mode];
           if (current.epoch === command.epoch && current.revision === command.base)

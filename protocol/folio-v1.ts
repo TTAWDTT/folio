@@ -15,7 +15,7 @@ export type Body =
 export type Availability = { enabled: boolean; reason: string };
 export type Card = {
   at: Attempt; mode: Mode; user: string; body: Body;
-  retry: Availability; writeTest: Availability; fillCommit: Availability;
+  retry: Availability; writeTest: Availability; fillCommit: Availability; generateTests: Availability | null;
 };
 export type Route =
   | { kind: 'chat' }
@@ -48,7 +48,7 @@ export type Command =
   | { kind: 'retry'; at: Attempt }
   | { kind: 'copy'; at: Attempt; part: 'user' | 'answer' | 'code'; index: number }
   | { kind: 'citation'; at: Attempt; index: number }
-  | { kind: 'generateTests'; at: Attempt; index: number }
+  | { kind: 'generateTests'; at: Attempt }
   | { kind: 'previewTest'; at: Attempt; tab: 'code' | 'raw' }
   | { kind: 'writeTest'; at: Attempt }
   | { kind: 'deliverCommit'; at: Attempt; index: number; delivery: 'copy' | 'fill' }

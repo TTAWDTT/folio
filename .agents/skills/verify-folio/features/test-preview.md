@@ -14,14 +14,14 @@ Generated tests appear in a separate preview. Only an explicit write creates the
 - Choose **Generate JUnit From Scenario** in the editor context menu for a Java class or method.
 - Choose **生成测试** in the composer after attaching Java context.
 - Choose **生成测试** under an eligible completed code answer.
-- Choose **查看完整测试预览**, inspect **测试代码** and **模型原始回复**, then choose **写入文件**.
+- Choose **查看测试预览**, inspect **Java 预览** and **原始回复**, then choose **写入文件**.
 
 ## Driving it with agent-desktop
 
 Preconditions: the doctor passes. Use a disposable Java project with an identifiable source, a known test directory, and an approved real provider. Record the initial target-directory inventory.
 
 - Reach each available entry point using exposed semantic controls. Cancel the scenario dialog and require no generation. Empty acceptance must retain a missing-scenario explanation. If opening an editor action would take focus, record the entry point as unverified.
-- After generation, find the preview action with `agent-desktop find --root "$FOLIO_ROOT_REF" --role button --name "查看完整测试预览" --exact --limit 2`. Failure means a nonzero exit, `ok: false`, or a match count other than one. Click its fresh ref. Require the source, target path, code, raw reply, and validation result.
+- After generation, find **查看测试预览** on the identified JCEF page. A missing or ambiguous button is failure. Click it and require the source, target path, code, raw reply, and validation result.
 - Before choosing **写入文件**, require no new test file on disk. Return with **返回对话** and require the original conversation and draft. Reopen the current preview.
 - For a valid bound preview, choose **写入文件** only in the disposable project. Require the exact displayed file to exist with the preview contents. Require no second model request. Inspect the file through the IDE and run that disposable project's test command before claiming the generated test executes.
 - Repeat with an existing target, changed captured source, superseded preview, and read-only destination. Require refusal with the preview retained and no overwrite. Invalid or unbound previews must remain inspectable without a write.

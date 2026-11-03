@@ -13,7 +13,7 @@ The folder opens the shared course library. Imports preserve usable old data on 
 
 - Choose the header folder named **课件**. Choose **返回对话** to return.
 - Choose **导入课件** in the empty state or populated file toolbar.
-- Choose a row's **更多文件操作** for **重新索引** or **移除**.
+- Choose a row's **重新索引** or **移除** icon. Its accessible name includes the source title.
 - Expand **展开课件引用** below a retrieved answer, then choose the source title.
 
 ## Driving it with agent-desktop
@@ -23,7 +23,7 @@ Preconditions: the doctor passes. Navigation uses the existing library. Mutation
 - Find the folder with `agent-desktop find --root "$FOLIO_ROOT_REF" --role button --name "课件" --exact --limit 2`. Failure means a nonzero exit, `ok: false`, or a match count other than one. Click its fresh ref. Require the shared-library notice and separate course page. Choose **返回对话** and require the original conversation state.
 - In the disposable profile, start with no sources. Require the import prompt. Import one text fixture, then several fixtures including a long filename. Require source names, scope counts, and indexed rows without clipped controls. Reopen the page and confirm the same library entries.
 - Cancel the file chooser. Require no library change. Import a missing or unreadable fixture through the normal selection path when supported. Require a nearby failure and the old library. Do not bypass the chooser with an internal import method.
-- Reindex one row through **更多文件操作**. Require one updated source rather than duplicate rows. Cancel removal and require the source. Confirm removal of a disposable source and require only that library entry to disappear. Require the original course file to remain on disk.
+- Reindex one row through its **重新索引** icon. Require one updated source rather than duplicate rows. Cancel removal and require the source. Confirm removal of a disposable source and require only that library entry to disappear. Require the original course file to remain on disk.
 - Ask a local retrieval question without a key in the disposable profile. Require the missing-model explanation and retrieved references. Expand the references, select an excerpt, and activate only its source title. Text sources open at the excerpt. Non-text or missing sources use the indexed preview. Require the answer and reading anchor to remain.
 
 ## Gotchas

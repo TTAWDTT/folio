@@ -14,7 +14,7 @@ import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiMethod;
 import com.intellij.psi.util.PsiTreeUtil;
-import cst3492.courseta.FolioPanel;
+import cst3492.courseta.FolioSession;
 import cst3492.courseta.CapturedCode;
 import cst3492.courseta.FolioPanels;
 import org.jetbrains.annotations.NotNull;
@@ -37,7 +37,7 @@ public final class GenerateTestAction extends AnAction {
         }
         String source = sourceOf(event);
         CapturedCode captured = captureCode(event, source);
-        FolioPanel existing = FolioPanels.get(project);
+        FolioSession existing = FolioPanels.get(project);
         ScenarioDialog dialog = new ScenarioDialog(project, prefill(existing == null ? null : existing.scenarioText()));
         boolean accepted = dialog.showAndGet();
         String scenario = scenarioAfterPrompt(accepted, accepted ? dialog.scenarioText() : null);
@@ -49,7 +49,7 @@ public final class GenerateTestAction extends AnAction {
             return;
         }
         window.activate(() -> {
-            FolioPanel panel = FolioPanels.get(project);
+            FolioSession panel = FolioPanels.get(project);
             if (panel == null) {
                 return;
             }

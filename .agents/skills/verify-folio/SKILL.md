@@ -1,13 +1,13 @@
 ---
 name: verify-folio
-description: Verify the Folio IntelliJ Swing sidebar after layout, mode-menu, settings, course-file, test-preview, or commit-candidate changes. Use for native sandbox walkthroughs and evidence capture without moving the system pointer or taking focus.
+description: Verify the Folio HeroUI sidebar in IntelliJ JCEF after layout, menu, settings, course-file, test-preview, or commit-candidate changes. Use the existing browser tests and native sandbox without moving the system pointer or taking focus.
 ---
 
 # Verify Folio in IntelliJ
 
 Use this skill to check the real **Folio** tool window. Read the [feature map](features/README.md), then select the affected entries.
 
-This skill is a draft until one mapped feature completes a native launch-or-reuse, doctor, drive, evidence, and cleanup run. Source inspection and headless Swing tests do not complete that run. Keep the native proof in a separate run record.
+This skill is a draft until one mapped feature completes a native launch-or-reuse, doctor, drive, evidence, and cleanup run. Independent Chromium tests do not prove embedded JCEF behavior. Keep native proof in a separate run record.
 
 ## Launch
 
@@ -54,7 +54,13 @@ Record the installed plugin's build identity alongside the source revision and c
 
 ## Drive
 
-The system pointer and focus belong to the user. Never use `--headed`, `press`, `hover`, `focus`, `focus-window`, physical typing, mouse commands, coordinates, or an API that activates the IDE. Never recover a failed semantic action with physical input.
+The system pointer and focus belong to the user. Never use agent-desktop's `--headed`, `press`, `hover`, `focus`, `focus-window`, physical typing, mouse commands, coordinates, or an API that activates the IDE. Never recover a failed semantic action with physical input.
+
+The current page is React and HeroUI inside JCEF. Use the existing Playwright dependency to connect to JCEF's DevTools port 9222 when native accessibility cannot expose the DOM. Select the single page matching `https://folio-<UUID>.invalid/index.html` and the installed bundle's hashed asset names. Multiple matches require project identification before driving. Do not create a replacement host, call `bringToFront`, or close the attached browser. DOM clicks, typing, and pointer events stay inside that renderer and do not move the system pointer.
+
+Drive the same visible feature journeys below through DOM roles and accessible names. Use the production `folioHost` connection. Check the resulting Java-backed state by switching away and back or reloading the document. Reload must preserve the session and draft. Capture the DOM, browser screenshot, and native window screenshot. A standalone Vite page or injected test host cannot close the native gate.
+
+For a second menu click, click the original trigger's center in the browser. The default modal underlay handles that gesture. A locator waiting for the covered button to become actionable does not deliver a click. For hover, move through empty space before entering the icon. Native OS IME and editor or VCS effects still need their own proof.
 
 1. Drill into the Folio region with `snapshot --root` when the skeleton cuts it off. Set `FOLIO_ROOT_REF` to its fresh addressable ancestor.
 2. Find a target by its exact accessible name within that region. Set `FOLIO_TARGET_REF` to the single returned qualified ref. When several controls share a name, narrow to the freshly identified header or input region and repeat the search. A remaining ambiguous match is an evidence gap.
@@ -78,7 +84,7 @@ agent-desktop set-value "$FOLIO_TARGET_REF" "folio-verification-unsaved"
 
 If Swing exposes no semantic action, retain the refusal and report the path as unverified. The 2026-11-03 installed sandbox returned `ACTION_NOT_SUPPORTED` with `window_without_accessibility_element` after restart. Screenshots worked, but no native journey completed. Do not treat a screenshot-only run as this skill's validation.
 
-Native pointer toggle order, outside clicks, hover timing, keyboard shortcuts, IME composition, and keyboard focus require separate proof. Under the current input restriction, leave them unverified. Synthetic Swing event tests remain supporting evidence.
+Without a native DOM connection, pointer toggle order, outside clicks, hover, keyboard shortcuts, IME composition, and keyboard focus remain unverified. The existing `web` browser suite supplies supporting evidence. It does not prove native OS IME behavior.
 
 ## Evidence
 

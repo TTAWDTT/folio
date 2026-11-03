@@ -26,7 +26,7 @@ The approved main layout and behavior are retained in [the design contract](docs
 
 Ask requests streaming responses. The sidebar appends actual incoming text and stops its activity indicator when the request completes, fails, or is cancelled. A provider that returns a normal JSON completion is displayed as a complete reply. Folio does not simulate a stream by revealing an already completed answer. Citation markers and source metadata are finalized after completion; provisional text is not completed conversation history.
 
-Completed replies render triple-backtick blocks as code. The answer-bottom copy icon copies the full answer, including code fences. The code-block copy icon copies only that block's code. An unclosed fence stays visible as literal text. Answer Copy is disabled until completion. Copy controls briefly show a checkmark on success; their tooltip reports success or clipboard failure. Incoming text preserves an existing selection. Code formatting waits while the streamed text has focus or a selection. Release both to format the completed reply. Full-answer Copy is available immediately after completion.
+Completed replies render triple-backtick blocks as code. The answer-bottom copy icon copies the full answer, including code fences. The code-block copy icon copies only that block's code. An unclosed fence stays visible as literal text. Answer Copy is disabled until completion. The sidebar status reports copy success or failure. Incoming text preserves an existing selection. Code formatting waits while the streamed text has focus or a selection. Release both to format the completed reply. Full-answer Copy is available immediately after completion.
 
 Retrieval is local BM25, without embeddings or a web search. Each request captures a read-only course-library snapshot, the current question, selected code, conversation context, and connection settings. Retrieval uses the current question and selection and returns at most four chunks. History is quoted context, not current citation evidence.
 
@@ -156,7 +156,18 @@ Continuation overhead can make a near-limit diff exceed the batch count. Folio r
 
 ## Build and verification
 
-The build requires JDK 25 and resolves IntelliJ IDEA 2026.2.4. The plugin targets platform builds `262` through `262.*` and depends on the Java plugin. A compatible chat endpoint is needed only for model-backed actions.
+The build requires JDK 25, Node.js 24.21.0, and npm. It resolves IntelliJ IDEA 2026.2.4 and targets platform builds `262` through `262.*`. The plugin declares the bundled Java and Web Browser JCEF plugins. A compatible chat endpoint is needed only for model-backed actions.
+
+The sidebar uses React 19 and HeroUI 3. Its JavaScript and styles are bundled into the plugin. The installed UI needs no CDN or frontend development server. JCEF must be available in the running JetBrains Runtime. An unsupported runtime shows an explanation instead of a partially working sidebar.
+
+Install the browser used by the frontend acceptance checks once before verification:
+
+```sh
+npm --prefix web ci
+npm --prefix web exec -- playwright install chromium
+```
+
+A nonzero exit means dependency or browser installation failed. On Linux, use `playwright install --with-deps chromium` to install its system dependencies as well.
 
 Run these commands from the repository root with JDK 25 in `JAVA_HOME`:
 
@@ -164,7 +175,7 @@ Run these commands from the repository root with JDK 25 in `JAVA_HOME`:
 ./scripts/verify.sh
 ```
 
-A nonzero exit means verification failed. The script runs `cleanTest test buildPlugin`, then rejects missing or empty required test suites, failures, errors, skipped tests, a corrupt ZIP, or missing plugin classes. It writes the measured count and plugin checksum to `build/verification/summary.json`. That generated summary is the result for the current checkout. A previous count is not proof of a new run.
+A nonzero exit means verification failed. The script installs locked frontend dependencies, type-checks the frontend, and runs its unit and browser tests. It then runs `cleanTest test buildPlugin`. Missing or empty required suites, failures, errors, skips, a corrupt ZIP, or missing plugin classes fail verification. It also compares every packaged frontend asset with `web/dist`, checks the JCEF dependency, and rejects the replaced Swing frontend classes. `build/verification/summary.json` records Java and frontend test counts separately, the bundled asset hashes, and the plugin checksum. A previous summary is not proof of a new run.
 
 ```sh
 ./gradlew runIde
@@ -186,24 +197,45 @@ A nonzero exit means tests or packaging failed. The mirror script does not retar
 
 ## Architecture and ownership
 
-`CourseLibrary` and `ProviderAccess` are application services. The first owns shared materials and committed revisions. The second owns connection settings and ordered Password Safe access. Each `FolioPanel` owns its task manager, bounded conversation, current results, and Swing presentation for one project/content lifetime.
+`CourseLibrary` and `ProviderAccess` are application services. The first owns shared materials and committed revisions. The second owns connection settings and ordered Password Safe access. Each `FolioSession` owns one project's task manager, bounded conversation, drafts, requests, and accepted results on the EDT.
 
-`FolioToolWindowFactory` creates the panel, registers it in project user data through `FolioPanels`, and binds disposal to the tool-window content. Editor and VCS actions activate the tool window and find that project's panel. `FolioChrome` supplies the narrow layout, answer rendering, reference disclosure, composer, and theme colors.
+`FolioToolWindowFactory` registers the session through `FolioPanels` and mounts `FolioBrowser`. Editor and VCS actions capture their source or commit target before entering the session. The JCEF adapter serves packaged resources, checks the current document and command sequence, forwards admitted commands to the EDT, and publishes allowlisted views. The React frontend renders those views with HeroUI.
 
-`FolioState` separates the current page from the next input mode. Four retained documents keep each mode's text and caret. Chat, course files, settings, and an attempt-qualified test preview are separate routes. The native tool-window title bar owns the header actions.
+The session separates the current route from the next input mode. Four revisioned drafts retain each mode's text and caret. Native source replacement advances a separate draft epoch. The browser retains unacknowledged input and exposes a conflict instead of silently attaching it to different source context. Chat, course files, settings, source preview, and an attempt-qualified test preview are separate routes. The IDE owns the Folio title. One web utility row owns the new-chat, course-file, and settings icons.
 
-The EDT captures immutable inputs. Background tasks use those values and read-only `CourseSearch` snapshots. `FolioTasks` tracks request IDs and typed success, failure, and cancellation outcomes. Test and Commit accept only the latest request. Delivery and later Write, Copy, or Fill require a live owner and current accepted result. Streaming updates pass through the same task identity and lifetime checks before reaching the EDT. Final answers determine citation metadata and completed history. Disposal cancels tasks, stops answer motion, and closes subscriptions. The composer derives Send or Stop from the foreground generation attempt. File indexing and source loading use independent task channels.
+The browser reloads from the existing Java session. It does not replay commands or persist conversation and credentials in browser storage. Full hydration sends retained cards once. Streaming sends attempt-qualified text offsets, followed by the authoritative completed card. [The v1 contract](protocol/README.md) defines message shapes, admission, reload, and protected effects.
+
+The EDT captures immutable inputs. Background tasks use those values and read-only `CourseSearch` snapshots. `FolioTasks` tracks request IDs and typed success, failure, and cancellation outcomes. Test and Commit accept only the latest request. Delivery and later Write, Copy, or Fill require a live owner, current accepted result, and current document lease. The browser supplies an attempt and operation, never arbitrary output code, target paths, or commit messages. Final answers determine citation metadata and completed history. Disposal cancels tasks and releases the browser, message handlers, and subscriptions. The composer captures Send or Stop when the gesture starts. File indexing and source loading use independent task channels.
 
 | Package | Main responsibility |
 | --- | --- |
-| `cst3492.courseta` | Tool window, project task and conversation state, application provider settings, Password Safe adapter, guarded commit target, and source preview. |
+| `web` | React and HeroUI presentation, pending input, settings form, selection, reading position, and browser acceptance. |
+| `protocol` | Explicit versioned message types and shared valid and invalid codec fixtures. |
+| `cst3492.courseta` | Java session, JCEF adapter, strict codec, tool-window lifetime, task acceptance, application provider settings, Password Safe adapter, and guarded commit target. |
 | `cst3492.courseta.ask` | `Asker`, typed `Answer`, citation mapping, injectable `ChatClient`, and bounded `HttpChatClient`. |
 | `cst3492.courseta.index` | `CourseLibrary`, read-only `CourseSearch`, `CourseIndex`, parsing, chunking, tokens, and page/slide/section scopes. |
 | `cst3492.courseta.junitgen` | Editor scenario action, `TestDraft`, PSI-backed `GeneratedTest`, and explicit IDE write. |
 | `cst3492.courseta.commit` | Git snapshot capture, full-diff batching, candidates, and commit-control adapter. |
 | `cst3492.courseta.drill` | Selected-code questions through `Asker`. |
 
-![Folio components](docs/images/components.svg)
+```mermaid
+flowchart TB
+    ui[React + HeroUI in JCEF renderer] <-->|Typed commands and views| browser[FolioBrowser + codec]
+    browser -->|EDT admission and document lease| session[FolioSession]
+    actions[Editor and VCS actions] -->|Captured source or original target| session
+    session --> tasks[FolioTasks]
+    session --> history[Conversation]
+    session --> library[CourseLibrary]
+    session --> provider[ProviderAccess]
+    tasks --> generators[Asker / Drill / TestDraft / CommitDraft]
+    generators --> http[HttpChatClient]
+    generators --> git[GitDiffs]
+    session -->|Explicit guarded effects| delivery[GeneratedTest / CommitTarget / clipboard]
+    provider --> safe[Password Safe + TaSettings]
+    library --> store[Parser / BM25 / atomic JSON]
+```
+
+The earlier Swing ownership map is retained as a [historical diagram](docs/images/components.svg).
 
 ### Historical statechart
 
@@ -219,7 +251,7 @@ The pre-change baseline ran 138 tests and built the plugin. Five supplied accept
 
 The deterministic tests cover shared-store commits and recovery, extraction fixtures, citation compatibility, staged-diff coverage, loopback HTTP boundaries, request identity, ordered settings, history, and existing keyboard/layout behavior. Real course-file checks preserved the 3-file, 85-page, 90-chunk denominator.
 
-No live campus-model call was completed during this review. The school API requires the campus network, as confirmed by the user. Its address timed out on the current network. The rebuilt sidebar was installed and restarted in the local sandbox, with every packaged file matched and a fresh tool-window screenshot. Native action checks remain open because the restarted Java window exposes no usable accessibility element to the semantic driver. Title-action visibility, hover, keyboard and IME behavior are not established by that screenshot. A full live walkthrough also remains open for Password Safe, multiple projects, source navigation, test-root selection, and actual commit controls. PSI and headless Swing tests do not close those integration gaps. The gaps describe missing verification, not established product defects.
+No live campus-model call was completed during this review. The school API requires the campus network, as confirmed by the user. Its address timed out on the current network. Earlier native installation and screenshot evidence covered the Swing version. The HeroUI version requires its own installed-package and JCEF check. Independent Chromium tests do not close that integration gap. A full live walkthrough also remains open for native OS IME, Password Safe, multiple projects, source navigation, test-root selection, and actual commit controls. These are verification gaps, not established product defects.
 
 The project-local [verify-folio workflow](.agents/skills/verify-folio/SKILL.md) records the native checks and their prerequisites. It remains a draft until one complete native feature journey succeeds.
 
@@ -254,7 +286,9 @@ Settings in Islands Dark:
 ## Project layout
 
 ```text
-build.gradle.kts          Java 25, IntelliJ 2026.2.4, Tika, POI, Gson
+build.gradle.kts          Java 25, IntelliJ 2026.2.4, JCEF, frontend packaging
+web/                      React, HeroUI, Vite, frontend tests and locked dependencies
+protocol/                 Browser contract and conformance fixtures
 src/main/java/            Plugin implementation
 src/main/resources/       Plugin descriptor and icons
 src/test/java/            JUnit and IntelliJ fixture tests
