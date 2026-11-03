@@ -100,11 +100,19 @@ class InteractionAcceptanceTest {
             var pane = (JScrollPane) find(panel, component -> component instanceof JScrollPane scroll
                     && scroll.getViewport().getView() instanceof FolioChrome.Column);
             assertNotNull(pane);
+            var column = (FolioChrome.Column) pane.getViewport().getView();
+            column.addRow(new FolioChrome.WrapText("A long answer gives the reader a real scroll range.\n".repeat(200)));
+            panel.setSize(360, 760);
+            for (int pass = 0; pass < 3; pass++) {
+                layout(panel);
+            }
             var bar = pane.getVerticalScrollBar().getModel();
             barRef.set(bar);
-            bar.setRangeProperties(900, 100, 0, 1000, false);
+            assertTrue(bar.getMaximum() - bar.getExtent() > 120);
+            bar.setValue(bar.getMaximum() - bar.getExtent());
             panel.scrollChat(false);
             bar.setValue(120);
+            assertEquals(120, bar.getValue());
         });
         SwingUtilities.invokeAndWait(() -> {
             try {
@@ -124,6 +132,15 @@ class InteractionAcceptanceTest {
         assertNotNull(references);
         references.doClick();
         return card;
+    }
+
+    private static void layout(Container root) {
+        root.doLayout();
+        for (Component child : root.getComponents()) {
+            if (child instanceof Container nested) {
+                layout(nested);
+            }
+        }
     }
 
     private static Component find(Component root, Predicate<Component> match) {
