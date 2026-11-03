@@ -19,10 +19,12 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
+from PIL import Image as PILImage
 from reportlab.platypus import (
     BaseDocTemplate,
     CondPageBreak,
     Frame,
+    Image,
     KeepTogether,
     ListFlowable,
     ListItem,
@@ -105,6 +107,16 @@ def bullets(items: list[str]) -> ListFlowable:
         spaceBefore=1,
         spaceAfter=6,
     )
+
+
+def figure(name: str, caption: str, page_width: float, max_height: float = 195 * mm):
+    path = ROOT / "figures" / name
+    with PILImage.open(path) as im:
+        pixel_w, pixel_h = im.size
+    scale = min(page_width / pixel_w, max_height / pixel_h)
+    img = Image(str(path), width=pixel_w * scale, height=pixel_h * scale)
+    img.hAlign = "CENTER"
+    return KeepTogether([img, P(caption, "caption")])
 
 
 def table(headers: list[str], rows: list[list[str]], widths: list[float]) -> Table:
@@ -197,7 +209,7 @@ def build_report(path: Path) -> None:
         [[sid, zh(name), roman] for sid, name, roman in TEAM],
         [width * 0.28, width * 0.32, width * 0.40],
     ))
-    story.append(P("The brief asks for one English report and one English slide deck, in this order: members, feature list, user manual, architecture including chunking and indexing, then any further notes. The accompanying ZIP keeps the source tree in one folder and these two PDFs in another. Canvas asks for that ZIP before 11:00pm on 3 November 2026. The brief does not name a time zone. The team is working in Asia/Shanghai.", "caption"))
+    story.append(P("The brief asks for one English report and one English slide deck, in this order: members, feature list, user manual, architecture including chunking and indexing, then any further notes. Section 5 is that further note: how the team and Cursor made this version. The accompanying ZIP keeps the source tree in one folder and these two PDFs in another. Canvas asks for that ZIP before 11:00pm on 3 November 2026. The brief does not name a time zone. The team is working in Asia/Shanghai.", "caption"))
 
     story.append(P("2. Feature list"))
     story.append(P("The list below is what this revision does, matched to the brief. Labels in Chinese are the labels in the tool window."))
@@ -333,8 +345,59 @@ def build_report(path: Path) -> None:
     story.append(P("A test preview is parsed with IntelliJ PSI. The check looks for Java syntax and common JUnit annotations. It does not compile, discover, or run the test. The write uses the captured source and the captured directory, and it refuses a closed project, a read-only directory, a package mismatch, or an existing file name."))
     story.append(P("A commit draft captures every configured Git root, including renames, deletions, and the full staged patch. Large diffs are sent in ordered batches of at most 12,000 Java characters, then one synthesis call. Nothing is silently trimmed. Copy and fill recheck the staging fingerprint before they touch the clipboard or the commit box."))
 
-    story.append(P("5. Other notes"))
-    story.append(P("5.1 What this revision was run against", "h2"))
+    story.append(P("4.6 Drawings", "h2"))
+    story.append(P("Two drawings were already in the repository. Three more were checked with TLC and drawn with the statechart tool. TLC reported no broken rule on those three models. A citation exists only after a retrieved chunk. A test file is a copy of a preview that parsed as Java. Copying or filling a commit message requires the staging that was captured, and no step creates a commit."))
+    story.append(figure(
+        "ownership.png",
+        "Figure 1. Ownership and boundaries, from docs/images/components.svg. Project tasks authorize writes. The course library and the key are shared. Workers do not read Swing fields.",
+        width,
+    ))
+    story.append(figure(
+        "state-window.png",
+        "Figure 2. The Folio tool window, from docs/statechart. One activity at a time. Ask, a test preview, and a commit draft each require a saved or typed key. Write is reachable only from a preview that parsed as a test.",
+        width,
+        220 * mm,
+    ))
+    story.append(figure(
+        "state-retrieval.png",
+        "Figure 3. Course retrieval. Fourteen states. A miss finishes as general knowledge. A hit can finish as an answer with a page. Stopping does not invent a page.",
+        width,
+        220 * mm,
+    ))
+    story.append(figure(
+        "state-test.png",
+        "Figure 4. Test preview and write. Six states. Cancel returns to the selection and writes nothing. The file appears only after you click Write on a Java preview.",
+        width,
+    ))
+    story.append(figure(
+        "state-commit.png",
+        "Figure 5. Commit candidates. Nine states. Copy and fill run only while the captured staging is unchanged. After the index changes, both are refused. The model contains no commit.",
+        width,
+        220 * mm,
+    ))
+
+    story.append(P("5. How this version was made"))
+    story.append(P("The plugin was made as a conversation with Cursor cloud agents. The team read each result on a phone and answered there. The agent did not decide the points that belonged to the team."))
+    story.append(figure(
+        "process.png",
+        "Figure 6. The eight steps, from the brief to the phone.",
+        width,
+        90 * mm,
+    ))
+    story.append(bullets([
+        "<b>Restate.</b> The project brief was given to Cursor, with the instruction to restate it in its own words. The team read that restatement before any design was treated as settled.",
+        "<b>Divide.</b> The restatement was turned into project points and modules. Where a choice needed a person, Cursor asked and waited.",
+        "<b>Draw.</b> Cursor used an architecture pass for the ownership of the library, the key, and the writes, and used statecharts for the tool window. The retrieval, test-write, and commit charts in section 4.6 were drawn the same way and checked with TLC.",
+        "<b>Revise.</b> The team reviewed the drawings and made small changes before implementation continued.",
+        "<b>Prove.</b> Cursor wrote a verify-skill for this plugin. It drives the Folio window inside IntelliJ, not a page opened in a separate browser.",
+        "<b>Build.</b> The code followed the architecture. The skill was then run on the sandbox. Retrieval, citation, and the opened excerpt worked on the nine lecture PDFs.",
+        "<b>Shape.</b> The interface was changed from the team’s notes: readable type, a thinking block kept apart from the answer, notices that leave, and a draft that stays with its mode. After each change, Cursor clicked the window and returned screenshots.",
+        "<b>Reply.</b> Every one of those steps ran on a Cursor cloud agent. The team did not need the IDE in front of them to accept or reject a result.",
+    ]))
+    story.append(P("The choices that stayed with the team were these. Retrieval is a local word index, not an embedding service, so a citation can still appear when the network is down. The third action is a course drill, not a rewrite of the student’s code and not a second answer. A test is previewed, then written only by an explicit click. A commit message is shown, and Folio does not run git commit. The model address stays in settings. This demonstration uses DeepSeek."))
+
+    story.append(P("6. Other notes"))
+    story.append(P("6.1 What this revision was run against", "h2"))
     story.append(P("On 3 November 2026 the sandbox IDE loaded revision 16ac42b and indexed nine lecture PDFs. The tool window reported these page counts:"))
     story.append(table(
         ["File", "Pages shown"],
@@ -357,7 +420,7 @@ def build_report(path: Path) -> None:
     story.append(P("A later Ask about Java generics showed a separate thinking block and the phase " + zh("正在思考") + " before answer text. Stopping that turn left " + zh("已停止生成") + ". Drafts typed in " + zh("问答") + ", " + zh("生成测试") + ", and " + zh("提交信息") + " were still there after switching away and back. Settings showed the DeepSeek address and deepseek-flash, an empty key field, and the saved-key line. Cancel left the conversation in place. New chat asked, and cancel kept the history."))
     story.append(P("That live pass did not write a test file and did not fill a commit box. The demonstration project used for retrieval was not a Git repository, so commit generation had nothing staged to describe. Both actions are in this revision and follow the rules in section 3."))
 
-    story.append(P("5.2 Limits worth saying in the room", "h2"))
+    story.append(P("6.2 Limits worth saying in the room", "h2"))
     story.append(bullets([
         "BM25 can miss a paraphrase that shares no terms with the slide. It can also rank a chunk that shares terms and does not answer the question. The citation shows where the terms matched. It is not a proof that the sentence is right.",
         "The thinking block is visible while a reply streams. The finished card and the stopped card do not keep it.",
@@ -365,9 +428,9 @@ def build_report(path: Path) -> None:
         "The JUnit check is syntactic. Run the project’s test command before treating the file as a passing test.",
         "Commit generation does not promise that three candidates come back. It asks for three. The provider decides how many it returns.",
     ]))
-    story.append(P("5.3 Build", "h2"))
+    story.append(P("6.3 Build", "h2"))
     story.append(P("The plugin is built with the IntelliJ Platform Gradle Plugin 2.19.0, JDK 25, and IntelliJ IDEA 2026.2.4. sinceBuild is 262. Tika is 4.2.0. Run ./gradlew runIde from the source tree to open the sandbox. The plugin id is cst3492.folio and the version is 0.1.0."))
-    story.append(P("5.4 Twenty minutes", "h2"))
+    story.append(P("6.4 Twenty minutes", "h2"))
     story.append(P("The talk has four parts: the name and the team, a short introduction, how the plugin was made, and the demonstration. The making section is the conversation with Cursor: restate the brief, split the work, draw the architecture, write a verification skill, test the backend, then change the interface from our notes. The demonstration uses the live tool window. Test writing and commit fill need a Java source and a staged Git repository. Show them if that project is open."))
 
     doc.build(story)
