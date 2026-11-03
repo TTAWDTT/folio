@@ -23,5 +23,5 @@ const paths = {
 export type IconName = keyof typeof paths;
 export const modeIcons: Record<Mode, IconName> = { ask: 'ask', drill: 'drill', tests: 'tests', commit: 'commit' };
 export function Icon({ name }: { name: IconName }) {
-  return <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"><path d={paths[name]} /></svg>;
+  return <svg aria-hidden="true" width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round"><path d={paths[name]} /></svg>;
 }

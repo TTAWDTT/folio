@@ -3,7 +3,7 @@
 
 :root {
   --ide-font: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --ide-font-size: 13px;
+  --ide-font-size: 15px;
   --folio-bg: #fafafa;
   --folio-fg: #292a2f;
   --folio-muted: #70737c;
@@ -44,8 +44,7 @@ svg { flex: 0 0 auto; }
 .utility-row { display: flex; flex: 0 0 28px; height: 28px; align-items: center; gap: 2px; padding: 0 6px; border-bottom: 1px solid color-mix(in srgb, var(--folio-border) 42%, transparent); }
 .utility-spacer { flex: 1; min-width: 0; }
 .route-title { font-size: .92rem; font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.icon-button { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; min-width: 26px; min-height: 26px; padding: 5px; border: 0; border-radius: 5px; color: var(--folio-muted); background: transparent; box-shadow: none; flex: 0 0 auto; gap: 0; transition: background-color 110ms ease-out, color 110ms ease-out; }
-.utility-row .icon-button { width: 24px; height: 24px; min-width: 24px; min-height: 24px; }
+.icon-button { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; min-width: 28px; min-height: 28px; padding: 4px; border: 0; border-radius: 5px; color: var(--folio-muted); background: transparent; box-shadow: none; flex: 0 0 auto; gap: 0; transition: background-color 110ms ease-out, color 110ms ease-out; }
 .icon-button:hover, .icon-button[data-hovered] { color: var(--folio-fg); background: var(--folio-hover); }
 .icon-button[aria-disabled="true"] { pointer-events: auto; color: var(--folio-muted); opacity: .45; }
 .help-tooltip { max-width: min(260px, calc(100vw - 16px)); padding: 4px 7px; border: 1px solid var(--folio-border); border-radius: 5px; background: var(--folio-soft); color: var(--folio-fg); font-size: .9rem; line-height: 1.5; box-shadow: 0 3px 12px #0002; animation: none !important; }
@@ -87,7 +86,7 @@ svg { flex: 0 0 auto; }
 .details > h3 { margin: 0; }
 .details-trigger { display: inline-flex; justify-content: flex-start; align-items: center; gap: 6px; min-height: 26px; width: auto; padding: 2px 8px; border: 0; border-radius: 13px; background: var(--folio-soft); color: var(--folio-fg); font-weight: 400; font-size: .9rem; }
 .details-trigger:hover { background: var(--folio-hover); }
-.details-trigger svg { width: 12px; height: 12px; }
+.details-trigger svg { width: 14px; height: 14px; }
 .details-body { padding: 10px 0 1px; }
 .citations { list-style: none; padding: 0; margin: 0; }
 .citations li { margin: 0 0 12px; border-left: 2px solid var(--folio-border); padding-left: 9px; }
@@ -109,8 +108,8 @@ svg { flex: 0 0 auto; }
 .composer-textarea::placeholder { color: var(--folio-muted); opacity: 1; }
 .composer-controls { display: flex; justify-content: space-between; align-items: center; min-height: 28px; padding: 0 1px; gap: 8px; }
 .mode-trigger { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 3px 7px; border-radius: 6px; background: transparent; color: var(--folio-fg); border: none; outline-offset: 1px; font-size: .92rem; line-height: 20px; white-space: nowrap; }
-.mode-trigger > svg:first-child { width: 14px; height: 14px; }
-.mode-trigger > svg:last-child { width: 12px; height: 12px; color: var(--folio-muted); }
+.mode-trigger > svg:first-child { width: 18px; height: 18px; }
+.mode-trigger > svg:last-child { width: 14px; height: 14px; color: var(--folio-muted); }
 .mode-trigger:hover, .mode-trigger[data-pressed] { background: var(--folio-hover); }
 .send-button { display: inline-flex; justify-content: center; align-items: center; width: 28px; height: 28px; min-width: 28px; min-height: 28px; padding: 6px; border: 0; border-radius: 50%; background: var(--folio-accent); color: var(--folio-on-accent); box-shadow: none; }
 .send-button:hover { filter: brightness(1.1); }
@@ -123,7 +122,7 @@ svg { flex: 0 0 auto; }
 .mode-item .menu-item__indicator { position: static; inset: auto; transform: none; margin-inline-start: auto; flex: 0 0 15px; }
 .mode-item[data-selected] { background: color-mix(in srgb, var(--folio-accent) 18%, transparent); }
 .mode-item[data-hovered], .mode-item[data-focused], .mode-item[data-focus-visible] { background: var(--folio-hover); }
-.mode-item svg { width: 15px; height: 15px; }
+.mode-item svg { width: 18px; height: 18px; }
 .context-chip { display: flex; align-items: center; gap: 5px; margin: 2px 4px 0; color: var(--folio-muted); font-size: .85rem; }
 .context-chip > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
 .context-chip .icon-button { width: 22px; height: 22px; min-width: 22px; min-height: 22px; }

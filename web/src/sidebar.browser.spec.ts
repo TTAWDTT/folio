@@ -153,7 +153,7 @@ test('credential removal remains an explicit save and cancellation clears the lo
 test('host font scale and reduced motion apply to the actual DOM', async ({ page, host }) => {
   host.shell.theme = { dark: false, reducedMotion: true, font: 'monospace', fontPx: 15, scale: 1.2 }; await host.open();
   const style = await page.getByRole('textbox', { name: '消息', exact: true }).evaluate(element => ({ size: getComputedStyle(element).fontSize, family: getComputedStyle(element).fontFamily, transition: getComputedStyle(element).transitionDuration, reduced: document.documentElement.dataset.reducedMotion }));
-  expect(style.size).toBe('18px'); expect(style.family).toBe('monospace'); expect(style.transition).toBe('0s'); expect(style.reduced).toBe('true');
+  expect(style.size).toBe('20.4px'); expect(style.family).toBe('monospace'); expect(style.transition).toBe('0s'); expect(style.reduced).toBe('true');
 });
 
 test('disabled retry explains its reason and never admits another generation', async ({ page, host }) => {

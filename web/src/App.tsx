@@ -149,6 +149,7 @@ function Chat({ shell, bridge, drafts, turns, hydrated }: { shell: Shell; bridge
 export function App({ bridge, drafts }: { bridge: Bridge; drafts: Drafts }) {
   const view = useSyncExternalStore(bridge.subscribe, bridge.getSnapshot);
   const shell = view.shell;
+  const fontSize = shell ? Math.max(15, (shell.theme.fontPx + 2) * shell.theme.scale) : 15;
   useEffect(() => {
     if (!shell) return;
     document.documentElement.classList.toggle('dark', shell.theme.dark);
@@ -156,14 +157,14 @@ export function App({ bridge, drafts }: { bridge: Bridge; drafts: Drafts }) {
     document.documentElement.dataset.theme = shell.theme.dark ? 'dark' : 'light';
     document.documentElement.dataset.reducedMotion = String(shell.theme.reducedMotion);
     document.documentElement.style.setProperty('--ide-font', shell.theme.font);
-    document.documentElement.style.setProperty('--ide-font-size', `${shell.theme.fontPx * shell.theme.scale}px`);
+    document.documentElement.style.setProperty('--ide-font-size', `${fontSize}px`);
     document.documentElement.style.colorScheme = shell.theme.dark ? 'dark' : 'light';
-  }, [shell?.theme]);
+  }, [shell?.theme, fontSize]);
   if (!bridge.transport) return <main className="host-unavailable"><p>请在 IntelliJ IDEA 的 Folio 侧栏中打开。</p><span>此页面需要 IDE 提供连接与工作流，独立浏览器不执行操作。</span></main>;
   if (!shell) return <main className="host-unavailable" role="status"><p>正在连接 IDE…</p></main>;
   const auxiliary = shell.route.kind !== 'chat';
   const back = () => shell.route.kind === 'settings' ? void bridge.command({ kind: 'cancelSettings', edit: shell.route.edit }) : void bridge.command({ kind: 'route', to: 'chat' });
-  return <main className="folio-app" style={{ fontSize: `${shell.theme.fontPx * shell.theme.scale}px`, fontFamily: shell.theme.font }} aria-busy={!view.hydrated}>
+  return <main className="folio-app" style={{ fontSize, fontFamily: shell.theme.font }} aria-busy={!view.hydrated}>
     <header className="utility-row" aria-label="侧栏工具">
       {auxiliary && <><IconButton name="返回对话" icon="back" onPress={back} /><span className="route-title">{titles[shell.route.kind]}</span></>}
       <div className="utility-spacer" />
