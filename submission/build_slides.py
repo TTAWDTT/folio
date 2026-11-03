@@ -74,9 +74,6 @@ def prepare_figures() -> None:
             im = im.crop((0, 0, im.width, 560))
         im.save(FIG / f"{name}.png")
     draw_process(FIG / "process.png")
-    draw_rag(FIG / "rag.png")
-    draw_question(FIG / "question.png")
-    draw_actions(FIG / "actions.png")
 
 
 def _card(draw: ImageDraw.ImageDraw, xy, number: str, title: str, body: str):
@@ -266,11 +263,17 @@ def _rect(slide, l, t, w, h, fill):
     return shape
 
 
-def _pic(slide, name, l, t, h):
+def _pic(slide, name, l, t, h, center=False):
     path = str(FIG / name)
     with Image.open(path) as im:
         aspect = im.width / im.height
-    if l + h * aspect > 12.9:
+    width_in = h * aspect
+    if center:
+        if width_in > 12.4:
+            width_in = 12.4
+            h = width_in / aspect
+        l = (W_IN - width_in) / 2
+    elif l + width_in > 12.9:
         h = (12.9 - l) / aspect
     height = Inches(h)
     width = Inches(h * aspect)
@@ -305,7 +308,7 @@ def build_pptx(path: Path) -> None:
     prs.core_properties.author = "Luo Zhen, Li Canwen, Fan Yu, Meng Shengyu"
     prs.core_properties.subject = "How Folio was made, and what the demonstration shows"
     blank = prs.slide_layouts[6]
-    total = 14
+    total = 17
 
     def new():
         slide = prs.slides.add_slide(blank)
@@ -400,27 +403,34 @@ def build_pptx(path: Path) -> None:
         _tb(s, 3.4, y, 9.3, 0.75, [{"text": v, "size": 20}])
     _notes(s, "These are the answers we gave. One minute. If asked why not vectors: a Chinese question still has to hit an English slide by its words, and the page has to appear before the network returns.")
 
-    # 6 RAG
-    s = new()
-    _chrome(s, 6, total)
-    _kicker(s, "03    Making")
-    _tb(s, 0.48, 0.55, 12, 0.55, [{"text": "The retrieval path", "size": 34, "bold": True}])
-    _pic(s, "rag.png", 0.45, 1.35, 5.5)
-    _notes(s, "Trace the top row, then the bottom row. Say BM25, k1 1.2, b 0.75, at most four chunks. Chinese questions about English slides keep the Latin terms when the Chinese bigrams are not in the deck. That is why the JUnit question hit Lec-3.4.")
+    def chart(n, title, image, caption, note):
+        slide = new()
+        _chrome(slide, n, total)
+        _kicker(slide, "03    Making")
+        _tb(slide, 0.48, 0.5, 12.2, 0.42, [{"text": title, "size": 26, "bold": True}])
+        _tb(slide, 0.48, 0.98, 12.2, 0.32, [{"text": caption, "size": 13, "italic": True, "color": C_MUTED}])
+        _pic(slide, image, 0.35, 1.38, 5.55, center=True)
+        _notes(slide, note)
 
-    # 7 subdiagrams
-    s = new()
-    _chrome(s, 7, total)
-    _kicker(s, "03    Making")
-    _tb(s, 0.48, 0.5, 6, 0.5, [{"text": "One question", "size": 28, "bold": True}])
-    _tb(s, 6.9, 0.5, 6, 0.5, [{"text": "Three actions", "size": 28, "bold": True}])
-    _pic(s, "question.png", 0.42, 1.15, 5.65)
-    _pic(s, "actions.png", 5.15, 1.35, 5.15)
-    _notes(s, "Left is the path the student sees. Right is the rule on each action: practice does not edit, tests do not write themselves, commits do not commit. One minute.")
+    chart(6, "Ownership, from the repository", "ownership.png",
+          "docs/images/components.svg. Who owns the library, the key, and a write.",
+          "This is the architecture drawing already in the repository. Top row is the IDE. Middle row is a project’s tasks and conversation. Bottom row is the shared library, the key, and the model or Git boundary. Workers do not read Swing fields. Forty-five seconds.")
+    chart(7, "Tool window, checked with TLC", "state-window.png",
+          "docs/statechart. One activity at a time. A key is required before Ask, Preview, or Draft.",
+          "This is the statechart already in the repository. Setup, indexing, then Ask, Test, and Commit. Write is only from a preview that parsed as a test. Say the overlapping labels are the real chart, not a simplification. One minute.")
+    chart(8, "Retrieval, checked with TLC", "state-retrieval.png",
+          "A page citation exists only after a hit. A miss ends as general knowledge. Stop does not invent a page.",
+          "This submodule was drawn with /statechart. TLC found 14 states. CiteOnlyWhenHit, MissNeverCited, and StoppedHasNoCitation all hold. Point at the two finishes: nothing retrieved, or a chunk was retrieved. One minute.")
+    chart(9, "Test write, checked with TLC", "state-test.png",
+          "An empty cancel writes nothing. Write is reachable only from a Java preview.",
+          "Second submodule from /statechart. Six states. The file is a copy of a preview that parsed. Not a test has no arrow to Test file written. Twenty seconds.")
+    chart(10, "Commit delivery, checked with TLC", "state-commit.png",
+          "Copy and fill require the captured staging. Nothing in the model creates a commit.",
+          "Third submodule from /statechart. Nine states. NeverCommits holds because no action sets a commit. After the index changes, copy and fill are refused. Twenty seconds.")
 
     # 8 verification
     s = new()
-    _chrome(s, 8, total)
+    _chrome(s, 11, total)
     _kicker(s, "03    Making")
     _tb(s, 0.48, 0.58, 6.2, 0.8, [{"text": "Then it was run", "size": 34, "bold": True}])
     _tb(s, 0.48, 1.7, 6.1, 4.8, [
@@ -435,7 +445,7 @@ def build_pptx(path: Path) -> None:
 
     # 9 frontend
     s = new()
-    _chrome(s, 9, total)
+    _chrome(s, 12, total)
     _kicker(s, "03    Making")
     _tb(s, 0.48, 0.5, 12, 0.55, [{"text": "The window, after our notes", "size": 32, "bold": True}])
     _pic(s, "files.png", 0.4, 1.25, 5.55)
@@ -448,7 +458,7 @@ def build_pptx(path: Path) -> None:
 
     # 10 demo opener
     s = new()
-    _chrome(s, 10, total)
+    _chrome(s, 13, total)
     _kicker(s, "04    Demonstration")
     _tb(s, 0.48, 0.62, 12, 0.7, [{"text": "What we will click", "size": 36, "bold": True}])
     rows = [
@@ -464,9 +474,9 @@ def build_pptx(path: Path) -> None:
         _tb(s, 1.4, y + 0.08, 11, 0.6, [{"text": line, "size": 24}])
     _notes(s, "Leave this up only while you switch to IntelliJ. Then do the five clicks. If the network is slow, the next three slides already hold the pictures.")
 
-    # 11 files
+    # 14 files
     s = new()
-    _chrome(s, 11, total)
+    _chrome(s, 14, total)
     _kicker(s, "04    Demonstration")
     _tb(s, 0.48, 0.5, 6.2, 0.9, [{"text": "The lectures", "size": 34, "bold": True}])
     _tb(s, 0.48, 1.55, 5.8, 4.5, [
@@ -478,18 +488,18 @@ def build_pptx(path: Path) -> None:
     _pic(s, "files.png", 6.7, 0.7, 6.15)
     _notes(s, "Scroll the list if you are live. Otherwise this picture is the list. Twenty seconds.")
 
-    # 12 answer
+    # 15 answer
     s = new()
-    _chrome(s, 12, total)
+    _chrome(s, 15, total)
     _kicker(s, "04    Demonstration")
     _tb(s, 0.42, 0.42, 12, 0.45, [{"text": "An answer, and the page it came from", "size": 30, "bold": True}])
     _pic(s, "citations.png", 0.4, 1.1, 5.7)
     _pic(s, "excerpt.png", 6.85, 1.1, 5.7)
     _notes(s, "Left: the question and two citations. Right: page 3 of Lec-3.4, opened from the first title. Say the marker [1] is the page, not a decoration.")
 
-    # 13 drill
+    # 16 drill
     s = new()
-    _chrome(s, 13, total)
+    _chrome(s, 16, total)
     _kicker(s, "04    Demonstration")
     _tb(s, 0.48, 0.48, 12, 0.5, [{"text": "Three exercises", "size": 32, "bold": True}])
     _pic(s, "drill.png", 0.4, 1.15, 5.7)
@@ -503,7 +513,7 @@ def build_pptx(path: Path) -> None:
 
     # 14 close
     s = new()
-    _chrome(s, 14, total)
+    _chrome(s, 17, total)
     _kicker(s, "04    Demonstration")
     _tb(s, 0.48, 0.7, 12, 0.8, [{"text": "What the picture is not", "size": 34, "bold": True}])
     limits = [
@@ -543,7 +553,7 @@ def build_slide_pdf(path: Path) -> None:
     def num(n):
         c.setFillColor(white)
         c.setFont("Serif", 9)
-        c.drawRightString(pw - 24, 7, f"{n}   /   14")
+        c.drawRightString(pw - 24, 7, f"{n}   /   17")
 
     def mixed(x, y, text, size=16, face="Serif", color=HexColor("#1C1915")):
         c.setFillColor(color)
@@ -584,7 +594,7 @@ def build_slide_pdf(path: Path) -> None:
             lines.append(cur)
         return lines
 
-    def image(name, x, y, h, max_w=900):
+    def image(name, x, y, h, max_w=900, center=False):
         path_img = str(FIG / name)
         with Image.open(path_img) as im:
             aspect = im.width / im.height
@@ -592,6 +602,8 @@ def build_slide_pdf(path: Path) -> None:
         if w > max_w:
             w = max_w
             h = w / aspect
+        if center:
+            x = (pw - w) / 2
         c.setStrokeColor(HexColor("#1C1915"))
         c.setLineWidth(0.8)
         c.rect(x - 1, y - 1, w + 2, h + 2, fill=0, stroke=1)
@@ -714,32 +726,33 @@ def build_slide_pdf(path: Path) -> None:
         y -= 52
     c.showPage()
 
-    # 6
-    paper(); num(6)
-    c.setFillColor(HexColor("#7A3028"))
-    c.setFont("Serif-B", 11)
-    c.drawString(36, 500, "03     MAKING")
-    c.setFillColor(HexColor("#1C1915"))
-    c.setFont("Serif-B", 26)
-    c.drawString(36, 466, "The retrieval path")
-    image("rag.png", 24, 36, 400)
-    c.showPage()
+    def chart_page(n, title, image_name, caption):
+        paper(); num(n)
+        c.setFillColor(HexColor("#7A3028"))
+        c.setFont("Serif-B", 11)
+        c.drawString(36, 500, "03     MAKING")
+        c.setFillColor(HexColor("#1C1915"))
+        c.setFont("Serif-B", 20)
+        c.drawString(36, 472, title)
+        c.setFillColor(HexColor("#5E574E"))
+        c.setFont("Serif-I", 11)
+        c.drawString(36, 452, caption)
+        image(image_name, 30, 32, 400, max_w=900, center=True)
+        c.showPage()
 
-    # 7
-    paper(); num(7)
-    c.setFillColor(HexColor("#7A3028"))
-    c.setFont("Serif-B", 11)
-    c.drawString(36, 500, "03     MAKING")
-    c.setFillColor(HexColor("#1C1915"))
-    c.setFont("Serif-B", 20)
-    c.drawString(36, 468, "One question")
-    c.drawString(500, 468, "Three actions")
-    image("question.png", 24, 36, 400)
-    image("actions.png", 330, 70, 360)
-    c.showPage()
+    chart_page(6, "Ownership, from the repository", "ownership.png",
+               "docs/images/components.svg. Who owns the library, the key, and a write.")
+    chart_page(7, "Tool window, checked with TLC", "state-window.png",
+               "docs/statechart. One activity at a time. A key is required before Ask, Preview, or Draft.")
+    chart_page(8, "Retrieval, checked with TLC", "state-retrieval.png",
+               "A page citation exists only after a hit. A miss ends as general knowledge. Stop invents no page.")
+    chart_page(9, "Test write, checked with TLC", "state-test.png",
+               "Cancel writes nothing. Write is reachable only from a Java preview.")
+    chart_page(10, "Commit delivery, checked with TLC", "state-commit.png",
+               "Copy and fill require the captured staging. The model never creates a commit.")
 
     # 8
-    paper(); num(8)
+    paper(); num(11)
     c.setFillColor(HexColor("#7A3028"))
     c.setFont("Serif-B", 11)
     c.drawString(36, 500, "03     MAKING")
@@ -763,7 +776,7 @@ def build_slide_pdf(path: Path) -> None:
     c.showPage()
 
     # 9
-    paper(); num(9)
+    paper(); num(12)
     c.setFillColor(HexColor("#7A3028"))
     c.setFont("Serif-B", 11)
     c.drawString(36, 500, "03     MAKING")
@@ -779,7 +792,7 @@ def build_slide_pdf(path: Path) -> None:
     c.showPage()
 
     # 10
-    paper(); num(10)
+    paper(); num(13)
     c.setFillColor(HexColor("#7A3028"))
     c.setFont("Serif-B", 11)
     c.drawString(36, 500, "04     DEMONSTRATION")
@@ -804,8 +817,8 @@ def build_slide_pdf(path: Path) -> None:
         y -= 52
     c.showPage()
 
-    # 11
-    paper(); num(11)
+    # 14
+    paper(); num(14)
     c.setFillColor(HexColor("#7A3028"))
     c.setFont("Serif-B", 11)
     c.drawString(36, 500, "04     DEMONSTRATION")
@@ -821,7 +834,7 @@ def build_slide_pdf(path: Path) -> None:
     c.showPage()
 
     # 12
-    paper(); num(12)
+    paper(); num(15)
     c.setFillColor(HexColor("#7A3028"))
     c.setFont("Serif-B", 11)
     c.drawString(36, 500, "04     DEMONSTRATION")
@@ -833,7 +846,7 @@ def build_slide_pdf(path: Path) -> None:
     c.showPage()
 
     # 13
-    paper(); num(13)
+    paper(); num(16)
     c.setFillColor(HexColor("#7A3028"))
     c.setFont("Serif-B", 11)
     c.drawString(36, 500, "04     DEMONSTRATION")
@@ -856,7 +869,7 @@ def build_slide_pdf(path: Path) -> None:
     c.showPage()
 
     # 14
-    paper(); num(14)
+    paper(); num(17)
     c.setFillColor(HexColor("#7A3028"))
     c.setFont("Serif-B", 11)
     c.drawString(36, 500, "04     DEMONSTRATION")
