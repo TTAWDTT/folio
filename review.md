@@ -4,7 +4,7 @@
 
 ## 目标与证据边界
 
-本次修改保留了 F0、F1 和既有交互能力。课程库、请求身份、设置保存、生成测试、暂存覆盖和引用状态已按下文选型实现。确定性回归与真实 Project PSI 检查已有通过证据。完整集成后的最终复跑已通过 244 项测试，真实 IDE 核心流程仍待验证。
+本次修改保留了 F0、F1 和既有交互能力。课程库、请求身份、设置保存、生成测试、暂存覆盖和引用状态已按下文选型实现。确定性回归与真实 Project PSI 检查已有通过证据。早期可靠性重构的集成快照通过 244 项测试。后续侧边栏重写以当前 `build/verification/summary.json` 为准，真实 IDE 核心流程的缺口单独记录。
 
 已通过用户登录的 Canvas 浏览器取得并完整读取 Assignment A 原文，以及 Java Fundamentals、JUnit、Building AI-Powered Java Applications 讲义。原始课程文件留在被 Git 忽略的本地审查目录，不进入源码、提交或 PR。项目文档列出的同济 AI 服务地址在本次浏览器访问中超时。用户随后确认该平台需要校园网，真实提供方验证待校园网与可用凭据。
 
@@ -193,19 +193,19 @@ PPTX 提取只读取顶层 `XSLFTextShape`，会漏掉组合图形内文字和�
 
 复查否定了“识别到测试结构就能保证 runner 有效”的前提。`@TestFactory String cases()` 能通过 Java 语法和注解识别，却不满足 JUnit 的运行要求。参数化测试的 argument provider、继承和组合注解也依赖项目类型及 runner。
 
-可选方案是继续手写近似完整的 JUnit 验证器，或只承诺语法、常见声明和基本签名识别，将完整有效性留给目标项目的编译与实际测试。选择后者，保留动态测试、参数化测试与显式 Write。预览现在只显示“Java syntax checked. Recognized JUnit annotations found. Not compiled or run.”，不再把结构识别称为完整 JUnit 验证。Factory 返回类型、参数来源和真实 runner 验证仍是明确的后续能力。
+可选方案是继续手写近似完整的 JUnit 验证器，或只承诺语法、常见声明和基本签名识别，将完整有效性留给目标项目的编译与实际测试。选择后者，保留动态测试、参数化测试与显式 Write。预览现在只显示“已检查 Java 语法与 JUnit 注解，尚未编译或运行。”，不再把结构识别称为完整 JUnit 验证。Factory 返回类型、参数来源和真实 runner 验证仍是明确的后续能力。
 
 ## 当前架构
 
 课程资料由应用级 `CourseLibrary` 持有。它发布 revision 与只读 `CourseSearch`，负责整批解析、锁、冲突检测、原子 JSON、备份和 TSV 迁移。查询不做 I/O。相同 IDE 内面板订阅已提交快照，跨进程写入受锁保护，但没有跨进程推送刷新。
 
-应用级 `ProviderAccess` 持有设置与凭据操作顺序。`TaSettings` 只存 endpoint、model 和 origin，不存 API key。请求可直接使用当时输入的密钥，存储密钥只用于其绑定 origin。后台加载和保存回调不能覆盖更新的表单。
+应用级 `ProviderAccess` 持有设置与凭据操作顺序。`TaSettings` 只存 endpoint、model 和 origin，不存 API key。侧边栏请求只使用已保存设置，存储密钥只用于其绑定 origin。未保存表单不参与请求，重试保持原 endpoint 与 model 并重新取得当前已保存的绑定密钥。后台加载和保存回调不能覆盖更新的表单。
 
 项目的工具窗口内容持有 `FolioTasks`、会话和当前结果。EDT 捕获值，后台只接收不可变输入。Task 的 success、failure、cancelled 分别呈现。Test 和 Commit 的旧完成不会替换新结果，后续 Write、Copy、Fill 再检查当前身份和生命周期。
 
 测试草稿同时持有准确 Java、派生文件名和原目标目录。所有暂存根进入一个 Git 快照和完整分批计划。引用状态来自 `Answer.Evidence`，不从答案固定前缀推断。没有引入独立后端、事件总线或多课程库选择器。
 
-相较实现前计划，最终选择了版本化 JSON 与备份，没有采用 generation manifests。保留了显式 Write、Drill、无 key 本地检索、直接使用输入 key、自定义远程 HTTP 和 query、多根全暂存、Copy 与 Fill，以及原输入法、主题和布局行为。
+相较实现前计划，最终选择了版本化 JSON 与备份，没有采用 generation manifests。保留了显式 Write、Drill、无 key 本地检索、自定义远程 HTTP 和 query、多根全暂存、Copy 与 Fill，以及原输入法、主题和布局行为。
 
 ## 验证结果与开放检查
 
@@ -218,14 +218,26 @@ PPTX 提取只读取顶层 `XSLFTextShape`，会漏掉组合图形内文字和�
 | 真实 Project PSI | 24 tests 通过。 | Java 提取、拒绝坏输入、目标和实际字节、碰撞、package、打开与 Undo。 |
 | 固定合成检索 | 12/12 正例有命中，0/12 负例误命中。旧实现为 12/12 与 2/12。 | 同一固定语料与题集的词法检索变化。 |
 | 真实课程 PDF | 3 份、85 页范围、90 片段，pancakes 无关问题零命中。 | 解析范围保留与指定检索检查，不是回答质量。 |
-| 完整集成自动验证 | `scripts/verify.sh` 完成，244 tests、24 suites，零 failures、errors、skipped，插件 ZIP 校验通过。 | 以当前 `build/verification/summary.json` 的 XML 计数与插件校验为准，不合计分支测试数。 |
+| 早期可靠性重构快照 | `scripts/verify.sh` 当时完成，244 tests、24 suites，零 failures、errors、skipped，插件 ZIP 校验通过。 | 当前版本以重新生成的 `build/verification/summary.json` 为准，不合计分支测试数。 |
 
 `./scripts/verify.sh` 的失败信号是非零退出、必需套件缺失或零测试、XML failures/errors/skipped 非零，以及 ZIP 损坏或缺少插件类。GitHub Actions 配置调用同一入口，配置存在不等于已观察到远端通过。
 
 以下检查仍开放。
 
 - 真实模型最小调用。课程项目列出的 school API 需要校园网，用户已确认。当前网络下最后一次访问超时，本次没有成功模型调用，不能声称真实提供方兼容或答案质量通过。
-- 完整真实 IDEA 操作。Computer use 未能附着到准确的运行中 IDEA 进程，尚未完成 Ask、来源跳转、多个 Project、Password Safe、测试根选择和实际提交控件的连续回放。
+- 完整真实 IDEA 操作。新版插件已安装到本地 sandbox 并正常重启，50 个文件逐一匹配已验证 ZIP，启动日志与真实窗口截图确认 Folio 加载。重启后的 Java 窗口未向语义驱动暴露可用辅助功能节点，因此尚未完成菜单、设置返回、Ask、来源跳转、多个 Project、Password Safe、测试根选择和实际提交控件的连续回放。没有使用物理鼠标或键盘补测。
 - 远端 CI。架构图已按当前所有权更新。本次交付包含独立代码与文档审查，最终报告需明确审查结论及所覆盖版本。远端结果同样必须绑定最终修改，不能复用局部通过结论。
 
 这些是验证缺口，不是已确认的运行缺陷。历史 `docs/statechart/FolioWindow.tla` 描述旧串行模型，不能用于关闭当前并发与写入检查。历史截图也不能证明新控件和凭据状态可用。
+
+## 2026-11-03 侧边栏交互重写
+
+主界面以 [已批准的设计](docs/design/sidebar-v3/approved.md) 为准。保留原生 Swing，移除独立任务页与重复内部工具栏。原生标题栏承载新对话、课件和设置。统一对话显示问答、练习、测试和提交结果，每个输入模式保留独立文档、光标与上下文。
+
+模式菜单只保留一个实例，按同一按下事件的关闭意图处理原生取消事件。独立 Swing 事件回放在修复时通过，单独移除取消事件处理后复现第二次点击关闭又打开。发送与停止在同一手势内锁定用途，停止保留已收到正文和下一条草稿。重试保留原请求，不重复用户行，另一任务生成时禁用重试并说明原因。
+
+本轮还修复相同问答内容的重试定位、选区被完整源码替代、未保存设置参与请求和无限积累可见历史的问题。可见历史上限为 40 轮。完整源码与模型选区分开保存，测试预览继续检查原来源和目标。提交候选只允许显式复制或填入，不自动修改剪贴板、提交框或暂存区。
+
+实际生产组件在显式测试配色下生成 360 与 280 宽度、深浅色和双倍密度图片。父级逐项比较主布局、圆角、菜单位置、图标和代码滚动，并退回首轮过方圆角及覆盖输入区的菜单。最终 `./scripts/verify.sh` 在集成工作区通过 329 项测试、44 个套件，零 failures、errors、skipped，插件 ZIP 校验通过。当前复跑结果仍以生成的 `build/verification/summary.json` 为准。
+
+真实窗口截图只证明已加载的空对话布局。原生标题栏动作在该截图中未显示，动作可见性、悬浮与连续点击仍未实机确认。测试配色产图不证明原生 LAF，静态悬浮图也不证明系统鼠标悬浮。校园模型调用、完整写入流程与多项目联动仍是开放检查。[verify-folio](.agents/skills/verify-folio/SKILL.md) 因辅助功能驱动受阻保留为草稿，不把未执行的步骤标为通过。

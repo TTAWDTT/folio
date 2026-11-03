@@ -18,6 +18,9 @@ required = {
     "AskerStreamingTest", "SidebarResizeAcceptanceTest", "FenceRenderingAcceptanceTest",
     "FenceLineEndingTest",
     "InteractionAcceptanceTest", "FolioInteractionTest", "FolioMotionTest",
+    "ApprovedSidebarAcceptanceTest", "PopupOwnershipAcceptanceTest", "PopupGestureTest",
+    "ConversationIdentityAcceptanceTest", "SidebarWorkflowV3Test", "CapturedSourceWriteTest",
+    "ApprovedSidebarRenderTest",
 }
 try:
     suites = {}
@@ -48,7 +51,8 @@ try:
                     packaged.update(jar.namelist())
                     descriptor |= "META-INF/plugin.xml" in jar.namelist()
     expected = {"cst3492/courseta/" + name + ".class" for name in (
-        "FolioPanel", "FolioTasks", "ProviderAccess", "ProviderConnection", "Conversation",
+        "FolioPanel", "FolioTasks", "FolioState", "CapturedCode", "ProviderAccess", "ProviderConnection", "Conversation",
+        "drill/Drill",
         "index/CourseLibrary", "index/CourseSearch", "junitgen/GeneratedTest",
         "ask/HttpChatClient", "commit/GitDiffs",
     )}

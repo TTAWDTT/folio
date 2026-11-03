@@ -2,28 +2,31 @@
 
 Folio is an IntelliJ IDEA plugin for CST3492 Group B. It answers questions from indexed course files, uses selected code as context, generates JUnit previews, drafts commit messages, and creates short course drills.
 
-Group B requires F0 course retrieval and F1 IDE actions. Source-code editing and the built-in diff viewer belong to Group C. Folio retains an explicit **Write test file** action for a validated test preview. It does not execute Git commits or change staging.
+Group B requires F0 course retrieval and F1 IDE actions. Source-code editing and the built-in diff viewer belong to Group C. Folio retains an explicit **写入文件** action for a validated test preview. It does not execute Git commits or change staging.
 
 The plugin id is `cst3492.folio`, version `0.1.0`. The **Folio** tool window is on the right. [review.md](review.md) records the review, selected designs, implementation status, and verification gaps. The original course plans are [English](docs/course-ta-plugin-plan.md) and [Chinese](docs/course-ta-plugin-plan.zh.md).
 
 ## Use Folio in a course project
 
-1. Open **Folio**. In the mode menu, choose **Course files**, then **Index files** and select course materials. Indexing needs no API key. Materials are shared across projects in the same IDE configuration.
-2. Choose **Ask** in the mode menu and enter a course question. Without a key, Folio retrieves local sources and explains that model configuration is missing. It makes no HTTP request.
-3. Open the gear to configure the endpoint, model, and API key. A typed key can be used for the next request before saving. **Save settings** stores it in Password Safe and reports success after the write finishes. An empty key field keeps the stored key. **Clear API key** removes it.
-4. Send a question with a configured key. Folio shows incoming answer text as the provider sends it. After completion, it maps citations and labels whether the references are inline citations, retrieved context, or a citation fallback. Expand the reference row to inspect the source excerpts. Follow-up questions use bounded conversation context. **Stop** cancels active work. **Clear chat** clears the conversation and prevents late answer text from restoring it.
-5. Select a Java class or method and run **Generate JUnit From Scenario** in the editor menu. Accept a natural-language scenario to generate a preview. Inspect the Java, target path, and validation note before choosing **Write test file**.
-6. Stage changes and run **Draft Folio Commit Messages** from the commit dialog or the **Commit** mode. Folio captures every configured Git root, shows the captured diff and call estimate, and asks for three candidates. **Copy** and **Fill commit box** remain available for the current, unchanged staged snapshot.
+1. Open **Folio**. Use the header folder icon to open **课件**, then **导入课件** to select materials. Indexing needs no API key. Materials are shared across projects in the same IDE configuration.
+2. Choose **问答** inside the composer and enter a course question. Without a saved key, local retrieval remains available and explains that model configuration is missing. It makes no HTTP request.
+3. Open **设置** from the gear icon. Enter the endpoint, model and API key, then choose **保存并返回**. Requests use saved settings. An empty Key keeps the saved credential. Removing a Key is a pending edit until saved. Cancel or Back discards the form edit. Saving does not prove that the external endpoint is reachable.
+4. Send a question. Incoming answer text appears as it arrives, then citations finalize. The same circular button becomes **停止生成** while generation is active. Stopping preserves received text and the next draft. Answer-bottom icons copy or regenerate the original answer. Every icon has a text tooltip and an accessible name.
+5. Use the composer menu to choose **练习**, **生成测试** or **提交信息**. Each mode retains its own draft and caret. Results remain in the same conversation. Course files and settings have their own direct header entries, and returning restores the draft and reading position.
+6. For a Java source selection, use the editor's existing test-generation action, inspect the captured target and Java preview, then choose **写入文件**. Generation alone does not write a file.
+7. Stage changes and use the existing commit-dialog action or **提交信息** mode. Inspect the candidates, then explicitly copy one or fill its original commit box. Generation does not change the clipboard, fill a commit box, execute a commit or alter staging.
 
-The composer supports Enter to send, Shift+Enter for a newline, and IME composition. It grows to six rows and then scrolls. A compact mode menu keeps **Ask**, **Tests**, **Commit**, **Drill**, and **Course files** reachable in a narrow sidebar. Settings remain in the header. Activity indicators run only while work is pending. The UI follows the IDE theme and zoom.
+Enter sends, Shift+Enter inserts a newline, and uncommitted IME text never sends. The composer grows to six rows and then scrolls internally. Its mode control and send/stop button remain inside the rounded input area. The popup opens on the first activation and stays closed after the second. Selecting the current mode or pressing Esc closes it without clearing a draft.
 
-Buttons keep native keyboard actions and show hover, press, and focus feedback. Reading older content suspends automatic following, including a follow update that was already queued. A new submission follows the latest turn. Short paint and height transitions stop when hidden or disposed. On macOS, movement respects the system Reduce Motion preference.
+Hover and focus feedback stays on the active control. Tooltips float above content without changing layout. Reading older content or selecting answer text suspends automatic following. Returning to the latest answer restores it. Auxiliary pages preserve the mounted conversation. Local transitions can be interrupted, stop when hidden or disposed, and respect macOS Reduce Motion.
+
+The approved main layout and behavior are retained in [the design contract](docs/design/sidebar-v3/approved.md). The generated review image is a design reference, not a runtime screenshot or proof of interaction quality.
 
 ## Ask and citation behavior
 
-Ask and Drill request streaming responses. The sidebar appends actual incoming text and stops its activity indicator when the request completes, fails, or is cancelled. A provider that returns a normal JSON completion is displayed as a complete reply. Folio does not simulate a stream by revealing an already completed answer. Citation markers and source metadata are finalized after completion; provisional text is not completed conversation history.
+Ask requests streaming responses. The sidebar appends actual incoming text and stops its activity indicator when the request completes, fails, or is cancelled. A provider that returns a normal JSON completion is displayed as a complete reply. Folio does not simulate a stream by revealing an already completed answer. Citation markers and source metadata are finalized after completion; provisional text is not completed conversation history.
 
-Completed replies render triple-backtick blocks as code. **Copy** beside the Folio answer label copies the full answer, including code fences. **Copy** inside a code block copies only that block's code. An unclosed fence stays visible as literal text. Answer Copy is disabled until completion. Copy controls briefly show success or a clipboard failure. Incoming text preserves an existing selection. Code formatting waits while the streamed text has focus or a selection. Release both to format the completed reply. Full-answer Copy is available immediately after completion.
+Completed replies render triple-backtick blocks as code. The answer-bottom copy icon copies the full answer, including code fences. The code-block copy icon copies only that block's code. An unclosed fence stays visible as literal text. Answer Copy is disabled until completion. Copy controls briefly show a checkmark on success; their tooltip reports success or clipboard failure. Incoming text preserves an existing selection. Code formatting waits while the streamed text has focus or a selection. Release both to format the completed reply. Full-answer Copy is available immediately after completion.
 
 Retrieval is local BM25, without embeddings or a web search. Each request captures a read-only course-library snapshot, the current question, selected code, conversation context, and connection settings. Retrieval uses the current question and selection and returns at most four chunks. History is quoted context, not current citation evidence.
 
@@ -44,7 +47,7 @@ These labels describe provenance and citation syntax. They do not verify whether
 
 The visible chat holds at most 40 exchanges. Conversation context retains at most 40 completed Ask turns, including the selected code captured for each turn. The next request captures up to eight complete turns within 8,000 characters. `Asker` preserves every accepted history character as quoted data, including Java indexes and earlier reference numbers. History above 8,000 characters is rejected explicitly. Earlier references are not current citation evidence. Failed requests, configuration-only responses, and drills do not become Ask history.
 
-**Ask Folio** in the editor asks about the selection. For a Java file, a completed answer can offer **Generate a test**. It reuses the Java source and target directory captured by the editor action, then opens the existing test-preview flow. The answer text is not a writable test. **Folio Course Drill** requests three short questions about selected code through the same retrieval and citation path. An empty drill selection makes no model call.
+**Ask Folio** in the editor asks about the selection. For a Java file, a completed answer can offer **生成测试**. It reuses the Java source and target directory captured by the editor action, then opens the existing test-preview flow. The answer text is not a writable test. The existing course-drill editor action requests three exercises with independently expandable explanations through the course retrieval path. Malformed structured replies are reported instead of inventing missing exercises. An empty drill selection makes no model call.
 
 <details>
 <summary>Citation compatibility reference</summary>
@@ -65,11 +68,11 @@ The visible chat holds at most 40 exchanges. Conversation context retains at mos
 
 ## Course files and recovery
 
-**Index files** accepts multiple files. PDF page extraction preserves original page numbers, including blank-page gaps. PPTX extraction preserves slide order and includes nested groups, table cells, and attached notes. Slide-master content is excluded. TXT, Markdown, and DOCX fixtures use Tika's non-paginated body fallback and are labeled **section**, without invented page numbers. Other Tika-readable formats can be selected, but do not have the same format-specific regression coverage.
+**导入课件** accepts multiple files. PDF page extraction preserves original page numbers, including blank-page gaps. PPTX extraction preserves slide order and includes nested groups, table cells, and attached notes. Slide-master content is excluded. TXT, Markdown, and DOCX fixtures use Tika's non-paginated body fallback and are labeled **section**, without invented page numbers. Other Tika-readable formats can be selected, but do not have the same format-specific regression coverage.
 
 `CourseChunks` splits each page, slide, or section into at most 700 Java characters with a 100-character overlap. It prefers a space or newline in the latter half of a chunk and avoids splitting UTF-16 surrogate pairs. Split chunks retain their original scope number and a part identifier.
 
-Sources use absolute paths, so two `notes.pdf` files in different directories remain distinct. Re-indexing replaces that source. **Remove** asks for confirmation. Re-index and Remove also clear a matching legacy bare-name row without removing another absolute path with the same basename.
+Sources use absolute paths, so two `notes.pdf` files in different directories remain distinct. Re-indexing replaces that source. Removing a source asks for confirmation that the shared library will change. Re-index and Remove also clear a matching legacy bare-name row without removing another absolute path with the same basename.
 
 `CourseLibrary` parses and validates the whole selected batch before committing it. A missing file, parser failure, zero-text result, or cancellation before commit preserves the old library. Overlapping changes to the same source are rejected with a retry message. Independent-source changes merge under the store lock. A cancellation after the atomic commit does not undo that committed revision.
 
@@ -98,11 +101,11 @@ The fixed public fixture has 12 positive and 12 negative queries over synthetic 
 
 **Generate JUnit From Scenario** opens a multiline scenario dialog. Cancel or an empty accept makes no generation request. Generation requires captured Java source and a key. The request keeps its scenario, source, target directory, and connection together.
 
-The **Tests** view separates the original model reply from the Java preview. `GeneratedTest.parse(Project, raw)` extracts one Java unit from a plain reply or one fenced block. IntelliJ PSI checks Java syntax and recognizes common JUnit annotations, nested containers, and basic method signatures. The filename comes from the parsed top-level declaration. The preview states, "Java syntax checked. Recognized JUnit annotations found. Not compiled or run."
+The **测试预览** page separates the original model reply from the Java preview. `GeneratedTest.parse(Project, raw)` extracts one Java unit from a plain reply or one fenced block. IntelliJ PSI checks Java syntax and recognizes common JUnit annotations, nested containers, and basic method signatures. The filename comes from the parsed top-level declaration. The preview states, "已检查 Java 语法与 JUnit 注解，尚未编译或运行。"
 
 A valid preview with no captured directory remains visible but cannot be written. Folio prefers an existing matching package directory under the same module's Java test-source root. When none exists, it retains the adjacent source directory as the fallback. The target path is shown before writing.
 
-**Write test file** uses the current accepted preview and its original directory, not the transcript or a later selection. It rejects a closed project, unavailable or read-only directory, mismatched package, and existing filename. It creates the file through an IntelliJ write command, opens the created file, and supports IDE Undo. The model is not called again. A newer preview, Stop, or disposal prevents an old request from becoming the writable result.
+**写入文件** uses the current accepted preview and its original directory, not the transcript or a later selection. Captured source revisions are checked again when available. It rejects a closed project, unavailable or read-only directory, mismatched package, and existing filename. It creates the file through an IntelliJ write command, opens the created file, and supports IDE Undo. The model is not called again. A newer preview, Stop, or disposal prevents an old request from becoming the writable result.
 
 These checks do not establish runner-valid JUnit. They do not validate factory return compatibility, argument providers, generic types, inherited or composed tests, dependencies, discovery, execution, or test quality. Use the project's test command after inspection.
 
@@ -112,9 +115,9 @@ Folio captures each configured Git root and falls back to the project base when 
 
 A single request handles a small diff. Larger diffs use ordered batches of at most 12,000 Java characters, followed by one synthesis request over every returned batch summary. No tail is silently discarded. Missing summaries and size or call limits fail explicitly without presenting a complete draft. Processing every raw character does not prove that the model's summaries retain every semantic detail.
 
-The **Commit** view shows roots, staged file count, character and call estimates, candidates, and the captured diff. It asks the model for three conventional commit messages separated by `---`. The number returned still depends on the provider response.
+The commit result retains its captured repository scope, staged file count, call estimate, candidates and diff in the conversation. It asks the model for three conventional commit messages separated by `---`. The number returned still depends on the provider response.
 
-Automatic copying or filling requires a current result, unchanged staging, and an unchanged original commit box. Automatic copying also preserves clipboard contents changed during generation. Explicit **Copy** and **Fill commit box** recheck staging and task identity. A full fingerprint check runs in the background. Delivery checks captured index and reference-file metadata immediately before a clipboard or commit-box write, including linked worktrees, split indexes, and reftable references. This catches ordinary queued changes. The file observation and UI write do not form an atomic operation against arbitrary external writes. Fill preserves user edits and refuses a closed or unreadable target. These actions do not execute a commit or alter staging.
+Generation completion never copies or fills automatically. Explicit candidate actions recheck staging and task identity. A full fingerprint check runs in the background. Delivery checks captured index and reference-file metadata immediately before a clipboard or commit-box write, including linked worktrees, split indexes and reftable references. This catches ordinary queued changes. File observation and a UI write do not form an atomic operation against arbitrary external writes. Fill preserves user edits and refuses a closed or unreadable original target. A replaced result cannot authorize an old action. These actions do not execute a commit or alter staging.
 
 ## Connection settings and limits
 
@@ -125,9 +128,9 @@ Automatic copying or filling requires a current result, unchanged staging, and a
 | Credential origin | Application `folio.xml`, scheme, host, and port only | none |
 | API key | IntelliJ Password Safe, service generated from `Folio` and `apiKey` | none |
 
-`ProviderAccess` orders credential loading, saving, and clearing on one background executor. Its badge distinguishes loading, saving, clearing, ready, and failed states. A save reports success after persistence. Newer edits are not cleared by an older callback.
+`ProviderAccess` orders credential loading, saving, and clearing on one background executor. The UI reports connection and save state beside the relevant form or input. A save reports success after persistence. Newer edits are not cleared by an older callback.
 
-A non-empty typed key takes precedence for a request. An empty field uses a stored key only for its saved HTTP or HTTPS origin. Changing origin requires a typed or newly saved key. While credentials are loading, saving, or clearing, Folio asks you to wait or enter a key for the request. It does not use the old cached key. An empty Save retains the stored key and its origin binding.
+Sidebar requests use saved connection settings; unsaved form fields never change an in-flight request. An empty Key on Save retains the stored key and its HTTP or HTTPS origin binding. Changing origin requires a newly saved key. Credential loading, saving or clearing must complete before a new model-backed request uses that saved state. A retry keeps its original endpoint and model while capturing the currently saved bound key, so removing or rotating a key affects later attempts.
 
 The endpoint accepts HTTP and HTTPS, including remote HTTP hosts and query parameters. Folio appends `/chat/completions` unless that path is already present and preserves the query. URL credentials, fragments, unsupported schemes, invalid hosts, and invalid ports are rejected. Requests send a bearer token. Errors redact the actual submitted key, and connection objects do not print secrets.
 
@@ -187,7 +190,9 @@ A nonzero exit means tests or packaging failed. The mirror script does not retar
 
 `FolioToolWindowFactory` creates the panel, registers it in project user data through `FolioPanels`, and binds disposal to the tool-window content. Editor and VCS actions activate the tool window and find that project's panel. `FolioChrome` supplies the narrow layout, answer rendering, reference disclosure, composer, and theme colors.
 
-The EDT captures immutable inputs. Background tasks use those values and read-only `CourseSearch` snapshots. `FolioTasks` tracks request IDs and typed success, failure, and cancellation outcomes. Test and Commit accept only the latest request. Delivery and later Write, Copy, or Fill require a live owner and current accepted result. Streaming updates pass through the same task identity and lifetime checks before reaching the EDT. Final answers determine citation metadata and completed history. Disposal cancels tasks, stops answer motion, and closes subscriptions. The activity indicator derives from active tasks.
+`FolioState` separates the current page from the next input mode. Four retained documents keep each mode's text and caret. Chat, course files, settings, and an attempt-qualified test preview are separate routes. The native tool-window title bar owns the header actions.
+
+The EDT captures immutable inputs. Background tasks use those values and read-only `CourseSearch` snapshots. `FolioTasks` tracks request IDs and typed success, failure, and cancellation outcomes. Test and Commit accept only the latest request. Delivery and later Write, Copy, or Fill require a live owner and current accepted result. Streaming updates pass through the same task identity and lifetime checks before reaching the EDT. Final answers determine citation metadata and completed history. Disposal cancels tasks, stops answer motion, and closes subscriptions. The composer derives Send or Stop from the foreground generation attempt. File indexing and source loading use independent task channels.
 
 | Package | Main responsibility |
 | --- | --- |
@@ -214,7 +219,9 @@ The pre-change baseline ran 138 tests and built the plugin. Five supplied accept
 
 The deterministic tests cover shared-store commits and recovery, extraction fixtures, citation compatibility, staged-diff coverage, loopback HTTP boundaries, request identity, ordered settings, history, and existing keyboard/layout behavior. Real course-file checks preserved the 3-file, 85-page, 90-chunk denominator.
 
-No live campus-model call was completed during this review. The school API requires the campus network, as confirmed by the user. Its address timed out on the current network. A full live walkthrough remains open for Password Safe, multiple projects, source navigation, test-root selection, and actual commit controls. PSI and headless Swing tests do not close those integration gaps. The gaps describe missing verification, not established product defects.
+No live campus-model call was completed during this review. The school API requires the campus network, as confirmed by the user. Its address timed out on the current network. The rebuilt sidebar was installed and restarted in the local sandbox, with every packaged file matched and a fresh tool-window screenshot. Native action checks remain open because the restarted Java window exposes no usable accessibility element to the semantic driver. Title-action visibility, hover, keyboard and IME behavior are not established by that screenshot. A full live walkthrough also remains open for Password Safe, multiple projects, source navigation, test-root selection, and actual commit controls. PSI and headless Swing tests do not close those integration gaps. The gaps describe missing verification, not established product defects.
+
+The project-local [verify-folio workflow](.agents/skills/verify-folio/SKILL.md) records the native checks and their prerequisites. It remains a draft until one complete native feature journey succeeds.
 
 ## Historical screenshot gallery
 
