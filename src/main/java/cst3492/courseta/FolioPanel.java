@@ -1476,7 +1476,8 @@ public final class FolioPanel extends JPanel implements Disposable {
             card.add(new FolioChrome.WrapText((i + 1) + ". " + message), BorderLayout.CENTER);
             JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, JBUI.scale(8), 0));
             actions.setOpaque(false);
-            JButton copy = FolioChrome.secondary("复制", AllIcons.Actions.Copy);
+            JButton copy = FolioChrome.iconButton(AllIcons.Actions.Copy);
+            FolioChrome.describe(copy, "复制提交信息");
             copy.addActionListener(event -> useCommitCandidate(accepted, message, false));
             actions.add(copy);
             if (result.input().target().exists()) {
