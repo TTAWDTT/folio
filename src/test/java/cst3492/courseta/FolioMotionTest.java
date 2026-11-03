@@ -6,7 +6,9 @@ import org.junit.jupiter.api.Test;
 import javax.swing.JButton;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
+import java.awt.BorderLayout;
 import java.awt.Dimension;
+import java.awt.event.FocusEvent;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -123,6 +125,32 @@ class FolioMotionTest {
             assertFalse(button.isBorderPainted());
             button.doClick(0);
             assertEquals(2, actions.get());
+        });
+    }
+
+    @Test
+    void focusGainSettlesAnActiveTransitionEvenWhenItsTargetIsUnchanged() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            var field = new FolioChrome.PromptArea("Ask");
+            var well = new JPanel(new BorderLayout());
+            well.add(field, BorderLayout.CENTER);
+            well.setPreferredSize(new Dimension(260, 100));
+            var composer = new FolioChrome.Composer(field, well);
+            composer.setSize(280, 40);
+            var parent = new JPanel(new BorderLayout());
+            parent.add(composer, BorderLayout.CENTER);
+            parent.addNotify();
+            try {
+                assertTrue(composer.isShowing());
+                composer.reveal(true, true);
+                assertEquals(40, composer.getPreferredSize().height);
+                for (var listener : field.getFocusListeners()) {
+                    listener.focusGained(new FocusEvent(field, FocusEvent.FOCUS_GAINED));
+                }
+                assertEquals(100, composer.getPreferredSize().height);
+            } finally {
+                parent.removeNotify();
+            }
         });
     }
 
