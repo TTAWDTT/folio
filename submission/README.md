@@ -1,6 +1,8 @@
 # CST3492 Group B, Team 4
 
-The brief asks for an English report and an English slide deck. The report order is members, feature list, user manual, architecture (including chunking and indexing), then further notes. The twenty-minute demonstration is 4 November 2026, 1:30–4:15pm. The brief does not name a time zone.
+The brief asks for an English report and an English slide deck. The report order is members, feature list, user manual, architecture (including chunking and indexing), then further notes. The slides follow the making of the plugin: the name and the team, what Folio is, how it was built with Cursor, then the demonstration. The twenty-minute slot is 4 November 2026, 1:30–4:15pm. The brief does not name a time zone.
+
+English type in the PowerPoint is Times New Roman. Chinese interface labels use SimSun. The slide PDF embeds Liberation Serif, which has the same metrics, because this build machine has no Times New Roman file.
 
 | File | Role |
 | --- | --- |
