@@ -58,7 +58,7 @@ PALE = HexColor("#E7EEF3")
 
 TEAM = [
     ("2451989", "罗臻", "Luo Zhen"),
-    ("2452279", "李灿文", "Li Canwen"),
+    ("2452270", "李灿文", "Li Canwen"),
     ("2452750", "范羽", "Fan Yu"),
     ("2452272", "孟圣雨", "Meng Shengyu"),
 ]

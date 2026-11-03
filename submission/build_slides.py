@@ -328,7 +328,7 @@ def build_pptx(path: Path) -> None:
     _rect(s, 0.72, 4.35, 2.2, 0.015, C_BURG)
     members = [
         ("2451989", "罗臻", "Luo Zhen"),
-        ("2452279", "李灿文", "Li Canwen"),
+        ("2452270", "李灿文", "Li Canwen"),
         ("2452750", "范羽", "Fan Yu"),
         ("2452272", "孟圣雨", "Meng Shengyu"),
     ]
@@ -624,7 +624,7 @@ def build_slide_pdf(path: Path) -> None:
     c.setStrokeColor(HexColor("#7A3028"))
     c.setLineWidth(1.2)
     c.line(50, 280, 160, 280)
-    members = [("2451989", "罗臻  Luo Zhen"), ("2452279", "李灿文  Li Canwen"), ("2452750", "范羽  Fan Yu"), ("2452272", "孟圣雨  Meng Shengyu")]
+    members = [("2451989", "罗臻  Luo Zhen"), ("2452270", "李灿文  Li Canwen"), ("2452750", "范羽  Fan Yu"), ("2452272", "孟圣雨  Meng Shengyu")]
     for i, (sid, name) in enumerate(members):
         x = 50 + (i % 2) * 400
         y = 230 - (i // 2) * 58
