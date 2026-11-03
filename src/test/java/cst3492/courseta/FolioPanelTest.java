@@ -51,6 +51,22 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FolioPanelTest {
     @Test
+    void commitCandidateCopyUsesAnIconAndDescriptiveHoverText(@org.junit.jupiter.api.io.TempDir java.nio.file.Path root)
+            throws Exception {
+        try (CommitDelivery fixture = new CommitDelivery(root)) {
+            fixture.queueCandidates();
+            fixture.workers.drain();
+            fixture.delivery.drain();
+            var copy = (JButton) findByName(fixture.panel, "复制提交信息");
+            org.junit.jupiter.api.Assertions.assertNotNull(copy);
+            assertTrue(copy.getText().isEmpty());
+            assertEquals("复制提交信息", copy.getToolTipText());
+            org.junit.jupiter.api.Assertions.assertNotNull(copy.getIcon());
+            assertEquals(0, fixture.writes.get());
+        }
+    }
+
+    @Test
     void commitCompletionNeverAutomaticallyFillsTheOriginalControl(@org.junit.jupiter.api.io.TempDir java.nio.file.Path root)
             throws Exception {
         for (boolean changeBeforeDelivery : List.of(false, true)) {
