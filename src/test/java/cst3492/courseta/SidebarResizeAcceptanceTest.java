@@ -60,7 +60,7 @@ class SidebarResizeAcceptanceTest {
             String reply = "FIRST_PARAGRAPH must remain visible when the sidebar becomes narrower. [1]\n"
                     + "```java\nint total = values.stream().mapToInt(Integer::intValue).sum();\n```\n"
                     + "The result stays zero for an empty stream.";
-            var panel = new FolioPanel(null, library, ProviderAccess.inMemory(), workers, delivery,
+            var panel = new FolioPanel(null, library, savedProvider(), workers, delivery,
                     (a, b, c, d, e) -> reply);
             try {
                 workers.drain();
@@ -122,4 +122,11 @@ class SidebarResizeAcceptanceTest {
             }
         }
     }
+    private static ProviderAccess savedProvider() {
+        ProviderAccess provider = ProviderAccess.inMemory();
+        provider.load().join();
+        provider.save(TaSettings.DEFAULT_BASE_URL, TaSettings.DEFAULT_MODEL, "fixture-key").join();
+        return provider;
+    }
+
 }

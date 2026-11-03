@@ -51,7 +51,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FolioPanelTest {
     @Test
-    void automaticCommitFillChecksStagingAgainAtDelivery(@org.junit.jupiter.api.io.TempDir java.nio.file.Path root)
+    void commitCompletionNeverAutomaticallyFillsTheOriginalControl(@org.junit.jupiter.api.io.TempDir java.nio.file.Path root)
             throws Exception {
         for (boolean changeBeforeDelivery : List.of(false, true)) {
             try (CommitDelivery fixture = new CommitDelivery(root.resolve("auto-" + changeBeforeDelivery))) {
@@ -61,7 +61,7 @@ class FolioPanelTest {
                     fixture.stage("replacement staged content");
                 }
                 fixture.delivery.drain();
-                assertEquals(changeBeforeDelivery ? 0 : 1, fixture.writes.get());
+                assertEquals(0, fixture.writes.get());
             }
         }
     }
@@ -74,31 +74,31 @@ class FolioPanelTest {
                 fixture.queueCandidates();
                 fixture.workers.drain();
                 fixture.delivery.drain();
-                assertEquals(1, fixture.writes.get());
+                assertEquals(0, fixture.writes.get());
                 button(fixture.panel, "Fill commit box").doClick();
                 fixture.workers.drain();
                 if (changeBeforeDelivery) {
                     fixture.stage("replacement after background validation");
                 }
                 fixture.delivery.drain();
-                assertEquals(changeBeforeDelivery ? 1 : 2, fixture.writes.get());
+                assertEquals(changeBeforeDelivery ? 0 : 1, fixture.writes.get());
             }
         }
     }
 
     @Test
-    void splitIndexKeepsAutomaticAndExplicitCommitFill(@org.junit.jupiter.api.io.TempDir java.nio.file.Path root)
+    void splitIndexKeepsExplicitCommitFill(@org.junit.jupiter.api.io.TempDir java.nio.file.Path root)
             throws Exception {
         try (CommitDelivery fixture = new CommitDelivery(root)) {
             fixture.git("update-index", "--split-index");
             fixture.queueCandidates();
             fixture.workers.drain();
             fixture.delivery.drain();
-            assertEquals(1, fixture.writes.get());
+            assertEquals(0, fixture.writes.get());
             button(fixture.panel, "Fill commit box").doClick();
             fixture.workers.drain();
             fixture.delivery.drain();
-            assertEquals(2, fixture.writes.get());
+            assertEquals(1, fixture.writes.get());
         }
     }
 
@@ -135,8 +135,7 @@ class FolioPanelTest {
             Class<?> inputType = Class.forName(FolioPanel.class.getName() + "$CommitInput");
             var inputConstructor = inputType.getDeclaredConstructors()[0];
             inputConstructor.setAccessible(true);
-            Object input = inputConstructor.newInstance(List.of(root), new ProviderConnection("https://example.test", "m", "key"),
-                    target, null);
+            Object input = inputConstructor.newInstance(List.of(root), target);
             Class<?> resultType = Class.forName(FolioPanel.class.getName() + "$CommitResult");
             var resultConstructor = resultType.getDeclaredConstructors()[0];
             resultConstructor.setAccessible(true);
@@ -150,7 +149,7 @@ class FolioPanelTest {
             show.setAccessible(true);
             tasks.submit(FolioTasks.Channel.COMMIT, () -> result, outcome -> {
                 try {
-                    show.invoke(panel, ((FolioTasks.Outcome.Success<?>) outcome).value());
+                    panel.add((Component) show.invoke(panel, ((FolioTasks.Outcome.Success<?>) outcome).value()));
                 } catch (ReflectiveOperationException ex) {
                     throw new AssertionError(ex);
                 }
@@ -376,7 +375,7 @@ class FolioPanelTest {
             for (int width : List.of(240, 360)) {
                 panel.setSize(width, 700);
                 layoutTree(panel);
-                JButton mode = button(panel, "Ask ▾");
+                JButton mode = (JButton) findByName(panel, "选择模式");
                 assertTrue(mode.getWidth() > 0);
                 Rectangle bounds = SwingUtilities.convertRectangle(mode.getParent(), mode.getBounds(), panel);
                 assertTrue(bounds.x >= 0 && bounds.x + bounds.width <= width);
@@ -504,17 +503,16 @@ class FolioPanelTest {
             List<String> labels = java.util.Arrays.stream(menu.getComponents())
                     .filter(component -> component instanceof javax.swing.JMenuItem)
                     .map(component -> ((javax.swing.JMenuItem) component).getText()).toList();
-            assertEquals(List.of("Ask", "Tests", "Commit", "Drill", "Course files"), labels);
+            assertEquals(List.of("问答", "练习", "生成测试", "提交信息"), labels);
             for (int i = 0; i < 4; i++) {
-                ((javax.swing.JMenuItem) panel.modeMenu().getComponent(i)).doClick();
-                assertTrue(button(panel, labels.get(i) + " ▾").isVisible());
-                assertTrue(((javax.swing.JRadioButtonMenuItem) panel.modeMenu().getComponent(i)).isSelected());
+                var item = (javax.swing.JMenuItem) panel.modeMenu().getComponent(i);
+                item.doClick(0);
+                assertTrue(item.isSelected());
+                assertTrue(findByName(panel, "选择模式").isVisible());
             }
-            ((javax.swing.JMenuItem) panel.modeMenu().getComponent(5)).doClick();
-            assertTrue(button(panel, "Back").isVisible());
-            button(panel, "Back").doClick();
-            assertFalse(button(panel, "Back").isVisible());
-            assertTrue(((javax.swing.JRadioButtonMenuItem) panel.modeMenu().getComponent(3)).isSelected());
+            ((JButton) findByName(panel, "课件")).doClick(0);
+            ((JButton) findByName(panel, "返回对话")).doClick(0);
+            assertTrue(((javax.swing.JMenuItem) panel.modeMenu().getComponent(3)).isSelected());
         } finally {
             panel.dispose();
         }
@@ -528,7 +526,7 @@ class FolioPanelTest {
     void failedAskRestoresTheQuestionThroughTheFailureCallback() {
         FolioPanel panel = panelWithKey();
         FolioChrome.PromptArea question = composer(panel);
-        findBaseUrl(panel).setText("http://[");
+
         question.setText("What is a servlet?");
         fireSend(question);
         awaitText(question, "What is a servlet?");
@@ -550,12 +548,8 @@ class FolioPanelTest {
         assertTrue(send.isEnabled());
     }
 
-    /**
-     * While a request is in flight the button stays disabled, so Enter does not send,
-     * and the disabled icon is the spinner. A grey generated icon means the spinner never paints.
-     */
     @Test
-    void busyDisablesEnterAndShowsTheSpinner() {
+    void busyEnterKeepsTheDraftAndThePointerControlOffersStop() {
         FolioTasksTest.Queue workers = new FolioTasksTest.Queue();
         FolioTasksTest.Queue delivery = new FolioTasksTest.Queue();
         FolioPanel panel = new FolioPanel(null, cst3492.courseta.index.CourseLibrary.inMemory(),
@@ -569,8 +563,9 @@ class FolioPanelTest {
         assertTrue(send.isEnabled());
         fireSend(question);
         question.setText("a new unsent question");
-        assertFalse(send.isEnabled());
-        assertSame(com.intellij.ui.AnimatedIcon.Default.INSTANCE, send.getDisabledIcon());
+        assertTrue(send.isEnabled());
+        assertEquals("停止生成", send.getAccessibleContext().getAccessibleName());
+        assertNull(send.getDisabledIcon());
         fireSend(question);
         assertEquals("a new unsent question", question.getText());
         assertFalse(containsText(panel, "(empty question)"));
@@ -618,7 +613,11 @@ class FolioPanelTest {
     }
 
     private static FolioPanel panelWithKey() {
-        FolioPanel panel = new FolioPanel(null);
+        ProviderAccess provider = ProviderAccess.inMemory();
+        provider.load().join();
+        provider.save(TaSettings.DEFAULT_BASE_URL, TaSettings.DEFAULT_MODEL, "test-key").join();
+        FolioPanel panel = new FolioPanel(null, cst3492.courseta.index.CourseLibrary.inMemory(), provider,
+                Runnable::run, Runnable::run, (base, key, name, system, user) -> { throw new java.io.IOException("fixture failure"); });
         JTextField model = findModel(panel);
         if (model != null) {
             model.setText("test-model");
@@ -700,9 +699,7 @@ class FolioPanelTest {
         Container scroll = area.getParent().getParent();
         Container box = scroll.getParent();
         for (Component child : box.getComponents()) {
-            if (child instanceof JButton button) {
-                return button;
-            }
+            if (child instanceof JButton button && List.of("发送消息", "停止生成").contains(button.getAccessibleContext().getAccessibleName())) return button;
         }
         return null;
     }
@@ -827,4 +824,13 @@ class FolioPanelTest {
 
     private static final class Cancel extends RuntimeException implements ControlFlowException {
     }
+    private static Component findByName(Component component, String name) {
+        if (component instanceof AbstractButton button && name.equals(button.getAccessibleContext().getAccessibleName())) return button;
+        if (component instanceof Container container) for (Component child : container.getComponents()) {
+            Component result = findByName(child, name);
+            if (result != null) return result;
+        }
+        return null;
+    }
+
 }

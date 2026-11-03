@@ -24,15 +24,18 @@ class PanelWorkflowTest {
         FolioTasksTest.Queue workers = new FolioTasksTest.Queue();
         FolioTasksTest.Queue delivery = new FolioTasksTest.Queue();
         List<List<String>> calls = new ArrayList<>();
-        FolioPanel panel = new FolioPanel(null, CourseLibrary.inMemory(), ProviderAccess.inMemory(), workers, delivery,
+        ProviderAccess provider = ProviderAccess.inMemory();
+        provider.load().join();
+        provider.save("https://submitted.example", "submitted-model", "submitted-secret").join();
+        FolioPanel panel = new FolioPanel(null, CourseLibrary.inMemory(), provider, workers, delivery,
                 (base, key, model, system, user) -> {
                     calls.add(List.of(base, key, model, user));
                     return "A servlet handles an HTTP request.";
                 });
         workers.drain();
         delivery.drain();
-        JTextField base = field(panel, field -> field.getText().equals(TaSettings.DEFAULT_BASE_URL));
-        JTextField model = field(panel, field -> field.getText().equals(TaSettings.DEFAULT_MODEL));
+        JTextField base = field(panel, field -> field.getText().equals("https://submitted.example"));
+        JTextField model = field(panel, field -> field.getText().equals("submitted-model"));
         JTextField key = field(panel, field -> field instanceof JBPasswordField);
         base.setText("https://submitted.example");
         model.setText("submitted-model");
@@ -93,6 +96,7 @@ class PanelWorkflowTest {
         });
         FolioPanel panel = new FolioPanel(null, CourseLibrary.inMemory(), provider, workers, delivery,
                 (base, key, model, system, user) -> "unused");
+        button(panel, "设置").doClick(0);
         JTextField base = field(panel, field -> field.getText().equals(TaSettings.DEFAULT_BASE_URL));
         JTextField key = field(panel, field -> field instanceof JBPasswordField);
         base.setText("https://typed.example");
@@ -102,19 +106,22 @@ class PanelWorkflowTest {
         delivery.drain();
         assertEquals("https://typed.example", base.getText());
         assertEquals("first-secret", key.getText());
-        button(panel, "Save settings").doClick();
+        button(panel, "保存并返回").doClick();
         assertEquals("first-secret", key.getText());
         key.setText("second-secret");
         credentials.drain();
         delivery.drain();
         assertEquals("first-secret", stored.get());
         assertEquals("second-secret", key.getText());
-        button(panel, "Clear API key").doClick();
+        button(panel, "移除已保存的 Key").doClick();
         key.setText("third-secret");
         credentials.drain();
         delivery.drain();
-        assertEquals("", stored.get());
+        assertEquals("first-secret", stored.get());
         assertEquals("third-secret", key.getText());
+        button(panel, "取消").doClick(0);
+        assertEquals("first-secret", stored.get());
+        assertEquals("", key.getText());
         panel.dispose();
     }
 
@@ -139,7 +146,10 @@ class PanelWorkflowTest {
         FolioTasksTest.Queue workers = new FolioTasksTest.Queue();
         FolioTasksTest.Queue delivery = new FolioTasksTest.Queue();
         List<String> prompts = new ArrayList<>();
-        FolioPanel panel = new FolioPanel(null, CourseLibrary.inMemory(), ProviderAccess.inMemory(), workers, delivery,
+        ProviderAccess provider = ProviderAccess.inMemory();
+        provider.load().join();
+        provider.save(TaSettings.DEFAULT_BASE_URL, TaSettings.DEFAULT_MODEL, "test-secret").join();
+        FolioPanel panel = new FolioPanel(null, CourseLibrary.inMemory(), provider, workers, delivery,
                 (base, key, model, system, user) -> {
                     prompts.add(user);
                     if (prompts.size() == 1) {
@@ -186,7 +196,7 @@ class PanelWorkflowTest {
     }
 
     private static JButton button(Component root, String text) {
-        return (JButton) find(root, component -> component instanceof JButton button && text.equals(button.getText()));
+        return (JButton) find(root, component -> component instanceof JButton button && (text.equals(button.getText()) || text.equals(button.getAccessibleContext().getAccessibleName())));
     }
 
     private static Component find(Component root, Predicate<Component> predicate) {

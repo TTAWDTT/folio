@@ -15,6 +15,7 @@ import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiMethod;
 import com.intellij.psi.util.PsiTreeUtil;
 import cst3492.courseta.FolioPanel;
+import cst3492.courseta.CapturedCode;
 import cst3492.courseta.FolioPanels;
 import org.jetbrains.annotations.NotNull;
 
@@ -35,7 +36,7 @@ public final class GenerateTestAction extends AnAction {
             return;
         }
         String source = sourceOf(event);
-        VirtualFile directory = directoryOf(event);
+        CapturedCode captured = captureCode(event, source);
         FolioPanel existing = FolioPanels.get(project);
         ScenarioDialog dialog = new ScenarioDialog(project, prefill(existing == null ? null : existing.scenarioText()));
         boolean accepted = dialog.showAndGet();
@@ -53,7 +54,7 @@ public final class GenerateTestAction extends AnAction {
                 return;
             }
             panel.setScenarioText(scenario);
-            panel.generateFromSelection(source, directory);
+            panel.generateFromSelection(captured);
         }, true);
     }
 
@@ -85,6 +86,13 @@ public final class GenerateTestAction extends AnAction {
         }
         PsiClass type = PsiTreeUtil.getParentOfType(leaf, PsiClass.class);
         return type == null ? "" : type.getText();
+    }
+
+    public static CapturedCode captureCode(AnActionEvent event, String source) {
+        Editor editor = event.getData(CommonDataKeys.EDITOR);
+        VirtualFile file = event.getData(CommonDataKeys.VIRTUAL_FILE);
+        return editor != null && file != null && !file.isDirectory() && "java".equalsIgnoreCase(file.getExtension())
+                ? CapturedCode.capture(editor, file, source) : CapturedCode.detached(source, directoryOf(event));
     }
 
     public static VirtualFile directoryOf(AnActionEvent event) {

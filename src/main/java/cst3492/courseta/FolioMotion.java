@@ -49,7 +49,7 @@ final class FolioMotion implements AutoCloseable {
     }
 
     void to(double next, int milliseconds) {
-        if (closed || next == target && (timer.isRunning() || value == next)) {
+        if (closed || milliseconds > 0 && next == target && (timer.isRunning() || value == next)) {
             return;
         }
         long now = System.nanoTime();

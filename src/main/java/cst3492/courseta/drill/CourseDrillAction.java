@@ -21,6 +21,7 @@ public final class CourseDrillAction extends AnAction {
             return;
         }
         String source = GenerateTestAction.sourceOf(event);
+        var captured = GenerateTestAction.captureCode(event, source);
         ToolWindow window = ToolWindowManager.getInstance(event.getProject()).getToolWindow("Folio");
         if (window == null) {
             return;
@@ -28,7 +29,7 @@ public final class CourseDrillAction extends AnAction {
         window.activate(() -> {
             var panel = FolioPanels.get(event.getProject());
             if (panel != null) {
-                panel.drill(source);
+                panel.drill(captured);
             }
         }, true);
     }

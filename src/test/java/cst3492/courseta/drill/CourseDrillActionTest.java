@@ -20,6 +20,6 @@ class CourseDrillActionTest {
         };
         Answer answer = Drill.questions(new CourseIndex(), chat, "http://localhost", "key", "m", " ");
         assertEquals(0, calls.get());
-        assertTrue(answer.text().contains("Select some code"));
+        assertTrue(answer.text().contains("请先选择或粘贴代码"));
     }
 }

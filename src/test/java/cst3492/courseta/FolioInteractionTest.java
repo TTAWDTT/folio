@@ -32,7 +32,7 @@ class FolioInteractionTest {
             assertEquals("Selected", body.getSelectedText());
             assertNull(find(card, component -> component instanceof FolioChrome.CodeText));
             var copy = (AbstractButton) find(card, component -> component instanceof AbstractButton button
-                    && "Copy answer".equals(button.getAccessibleContext().getAccessibleName()));
+                    && "复制回答".equals(button.getAccessibleContext().getAccessibleName()));
             assertTrue(copy.isEnabled());
             copy.doClick();
             assertEquals(List.of(raw), copies);

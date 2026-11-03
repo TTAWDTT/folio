@@ -35,10 +35,10 @@ class FenceLineEndingTest {
             assertTrue(visible.contains(second));
             assertTrue(visible.contains(tail));
             List<AbstractButton> copies = components.stream().filter(AbstractButton.class::isInstance)
-                    .map(AbstractButton.class::cast).filter(button -> "Copy".equals(button.getToolTipText())).toList();
+                    .map(AbstractButton.class::cast).filter(button -> ("复制回答".equals(button.getToolTipText()) || "复制代码".equals(button.getToolTipText()))).toList();
             assertEquals(3, copies.size());
             copies.forEach(AbstractButton::doClick);
-            assertEquals(List.of(reply, first, second), copied);
+            assertEquals(List.of(first, second, reply), copied);
         });
     }
 
@@ -56,8 +56,8 @@ class FenceLineEndingTest {
             assertTrue(components.stream().anyMatch(component -> component instanceof JTextComponent text
                     && code.equals(text.getText())));
             components.stream().filter(AbstractButton.class::isInstance).map(AbstractButton.class::cast)
-                    .filter(button -> "Copy".equals(button.getToolTipText())).forEach(AbstractButton::doClick);
-            assertEquals(List.of(reply, code), copied);
+                    .filter(button -> ("复制回答".equals(button.getToolTipText()) || "复制代码".equals(button.getToolTipText()))).forEach(AbstractButton::doClick);
+            assertEquals(List.of(code, reply), copied);
         });
     }
 

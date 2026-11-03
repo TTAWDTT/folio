@@ -14,6 +14,14 @@ import java.util.concurrent.ExecutorService;
 
 @Service(Service.Level.APP)
 public final class ProviderAccess implements Disposable {
+    sealed interface KeyChange {
+        record Keep() implements KeyChange {}
+        record Replace(String value) implements KeyChange {
+            @Override public String toString() { return "Replace[redacted]"; }
+        }
+        record Remove() implements KeyChange {}
+    }
+
     enum Phase { LOADING, READY, SAVING, CLEARING, FAILED }
 
     record View(long revision, Phase phase, String warning) {}
@@ -100,6 +108,10 @@ public final class ProviderAccess implements Disposable {
         return view;
     }
 
+    synchronized ProviderConnection captureSaved() {
+        return capture(values.baseUrl(), values.modelName(), "");
+    }
+
     synchronized boolean hasKey(String endpoint) {
         return !key.isBlank() && origin(endpoint).equals(values.credentialOrigin());
     }
@@ -138,7 +150,12 @@ public final class ProviderAccess implements Disposable {
     }
 
     synchronized CompletableFuture<TaSettings.Values> save(String endpoint, String model, String typed) {
-        ProviderConnection input = new ProviderConnection(endpoint, model, typed);
+        return save(endpoint, model, typed == null || typed.isBlank() ? new KeyChange.Keep() : new KeyChange.Replace(typed));
+    }
+
+    synchronized CompletableFuture<TaSettings.Values> save(String endpoint, String model, KeyChange change) {
+        ProviderConnection input = new ProviderConnection(endpoint, model,
+                change instanceof KeyChange.Replace replace ? replace.value() : "");
         if (origin(input.baseUrl()).isEmpty()) {
             String warning = "Use an HTTP or HTTPS endpoint without URL credentials or fragments.";
             view = new View(view.revision() + 1, Phase.FAILED, warning);
@@ -151,7 +168,11 @@ public final class ProviderAccess implements Disposable {
             TaSettings.Values previous = settings.read();
             String stored;
             String binding;
-            if (decision != null) {
+            if (change instanceof KeyChange.Remove) {
+                credentials.write("");
+                stored = "";
+                binding = "";
+            } else if (decision != null) {
                 credentials.write(decision);
                 stored = decision;
                 binding = origin(input.baseUrl());

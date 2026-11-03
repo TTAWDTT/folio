@@ -1,5 +1,7 @@
 package cst3492.courseta.junitgen;
 
+import cst3492.courseta.CapturedCode;
+
 import com.intellij.ide.highlighter.JavaFileType;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.command.WriteCommandAction;
@@ -200,17 +202,21 @@ public final class GeneratedTest {
     }
 
     public VirtualFile write(Project project, VirtualFile directory) {
+        return write(project, directory, CapturedCode.detached("", directory));
+    }
+
+    public VirtualFile write(Project project, VirtualFile directory, CapturedCode captured) {
         if (project == null || project.isDisposed()) {
             throw new IllegalStateException("The target project is closed.");
         }
         if (ApplicationManager.getApplication().isDispatchThread()) {
-            return writeOnEdt(project, directory);
+            return writeOnEdt(project, directory, captured);
         }
         AtomicReference<VirtualFile> created = new AtomicReference<>();
         AtomicReference<RuntimeException> failure = new AtomicReference<>();
         ApplicationManager.getApplication().invokeAndWait(() -> {
             try {
-                created.set(writeOnEdt(project, directory));
+                created.set(writeOnEdt(project, directory, captured));
             } catch (RuntimeException error) {
                 failure.set(error);
             }
@@ -221,8 +227,10 @@ public final class GeneratedTest {
         return created.get();
     }
 
-    private VirtualFile writeOnEdt(Project project, VirtualFile directory) {
-        VirtualFile created = WriteCommandAction.writeCommandAction(project).withName("Write generated JUnit test").compute(() -> {
+    private VirtualFile writeOnEdt(Project project, VirtualFile directory, CapturedCode captured) {
+        VirtualFile created = WriteCommandAction.writeCommandAction(project).withName("写入生成的 JUnit 测试").compute(() -> {
+            captured.verifySource();
+            if (captured.testDirectory() != directory) throw new IllegalStateException("测试目标目录与捕获的目录不一致，请重新生成。");
             if (project.isDisposed() || directory == null || !directory.isValid() || !directory.isDirectory()) {
                 throw new IllegalStateException("The captured test directory is no longer available. Select the source again.");
             }

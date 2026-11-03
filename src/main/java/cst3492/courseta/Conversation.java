@@ -9,14 +9,28 @@ final class Conversation {
     static final int MAX_TURNS = 40;
     static final int CONTEXT_TURNS = 8;
     static final int CONTEXT_CHARACTERS = 8_000;
-    private final Deque<Turn> turns = new ArrayDeque<>();
+    private final List<Turn> turns = new ArrayList<>();
 
+    private final java.util.Map<Long, Turn> keyed = new java.util.HashMap<>();
     record Turn(String question, String answer) {}
 
+    void complete(long id, String question, String answer) {
+        Turn previous = keyed.remove(id);
+        if (previous != null && turns.contains(previous)) {
+            Turn replacement = new Turn(question, answer);
+            turns.set(turns.indexOf(previous), replacement);
+            keyed.put(id, replacement);
+        } else {
+            complete(question, answer);
+            keyed.put(id, turns.getLast());
+        }
+    }
+
     void complete(String question, String answer) {
-        turns.addLast(new Turn(question, answer));
+        turns.add(new Turn(question, answer));
         while (turns.size() > MAX_TURNS) {
-            turns.removeFirst();
+            Turn removed = turns.removeFirst();
+            keyed.values().removeIf(turn -> turn == removed);
         }
     }
 
@@ -41,5 +55,6 @@ final class Conversation {
 
     void clear() {
         turns.clear();
+        keyed.clear();
     }
 }

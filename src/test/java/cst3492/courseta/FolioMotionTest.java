@@ -73,13 +73,13 @@ class FolioMotionTest {
                 copy.getAccessibleContext().setAccessibleName("Copy answer");
                 copy.doClick(0);
                 assertEquals(1, copies.get());
-                assertEquals("Copied", copy.getToolTipText());
+                assertEquals("已复制", copy.getToolTipText());
                 assertEquals("Copy answer", copy.getAccessibleContext().getAccessibleName());
                 copy.doClick(0);
                 assertEquals(2, copies.get());
                 failed.doClick(0);
-                assertEquals("Copy failed. Try again.", failed.getToolTipText());
-                assertEquals("Copy failed. Try again.", failed.getAccessibleContext().getAccessibleDescription());
+                assertEquals("复制失败，请重试", failed.getToolTipText());
+                assertEquals("复制失败，请重试", failed.getAccessibleContext().getAccessibleDescription());
                 assertThrows(IllegalArgumentException.class, () -> unexpected.doClick(0));
                 FolioMotion.stopTree(panel, true);
                 panel.setVisible(false);
@@ -109,7 +109,7 @@ class FolioMotionTest {
             badge.setText("API key stored");
             assertEquals("API key stored", badge.getAccessibleContext().getAccessibleName());
             assertTrue(badge.getPreferredSize().width >= 26);
-            assertEquals("Settings", FolioChrome.gear(AllIcons.General.GearPlain)
+            assertEquals("设置", FolioChrome.gear(AllIcons.General.GearPlain)
                     .getAccessibleContext().getAccessibleName());
             button.getModel().setRollover(true);
             int hover = paintedPixel(button);

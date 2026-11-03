@@ -88,8 +88,7 @@ final class FolioChrome {
 
     static JButton gear(Icon icon) {
         JButton button = iconButton(icon);
-        button.setToolTipText("Settings");
-        button.getAccessibleContext().setAccessibleName("Settings");
+        describe(button, "设置");
         return button;
     }
 
@@ -100,7 +99,11 @@ final class FolioChrome {
     static final class CopyFailedException extends RuntimeException {}
 
     static JButton copyButton(Runnable copy) {
-        return new CopyButton(copy);
+        return new CopyButton(copy, "复制");
+    }
+
+    static JButton copyButton(String description, Runnable copy) {
+        return new CopyButton(copy, description);
     }
 
     private static class QuietButton extends JButton {
@@ -108,6 +111,7 @@ final class FolioChrome {
 
         QuietButton(String text, Icon icon, boolean primary) {
             super(text, icon);
+            if (icon != null && !text.isBlank()) describe(this, text);
             paint = new ButtonPaint(this, primary);
         }
 
@@ -193,6 +197,10 @@ final class FolioChrome {
         private boolean disposed;
 
         ModePopup(ActivationButton<PopupIntent> trigger, Runnable restoreInput) {
+            this(trigger, restoreInput, () -> {});
+        }
+
+        ModePopup(ActivationButton<PopupIntent> trigger, Runnable restoreInput, Runnable captureInput) {
             this.trigger = trigger;
             this.restoreInput = restoreInput;
             trigger.bind(() -> {
@@ -206,9 +214,17 @@ final class FolioChrome {
                     closePopup();
                     restoreInput.run();
                 } else {
+                    captureInput.run();
                     popup.show(trigger, 0, -popup.getPreferredSize().height - JBUI.scale(6));
                 }
             });
+            popup.getActionMap().put("cancel", new javax.swing.AbstractAction() {
+                @Override public void actionPerformed(java.awt.event.ActionEvent event) {
+                    closePopup();
+                    restoreInput.run();
+                }
+            });
+            popup.setBorder(JBUI.Borders.empty(6));
             popup.addPopupMenuListener(new PopupMenuListener() {
                 @Override
                 public void popupMenuWillBecomeVisible(PopupMenuEvent event) {
@@ -235,7 +251,21 @@ final class FolioChrome {
         JPopupMenu menu() { return popup; }
 
         void add(String label, Icon icon, Runnable action) {
-            JMenuItem item = new JMenuItem(label, icon);
+            JMenuItem item = new JMenuItem(label, icon) {
+                @Override protected void paintComponent(Graphics graphics) {
+                    if (isSelected()) {
+                        Graphics2D g = (Graphics2D) graphics.create();
+                        g.setColor(userFill());
+                        g.fillRoundRect(0, 0, getWidth(), getHeight(), JBUI.scale(10), JBUI.scale(10));
+                        g.dispose();
+                    }
+                    super.paintComponent(graphics);
+                    if (isSelected()) AllIcons.Actions.Checked.paintIcon(this, graphics, getWidth() - JBUI.scale(24), JBUI.scale(8));
+                }
+            };
+            item.setOpaque(false);
+            item.setBorder(JBUI.Borders.empty(7, 8));
+            item.setPreferredSize(new Dimension(JBUI.scale(176), JBUI.scale(32)));
             describe(item, label);
             item.addActionListener(event -> {
                 closePopup();
@@ -378,17 +408,17 @@ final class FolioChrome {
     }
 
     private static final class CopyButton extends QuietButton {
-        private final FolioMotion feedback = new FolioMotion(this, 0, value -> {
-            if (value >= 1) {
-                setIcon(AllIcons.Actions.Copy);
-                setToolTipText("Copy");
-            }
-        });
+        private final FolioMotion feedback;
 
-        CopyButton(Runnable copy) {
+        CopyButton(Runnable copy, String description) {
             super("", AllIcons.Actions.Copy, false);
-            setToolTipText("Copy");
-            getAccessibleContext().setAccessibleName("Copy");
+            feedback = new FolioMotion(this, 0, value -> {
+                if (value >= 1) {
+                    setIcon(AllIcons.Actions.Copy);
+                    setToolTipText(description);
+                }
+            });
+            describe(this, description);
             addActionListener(event -> {
                 boolean copied = true;
                 try {
@@ -397,7 +427,7 @@ final class FolioChrome {
                     copied = false;
                 }
                 setIcon(copied ? AllIcons.General.GreenCheckmark : AllIcons.General.Warning);
-                String outcome = copied ? "Copied" : "Copy failed. Try again.";
+                String outcome = copied ? "已复制" : "复制失败，请重试";
                 setToolTipText(outcome);
                 getAccessibleContext().setAccessibleDescription(outcome);
                 feedback.hold(copied ? 900 : 1500);
@@ -549,8 +579,8 @@ final class FolioChrome {
     }
 
     static class Reveal extends JPanel {
-        private final JComponent child;
-        final FolioMotion height = new FolioMotion(this, 0, value -> {
+        final JComponent child;
+        private final FolioMotion height = new FolioMotion(this, 0, value -> {
             revalidate();
             repaint();
         });
@@ -600,7 +630,6 @@ final class FolioChrome {
             field.addFocusListener(new FocusAdapter() {
                 @Override
                 public void focusGained(FocusEvent event) {
-                    height.settle();
                     resize(false);
                     repaint();
                 }
@@ -610,6 +639,32 @@ final class FolioChrome {
                     repaint();
                 }
             });
+        }
+
+        void controls(JComponent mode, JComponent send) {
+            child.removeAll();
+            child.setBorder(JBUI.Borders.empty(10, 10, 8, 8));
+            GridBagConstraints input = new GridBagConstraints();
+            input.gridx = 0;
+            input.gridy = 0;
+            input.gridwidth = 2;
+            input.weightx = 1;
+            input.weighty = 1;
+            input.fill = GridBagConstraints.BOTH;
+            input.insets = JBUI.insetsBottom(16);
+            child.add(scroll(field), input);
+            GridBagConstraints modes = new GridBagConstraints();
+            modes.gridx = 0;
+            modes.gridy = 1;
+            modes.weightx = 1;
+            modes.anchor = GridBagConstraints.WEST;
+            child.add(mode, modes);
+            GridBagConstraints action = new GridBagConstraints();
+            action.gridx = 1;
+            action.gridy = 1;
+            action.anchor = GridBagConstraints.EAST;
+            child.add(send, action);
+            child.setMinimumSize(new Dimension(1, JBUI.scale(100)));
         }
 
         void fitRows(int rows) {
@@ -932,6 +987,9 @@ final class FolioChrome {
         private String finalBody;
         private JButton answerCopy;
         private boolean selecting;
+        private Runnable reading = () -> {};
+        private final JPanel actions = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, JBUI.scale(4), 0));
+        private final JButton retry = iconButton(AllIcons.Actions.Refresh);
 
         AnswerCard(Consumer<CourseChunk> onSource, Consumer<String> onCopy) {
             super(new BorderLayout(0, JBUI.scale(4)));
@@ -951,6 +1009,7 @@ final class FolioChrome {
             references.addActionListener(event -> {
                 sourceReveal.reveal(references.isSelected(), EventQueue.getCurrentEvent() instanceof MouseEvent);
                 references.setIcon(UIManager.getIcon(references.isSelected() ? "Tree.expandedIcon" : "Tree.collapsedIcon"));
+                describe(references, references.isSelected() ? "收起课件引用" : "展开课件引用");
                 refresh();
             });
             referenceSlot.add(references, BorderLayout.NORTH);
@@ -958,19 +1017,19 @@ final class FolioChrome {
             add(bannerSlot, BorderLayout.NORTH);
             JBPanel<?> answer = new JBPanel<>(new BorderLayout(0, JBUI.scale(4)));
             answer.setOpaque(false);
-            JPanel head = new JPanel(new BorderLayout());
-            head.setOpaque(false);
-            head.add(mutedHeading("Folio"), BorderLayout.WEST);
             if (onCopy != null) {
-                answerCopy = copyButton(() -> onCopy.accept(rawAnswer));
+                answerCopy = copyButton("复制回答", () -> onCopy.accept(rawAnswer));
                 answerCopy.setEnabled(false);
-                answerCopy.getAccessibleContext().setAccessibleName("Copy answer");
+                describe(answerCopy, "复制回答");
                 answerCopy.getAccessibleContext().setAccessibleDescription("Available when the answer finishes.");
-                head.add(answerCopy, BorderLayout.EAST);
+                actions.add(answerCopy);
             }
-            answer.add(head, BorderLayout.NORTH);
+
             bodySlot.add(body, BorderLayout.CENTER);
-            body.addCaretListener(event -> SwingUtilities.invokeLater(this::formatWhenReleased));
+            body.addCaretListener(event -> {
+                if (event.getDot() != event.getMark()) reading.run();
+                SwingUtilities.invokeLater(this::formatWhenReleased);
+            });
             body.addFocusListener(new FocusAdapter() {
                 @Override
                 public void focusLost(FocusEvent event) {
@@ -992,7 +1051,103 @@ final class FolioChrome {
             answer.add(content, BorderLayout.CENTER);
             answer.add(activity, BorderLayout.SOUTH);
             add(answer, BorderLayout.CENTER);
-            add(referenceSlot, BorderLayout.SOUTH);
+            JPanel bottom = new JPanel(new BorderLayout(0, JBUI.scale(8)));
+            bottom.setOpaque(false);
+            bottom.add(referenceSlot, BorderLayout.CENTER);
+            actions.setOpaque(false);
+            describe(retry, "重新生成");
+            retry.setEnabled(false);
+            actions.add(retry);
+            bottom.add(actions, BorderLayout.SOUTH);
+            add(bottom, BorderLayout.SOUTH);
+        }
+
+        void onRetry(Runnable action) { retry.addActionListener(event -> action.run()); }
+        void reading(Runnable action) { reading = action; }
+        void begin() {
+            state = State.RETRIEVING;
+            provisional.setLength(0);
+            rawAnswer = "";
+            body.setBody("");
+            bodySlot.removeAll();
+            bodySlot.add(body, BorderLayout.CENTER);
+            activity.setVisible(true);
+            retry.setEnabled(false);
+            retry.setToolTipText("正在重新生成");
+            bannerSlot.removeAll();
+            sources.removeAll();
+            references.setVisible(false);
+            Component offered = ((BorderLayout) referenceSlot.getLayout()).getLayoutComponent(BorderLayout.SOUTH);
+            if (offered != null) referenceSlot.remove(offered);
+            if (answerCopy != null) answerCopy.setEnabled(false);
+            refresh();
+        }
+        void stopped() {
+            String received = provisional.toString();
+            showAnswer(received, null);
+            activity.setText("已停止");
+            activity.setVisible(true);
+            state = State.STOPPED;
+        }
+        void fail(String reason) {
+            showAnswer(provisional.toString(), null);
+            activity.setText(reason);
+            activity.setVisible(true);
+        }
+        void showExercises(cst3492.courseta.drill.Drill.Result result) {
+            showAnswer(result.evidence().text(), result.evidence());
+            if (result.questions().isEmpty()) return;
+            Column exercises = new Column();
+            int number = 0;
+            for (var exercise : result.questions()) {
+                JPanel row = new JPanel(new BorderLayout(0, JBUI.scale(6)));
+                row.setOpaque(false);
+                row.add(new WrapText(++number + ". " + exercise.question()), BorderLayout.NORTH);
+                JPanel explanation = new JPanel(new BorderLayout());
+                explanation.setOpaque(false);
+                explanation.add(new WrapText(exercise.explanation()), BorderLayout.CENTER);
+                explanation.setVisible(false);
+                JButton toggle = secondary("展开解析", AllIcons.Actions.Expandall);
+                describe(toggle, "展开解析");
+                toggle.addActionListener(event -> {
+                    explanation.setVisible(!explanation.isVisible());
+                    toggle.setText(explanation.isVisible() ? "收起解析" : "展开解析");
+                    describe(toggle, toggle.getText());
+                    refresh();
+                });
+                JPanel detail = new JPanel(new BorderLayout(0, JBUI.scale(4)));
+                detail.setOpaque(false);
+                detail.add(toggle, BorderLayout.NORTH);
+                detail.add(explanation, BorderLayout.CENTER);
+                row.add(detail, BorderLayout.CENTER);
+                exercises.addRow(row);
+            }
+            bodySlot.removeAll();
+            watchSelection(exercises);
+            bodySlot.add(exercises, BorderLayout.CENTER);
+            refresh();
+        }
+
+        void failureReason(String reason) {
+            activity.setText(reason);
+            activity.setVisible(true);
+        }
+        void showContent(JComponent component) {
+            showAnswer("", null);
+            if (answerCopy != null) {
+                answerCopy.setEnabled(false);
+                answerCopy.setToolTipText("复制回答：请使用候选旁的复制操作");
+            }
+            bodySlot.removeAll();
+            bodySlot.add(component, BorderLayout.CENTER);
+            refresh();
+        }
+        void offerPreview(Runnable action) {
+            JButton preview = secondary("查看完整测试预览", AllIcons.Actions.Preview);
+            describe(preview, "查看完整测试预览");
+            preview.addActionListener(event -> action.run());
+            referenceSlot.add(preview, BorderLayout.SOUTH);
+            refresh();
         }
 
         @Override
@@ -1010,6 +1165,8 @@ final class FolioChrome {
             activity.setVisible(false);
             rawAnswer = text == null ? "" : text;
             state = State.FINAL_RAW;
+            retry.setEnabled(true);
+            describe(retry, "重新生成");
             if (answerCopy != null) {
                 answerCopy.setEnabled(true);
                 answerCopy.getAccessibleContext().setAccessibleDescription("Copy the completed answer.");
@@ -1040,8 +1197,8 @@ final class FolioChrome {
             body.setBody(value);
             formatWhenReleased();
             references.setVisible(!hits.isEmpty());
-            references.setText(hits.size() + (hits.size() == 1 ? " course reference" : " course references"));
-            references.getAccessibleContext().setAccessibleName(references.getText());
+            references.setText("课件 · " + hits.size() + " 处引用");
+            describe(references, "展开课件引用");
             if (!hits.isEmpty()) {
                 addSourceRow(mutedHeading(answer.evidence() == Answer.Evidence.INLINE
                         ? "Sources cited in the reply" : "Retrieved material"), 0, JBUI.insets(0, 0, 2, 0));
@@ -1084,9 +1241,18 @@ final class FolioChrome {
             }
             state = State.FINAL_FORMATTED;
             bodySlot.removeAll();
-            bodySlot.add(formattedBody(finalBody), BorderLayout.CENTER);
+            JComponent formatted = formattedBody(finalBody);
+            watchSelection(formatted);
+            bodySlot.add(formatted, BorderLayout.CENTER);
             content.resize(true);
             refresh();
+        }
+
+        private void watchSelection(Component component) {
+            if (component instanceof WrapText text) text.addCaretListener(event -> {
+                if (event.getDot() != event.getMark()) reading.run();
+            });
+            if (component instanceof Container container) for (Component child : container.getComponents()) watchSelection(child);
         }
 
         void stopMotion() {
@@ -1098,7 +1264,8 @@ final class FolioChrome {
 
         void offerTest(Runnable action) {
             JButton generate = iconButton(AllIcons.Nodes.JunitTestMark);
-            generate.setText("Generate a test");
+            generate.setText("生成测试");
+            describe(generate, "生成测试");
             generate.setHorizontalAlignment(SwingConstants.LEADING);
             generate.addActionListener(event -> action.run());
             referenceSlot.add(generate, BorderLayout.SOUTH);
@@ -1155,8 +1322,7 @@ final class FolioChrome {
                 head.add(muted(text.substring(fenceStart + 3, headerEnd).strip()), BorderLayout.WEST);
                 String codeText = text.substring(codeStart, lineStart);
                 if (onCopy != null) {
-                    JButton copy = copyButton(() -> onCopy.accept(codeText));
-                    copy.getAccessibleContext().setAccessibleName("Copy code");
+                    JButton copy = copyButton("复制代码", () -> onCopy.accept(codeText));
                     head.add(copy, BorderLayout.EAST);
                 }
                 code.add(head, BorderLayout.NORTH);

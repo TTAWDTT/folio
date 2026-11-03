@@ -56,7 +56,7 @@ class FolioSidebarTest {
                 assertNoMotion(card);
                 card.showAnswer("done", null);
                 var copy = (AbstractButton) find(card, component -> component instanceof AbstractButton button
-                        && "Copy answer".equals(button.getAccessibleContext().getAccessibleName()));
+                        && "复制回答".equals(button.getAccessibleContext().getAccessibleName()));
                 assertTrue(copy.isEnabled());
                 layout.show(deck, "other");
                 assertNoMotion(card);
@@ -92,13 +92,13 @@ class FolioSidebarTest {
             assertEquals(family, code.getFont().getFamily());
             List<AbstractButton> copyButtons = new ArrayList<>();
             collect(card, AbstractButton.class, copyButtons);
-            copyButtons.removeIf(button -> !"Copy".equals(button.getToolTipText()));
+            copyButtons.removeIf(button -> !("复制回答".equals(button.getToolTipText()) || "复制代码".equals(button.getToolTipText())));
             assertEquals(2, copyButtons.size());
             copyButtons.forEach(AbstractButton::doClick);
-            assertEquals(List.of(raw, "int total = 0;\n"), copies);
+            assertEquals(List.of("int total = 0;\n", raw), copies);
             AbstractButton references = (AbstractButton) find(card, component -> component instanceof AbstractButton button
-                    && "1 course reference".equals(button.getText()));
-            assertEquals(references.getText(), references.getAccessibleContext().getAccessibleName());
+                    && "课件 · 1 处引用".equals(button.getText()));
+            assertEquals("展开课件引用", references.getAccessibleContext().getAccessibleName());
             references.getActionMap().get("pressed").actionPerformed(new ActionEvent(references, 0, ""));
             references.getActionMap().get("released").actionPerformed(new ActionEvent(references, 0, ""));
             assertTrue(references.isSelected());
@@ -156,11 +156,12 @@ class FolioSidebarTest {
                 var card = (FolioChrome.AnswerCard) find(ref.get(), component -> component instanceof FolioChrome.AnswerCard);
                 assertNotNull(card);
                 assertFalse(card.isOpaque());
-                JButton stop = (JButton) find(ref.get(), component -> component instanceof JButton button && "Stop".equals(button.getText()));
+                JButton stop = (JButton) find(ref.get(), component -> component instanceof JButton button && "停止生成".equals(button.getAccessibleContext().getAccessibleName()));
                 stop.doClick();
                 delivery.drain();
                 assertNoMotion(card);
-                assertTrue(text(card).contains("Cancelled."));
+                assertTrue(text(card).contains("LIVE_PROVIDER_TEXT"));
+                assertNotNull(find(card, component -> component instanceof javax.swing.JLabel label && "已停止".equals(label.getText())));
                 callback.get().accept("AFTER_STOP");
                 delivery.drain();
                 assertFalse(text(card).contains("AFTER_STOP"));
@@ -197,7 +198,7 @@ class FolioSidebarTest {
                 assertFalse(((JButton) find(panel, component -> component instanceof JButton button
                         && "Write test file".equals(button.getText()))).isEnabled());
                 JButton generate = (JButton) find(panel, component -> component instanceof JButton button
-                        && "Generate a test".equals(button.getText()));
+                        && "生成测试".equals(button.getText()));
                 assertNotNull(generate);
                 panel.generateFromSelection("class UnrelatedSource {}", new LightVirtualFile("other-tests"));
                 panel.setScenarioText("returns zero");
@@ -239,16 +240,17 @@ class FolioSidebarTest {
                 workers.drain();
                 delivery.drain();
                 assertEquals(1, prompts.size());
-                ((JMenuItem) panel.modeMenu().getComponent(3)).doClick();
+                ((JMenuItem) panel.modeMenu().getComponent(1)).doClick();
                 var composer = (FolioChrome.PromptArea) find(panel, component -> component instanceof FolioChrome.PromptArea);
                 composer.setFont(composer.getFont().deriveFont(Font.PLAIN, 19));
+                ((AbstractButton) find(panel, component -> component instanceof AbstractButton action && "移除代码上下文".equals(action.getAccessibleContext().getAccessibleName()))).doClick(0);
                 composer.setText("class PastedCode {}\n".repeat(9));
                 assertEquals(6, composer.getRows());
                 composer.getActionMap().get("folio-send").actionPerformed(new ActionEvent(composer, 0, ""));
                 workers.drain();
                 delivery.drain();
                 assertEquals(2, prompts.size());
-                assertTrue(prompts.getLast().contains("exactly three short questions"));
+                assertTrue(prompts.getLast().contains("恰好三道练习题"));
                 assertTrue(prompts.getLast().contains("PastedCode"));
             } finally {
                 panel.dispose();
@@ -257,7 +259,7 @@ class FolioSidebarTest {
     }
 
     private static FolioPanel panel(FolioTasksTest.Queue workers, FolioTasksTest.Queue delivery, ChatClient client) {
-        FolioPanel panel = new FolioPanel(null, CourseLibrary.inMemory(), ProviderAccess.inMemory(), workers, delivery, client);
+        FolioPanel panel = new FolioPanel(null, CourseLibrary.inMemory(), savedProvider(), workers, delivery, client);
         workers.drain();
         delivery.drain();
         ((JBPasswordField) find(panel, component -> component instanceof JBPasswordField)).setText("fixture-key");
@@ -313,4 +315,11 @@ class FolioSidebarTest {
         }
         return null;
     }
+    private static ProviderAccess savedProvider() {
+        ProviderAccess provider = ProviderAccess.inMemory();
+        provider.load().join();
+        provider.save(TaSettings.DEFAULT_BASE_URL, TaSettings.DEFAULT_MODEL, "fixture-key").join();
+        return provider;
+    }
+
 }

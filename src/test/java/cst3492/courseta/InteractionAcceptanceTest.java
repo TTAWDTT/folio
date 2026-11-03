@@ -45,7 +45,7 @@ class InteractionAcceptanceTest {
             List<String> copied = new ArrayList<>();
             var card = new FolioChrome.AnswerCard(chunk -> {}, copied::add);
             AbstractButton copy = (AbstractButton) find(card, component -> component instanceof AbstractButton button
-                    && "Copy".equals(button.getToolTipText()));
+                    && "复制回答".equals(button.getToolTipText()));
             assertNotNull(copy);
             assertFalse(copy.isEnabled(), "Pending Copy must not replace the clipboard with an empty string");
             card.update(List.of(new Asker.Update.Delta("Still arriving")));
@@ -128,7 +128,7 @@ class InteractionAcceptanceTest {
         var chunk = new CourseChunk("one", "lecture.pdf", ScopeKind.PAGE, 7, "Selectable course excerpt");
         card.showAnswer("Answer [1]", new Answer(Answer.Kind.CITED, "Answer [1]", List.of(chunk), true, Answer.Evidence.INLINE));
         AbstractButton references = (AbstractButton) find(card, component -> component instanceof AbstractButton button
-                && "1 course reference".equals(button.getText()));
+                && "课件 · 1 处引用".equals(button.getText()));
         assertNotNull(references);
         references.doClick();
         return card;

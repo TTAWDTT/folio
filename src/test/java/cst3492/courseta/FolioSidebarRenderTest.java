@@ -69,7 +69,7 @@ class FolioSidebarRenderTest {
         };
         SwingUtilities.invokeAndWait(() -> {
             applyPalette(false, originalPalette);
-            FolioPanel panel = new FolioPanel(null, library, ProviderAccess.inMemory(), workers, delivery, client);
+            FolioPanel panel = new FolioPanel(null, library, savedProvider(), workers, delivery, client);
             workers.drain();
             delivery.drain();
             ((JBPasswordField) find(panel, component -> component instanceof JBPasswordField)).setText("fixture-key");
@@ -92,7 +92,7 @@ class FolioSidebarRenderTest {
                 delivery.drain();
                 render(panel, "collapsed-360", 360);
                 AbstractButton references = (AbstractButton) find(panel, component -> component instanceof AbstractButton button
-                        && "1 course reference".equals(button.getText()));
+                        && "课件 · 1 处引用".equals(button.getText()));
                 assertNotNull(references);
                 references.doClick();
                 render(panel, "expanded-360", 360);
@@ -187,4 +187,11 @@ class FolioSidebarRenderTest {
         }
         return null;
     }
+    private static ProviderAccess savedProvider() {
+        ProviderAccess provider = ProviderAccess.inMemory();
+        provider.load().join();
+        provider.save(TaSettings.DEFAULT_BASE_URL, TaSettings.DEFAULT_MODEL, "fixture-key").join();
+        return provider;
+    }
+
 }

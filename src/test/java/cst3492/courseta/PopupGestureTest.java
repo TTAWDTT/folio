@@ -98,6 +98,36 @@ class PopupGestureTest {
         });
     }
 
+    @Test
+    void keyboardCancelRestoresInputButAnOutsideDismissDoesNot() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            PopupFactory previous = PopupFactory.getSharedInstance();
+            PopupFactory.setSharedInstance(new PopupFactory() {
+                @Override public Popup getPopup(Component owner, Component contents, int x, int y) {
+                    return new Popup() { public void show() {} public void hide() {} };
+                }
+            });
+            AtomicInteger restored = new AtomicInteger();
+            Anchor button = new Anchor();
+            button.setSize(90, 30);
+            var popup = new FolioChrome.ModePopup(button, restored::incrementAndGet);
+            popup.add("问答", AllIcons.Actions.Find, () -> {});
+            try {
+                button.doClick(0);
+                assertTrue(popup.menu().isVisible());
+                popup.menu().getActionMap().get("cancel").actionPerformed(new java.awt.event.ActionEvent(popup.menu(), 0, ""));
+                assertFalse(popup.menu().isVisible());
+                assertEquals(1, restored.get());
+                button.doClick(0);
+                popup.menu().setVisible(false);
+                assertEquals(1, restored.get());
+            } finally {
+                popup.close();
+                PopupFactory.setSharedInstance(previous);
+            }
+        });
+    }
+
     private static void click(Anchor button, boolean consumed, boolean dragOut) throws Exception {
         MouseEvent press = mouse(button, MouseEvent.MOUSE_PRESSED, 5, 5);
         if (consumed) press.consume();

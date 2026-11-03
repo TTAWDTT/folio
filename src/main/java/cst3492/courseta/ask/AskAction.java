@@ -13,6 +13,7 @@ import com.intellij.psi.PsiMethod;
 import com.intellij.psi.util.PsiTreeUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import cst3492.courseta.FolioPanels;
+import cst3492.courseta.CapturedCode;
 import org.jetbrains.annotations.NotNull;
 
 public final class AskAction extends AnAction {
@@ -31,7 +32,7 @@ public final class AskAction extends AnAction {
         VirtualFile file = event.getData(CommonDataKeys.VIRTUAL_FILE);
         boolean javaSource = editor != null && file != null && "java".equalsIgnoreCase(file.getExtension());
         String source = javaSource ? editor.getDocument().getText() : "";
-        VirtualFile directory = javaSource ? file.getParent() : null;
+        CapturedCode captured = javaSource ? CapturedCode.capture(editor, file, source) : CapturedCode.detached(source, null);
         ToolWindow window = ToolWindowManager.getInstance(event.getProject()).getToolWindow("Folio");
         if (window == null) {
             return;
@@ -39,8 +40,8 @@ public final class AskAction extends AnAction {
         window.activate(() -> {
             var panel = FolioPanels.get(event.getProject());
             if (panel != null) {
-                String question = selection.isBlank() ? "Explain this." : "Explain the selected code.";
-                panel.ask(question, selection, source, directory);
+                String question = selection.isBlank() ? "解释这段代码。" : "解释选中的代码。";
+                panel.ask(question, selection, captured);
             }
         }, true);
     }

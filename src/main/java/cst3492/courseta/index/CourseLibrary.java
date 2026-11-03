@@ -82,6 +82,10 @@ public final class CourseLibrary {
     }
 
     public ImportResult replace(List<Path> files, BooleanSupplier cancelled) throws Exception {
+        return replace(files, cancelled, path -> {});
+    }
+
+    public ImportResult replace(List<Path> files, BooleanSupplier cancelled, java.util.function.Consumer<Path> progress) throws Exception {
         List<Path> inputs = List.copyOf(files);
         Objects.requireNonNull(cancelled, "cancelled");
         if (inputs.isEmpty()) {
@@ -95,6 +99,7 @@ public final class CourseLibrary {
         for (Path input : inputs) {
             checkCancelled(cancelled);
             Path file = input.toAbsolutePath().normalize();
+            progress.accept(file);
             String source = file.toString();
             if (prepared.containsKey(source)) {
                 throw new IllegalArgumentException("The import contains the same source twice: " + source);

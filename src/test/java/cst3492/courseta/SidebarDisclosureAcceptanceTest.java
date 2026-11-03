@@ -29,7 +29,7 @@ class SidebarDisclosureAcceptanceTest {
             assertNotNull(excerpt, "Collapsing references must keep the source excerpt available");
             assertFalse(visibleWithin(excerpt, card), "Course excerpts must start collapsed");
             AbstractButton disclosure = (AbstractButton) find(card, component -> component instanceof AbstractButton button
-                    && button.getText() != null && button.getText().toLowerCase().matches(".*(reference|source).*"));
+                    && "展开课件引用".equals(button.getAccessibleContext().getAccessibleName()));
             assertNotNull(disclosure, "References need an operable disclosure control");
             disclosure.doClick();
             assertTrue(visibleWithin(excerpt, card), "Opening references must reveal the retained excerpt");
@@ -47,8 +47,7 @@ class SidebarDisclosureAcceptanceTest {
             var source = new CourseChunk("one", "/course/lecture.pdf", ScopeKind.PAGE, 7, "excerpt");
             card.showAnswer(answer, new Answer(Answer.Kind.CITED, answer, List.of(source), true, Answer.Evidence.INLINE));
             AbstractButton copy = (AbstractButton) find(card, component -> component instanceof AbstractButton button
-                    && ((button.getToolTipText() != null && button.getToolTipText().toLowerCase().contains("copy"))
-                    || (button.getText() != null && button.getText().toLowerCase().contains("copy"))));
+                    && "复制回答".equals(button.getAccessibleContext().getAccessibleName()));
             assertNotNull(copy);
             copy.doClick();
             assertEquals(answer, copied.get());

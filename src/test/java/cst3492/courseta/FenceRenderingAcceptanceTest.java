@@ -49,7 +49,7 @@ class FenceRenderingAcceptanceTest {
 
     private static AbstractButton copy(Component root) {
         return (AbstractButton) find(root, component -> component instanceof AbstractButton button
-                && "Copy".equals(button.getToolTipText()));
+                && "复制回答".equals(button.getToolTipText()));
     }
 
     private static Component find(Component root, Predicate<Component> match) {
