@@ -205,7 +205,7 @@ class AskerTest {
         assertFalse(answer.text().contains("[1]"));
         assertFalse(answer.text().contains("lecture-"));
         assertTrue(systemPrompt.get().contains("general knowledge"));
-        assertTrue(Answer.UNGROUNDED.contains("isn't grounded in course files"));
+        assertTrue(Answer.UNGROUNDED.contains("没有落在课件上"));
         assertTrue(Answer.UNGROUNDED.contains(Answer.GENERAL_SENTENCE));
     }
 

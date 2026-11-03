@@ -12,7 +12,7 @@ const draft = z.strictObject({ text, dot: number, mark: number, revision: number
 const citation = z.strictObject({ number: positive, title: text, location: text, excerpt: text });
 const evidence = z.enum(['GENERAL', 'INLINE', 'RETRIEVED', 'INVALID', 'AMBIGUOUS', 'CONFIGURATION']);
 const body = z.discriminatedUnion('kind', [
-  z.strictObject({ kind: z.literal('stream'), phase: text, text }),
+  z.strictObject({ kind: z.literal('stream'), phase: text, reasoning: text.optional(), text }),
   z.strictObject({ kind: z.literal('answer'), raw: text, evidence, citations: z.array(citation) }),
   z.strictObject({ kind: z.literal('practice'), raw: text, evidence, citations: z.array(citation), exercises: z.array(z.strictObject({ question: text, explanation: text })).length(3) }),
   z.strictObject({ kind: z.literal('test'), raw: text, code: text.nullable(), source: text, target: text, problem: text.nullable() }),

@@ -56,7 +56,7 @@ svg { flex: 0 0 auto; }
 .turn { min-width: 0; margin-bottom: 26px; overflow-wrap: anywhere; }
 .user-row { position: relative; display: flex; flex-direction: column; align-items: flex-end; margin: 0 0 26px 20px; }
 .user-message { max-width: 100%; white-space: pre-wrap; padding: 7px 11px; background: var(--folio-soft); border-radius: 10px 10px 3px 10px; line-height: 1.65; }
-.user-row > .icon-button { position: absolute; right: 0; bottom: -26px; opacity: 0; }
+.user-row > .icon-button { position: absolute; right: 0; bottom: -26px; opacity: .7; }
 .user-row:hover > .icon-button, .user-row:focus-within > .icon-button { opacity: 1; }
 .answer { min-width: 0; user-select: text; }
 .markdown { font-weight: 400; min-width: 0; line-height: 1.75; }
@@ -78,7 +78,13 @@ svg { flex: 0 0 auto; }
 .code-block code { font-family: inherit; }
 .answer-tools { display: flex; gap: 3px; margin-top: 9px; align-items: center; }
 .stream-status { display: flex; align-items: center; gap: 6px; color: var(--folio-muted); font-size: .9rem; margin-bottom: 8px; }
-.activity-dot { width: 5px; height: 5px; background: var(--folio-accent); border-radius: 50%; }
+.activity-dot { width: 7px; height: 7px; background: var(--folio-accent); border-radius: 50%; animation: folio-pulse 1s ease-in-out infinite; }
+@keyframes folio-pulse { 50% { opacity: .2; } }
+.thinking { margin: 0 0 10px; border-left: 2px solid var(--folio-border); padding: 2px 0 2px 10px; color: var(--folio-muted); }
+.thinking summary { cursor: pointer; font-size: .9rem; }
+.thinking-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .9rem; line-height: 1.6; margin-top: 6px; }
+.notice { flex: 0 0 auto; padding: 5px 10px; font-size: .9rem; border-bottom: 1px solid var(--folio-border); color: var(--folio-warning); overflow-wrap: anywhere; }
+.notice.info { color: var(--folio-muted); }
 .stream-text { white-space: pre-wrap; line-height: 1.75; overflow-wrap: anywhere; }
 .muted { color: var(--folio-muted); font-size: .9rem; line-height: 1.6; }
 .evidence { margin-top: 9px; }
@@ -126,7 +132,7 @@ svg { flex: 0 0 auto; }
 .context-chip { display: flex; align-items: center; gap: 5px; margin: 2px 4px 0; color: var(--folio-muted); font-size: .85rem; }
 .context-chip > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
 .context-chip .icon-button { width: 22px; height: 22px; min-width: 22px; min-height: 22px; }
-.notice { flex: 0 0 auto; padding: 5px 10px; font-size: .9rem; border-bottom: 1px solid var(--folio-border); color: var(--folio-warning); overflow-wrap: anywhere; }
+.page-intro, .empty-files, .notice, .markdown, .user-message { overflow-wrap: anywhere; }
 .draft-conflict { margin-bottom: 6px; padding: 8px; border: 1px solid var(--folio-warning); border-radius: 7px; font-size: .9rem; }
 .draft-conflict p { margin: 0 0 6px; }
 .composer-problem { color: var(--folio-danger); font-size: .85rem; margin: 0 0 4px; }

@@ -34,7 +34,7 @@ export function Settings({ provider, edit, bridge }: { provider: Provider; edit:
   }, [provider, saving, revision, bridge]);
   const cancel = () => { setKey(''); setShowKey(false); void bridge.command({ kind: 'cancelSettings', edit }); };
   return <section className="aux-page settings-page" aria-label="连接设置">
-    <p className="page-intro">设置在当前 IDE 的项目间共享。</p>
+    <p className="page-intro">设置在当前 IDE 的项目间共享。首次保存 Key 时，系统可能会要求为钥匙串设置密码。</p>
     <form autoComplete="off" onSubmit={event => {
       event.preventDefault();
       if (saving !== null && revision === saving) return;

@@ -11,7 +11,7 @@ final class FolioView {
     record Citation(int number, String title, String location, String excerpt) {}
     record Exercise(String question, String explanation) {}
     sealed interface Body {
-        record Stream(String phase, String text) implements Body {}
+        record Stream(String phase, String reasoning, String text) implements Body {}
         record Answer(String raw, String evidence, List<Citation> citations) implements Body {}
         record Practice(String raw, String evidence, List<Citation> citations, List<Exercise> exercises) implements Body {}
         record Test(String raw, String code, String source, String target, String problem) implements Body {}

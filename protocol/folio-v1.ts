@@ -5,7 +5,7 @@ export type Draft = DraftValue & { revision: number; epoch: number; context: str
 export type Citation = { number: number; title: string; location: string; excerpt: string };
 export type Evidence = 'GENERAL' | 'INLINE' | 'RETRIEVED' | 'INVALID' | 'AMBIGUOUS' | 'CONFIGURATION';
 export type Body =
-  | { kind: 'stream'; phase: string; text: string }
+  | { kind: 'stream'; phase: string; reasoning?: string; text: string }
   | { kind: 'answer'; raw: string; evidence: Evidence; citations: Citation[] }
   | { kind: 'practice'; raw: string; evidence: Evidence; citations: Citation[]; exercises: { question: string; explanation: string }[] }
   | { kind: 'test'; raw: string; code: string | null; source: string; target: string; problem: string | null }
