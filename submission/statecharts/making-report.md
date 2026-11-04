@@ -1,7 +1,7 @@
 # Making
 
-TLC reached 11 states and 12 steps. The chart draws 11 states and 11 arrows.
+TLC reached 13 states and 13 steps. The chart draws 13 states and 12 arrows.
 The view hides 1 steps, so the chart does not draw them.
 
 ## Rules that hold
-TypeOK, NoDrawingBeforeRestate, AskedBeforeWeAnswer, NoProofBeforeOurEdit, NoUiBeforeProof, NoDeadlock
+TypeOK, AskedBeforeWeAnswer, NoSkillBeforeOurEdit, NoBuildBeforeSkill, NoProofBeforeBuild, NoClickBeforeChange, NoDeadlock

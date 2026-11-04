@@ -300,43 +300,50 @@ def _notes(slide, text):
 
 
 def draw_making_board(path: Path) -> None:
-    """Landscape telling of the checked making chart, filling a 16:9 slide."""
-    width, height = 2600, 1440
+    """The making sequence in the user's own order, laid out as two full rows."""
+    width, height = 2600, 1500
     image = Image.new("RGB", (width, height), PAPER)
     draw = ImageDraw.Draw(image)
     fills = {
-        "Read": (0xD7, 0xE4, 0xF2),
-        "Decide": (0xF3, 0xE0, 0xD2),
+        "Send": (0xD7, 0xE4, 0xF2),
+        "Restate": (0xD7, 0xE4, 0xF2),
+        "Divide": (0xF3, 0xE0, 0xD2),
+        "Ask": (0xF3, 0xE0, 0xD2),
+        "Answer": (0xF3, 0xE0, 0xD2),
         "Draw": (0xE4, 0xDC, 0xF2),
+        "Edit": (0xE4, 0xDC, 0xF2),
+        "Skill": (0xD5, 0xE8, 0xE4),
+        "Build": (0xD5, 0xE8, 0xE4),
         "Prove": (0xD5, 0xE8, 0xE4),
-        "Shape": (0xEF, 0xE4, 0xD4),
-        "Phone": (0xF6, 0xDC, 0xE8),
+        "Notes": (0xEF, 0xE4, 0xD4),
+        "Click": (0xF6, 0xDC, 0xE8),
     }
     top = [
-        ("Read", "Brief", "in hand"),
-        ("Read", "Brief", "restated"),
-        ("Decide", "Waiting", "for us"),
-        ("Decide", "Decisions", "made"),
-        ("Draw", "Drawings", "ready"),
-        ("Draw", "Drawings", "accepted"),
+        ("Send", "Send the brief", "“restate it…”"),
+        ("Restate", "Cursor", "restates it"),
+        ("Divide", "Points and", "modules"),
+        ("Ask", "Cursor asks", "us to decide"),
+        ("Answer", "We", "answer"),
+        ("Draw", "/architect", "/statechart"),
     ]
     bottom = [
-        ("Prove", "Verify skill", "written"),
-        ("Prove", "Backend", "proven"),
-        ("Shape", "Window notes", "given"),
-        ("Shape", "Window clicked", "through"),
-        ("Phone", "Reviewed", "on a phone"),
+        ("Edit", "Small", "edits"),
+        ("Skill", "Verify-skill", "for this project"),
+        ("Build", "Code follows", "the architecture"),
+        ("Prove", "Skill is run", "backend works"),
+        ("Notes", "Our UI notes", "Cursor changes it"),
+        ("Click", "Computer use", "screenshots"),
     ]
-    box_w, box_h, gap = 380, 430, 44
+    box_w, box_h, gap = 380, 400, 44
     top_w = len(top) * box_w + (len(top) - 1) * gap
     left = (width - top_w) // 2
-    y1, y2 = 36, 860
+    y1, y2 = 28, 820
 
     def rounded(x, y, phase, a, b):
         draw.rounded_rectangle((x, y, x + box_w, y + box_h), radius=28, fill=fills[phase], outline=LINE, width=4)
         draw.text((x + 28, y + 36), phase.upper(), font=font(26, True), fill=BURG)
-        draw.text((x + 28, y + 150), a, font=font(48, True), fill=INK)
-        draw.text((x + 28, y + 220), b, font=font(48, True), fill=INK)
+        draw.text((x + 28, y + 140), a, font=font(42, True), fill=INK)
+        draw.text((x + 28, y + 200), b, font=font(42, True), fill=INK)
 
     def shaft(x1, y1, x2, y2):
         draw.line((x1, y1, x2, y2), fill=BURG, width=6)
@@ -358,16 +365,12 @@ def draw_making_board(path: Path) -> None:
     for i, (phase, a, b) in enumerate(bottom):
         rounded(left + i * (box_w + gap), y2, phase, a, b)
 
-    for i in range(len(top) - 1):
-        x1 = left + i * (box_w + gap) + box_w
-        mid_y = y1 + box_h / 2
-        shaft(x1 + 4, mid_y, x1 + gap - 18, mid_y)
-        head(x1 + gap - 2, mid_y, "right")
-    for i in range(len(bottom) - 1):
-        x1 = left + i * (box_w + gap) + box_w
-        mid_y = y2 + box_h / 2
-        shaft(x1 + 4, mid_y, x1 + gap - 18, mid_y)
-        head(x1 + gap - 2, mid_y, "right")
+    for row_y, count in ((y1, len(top)), (y2, len(bottom))):
+        for i in range(count - 1):
+            x1 = left + i * (box_w + gap) + box_w
+            mid_y = row_y + box_h / 2
+            shaft(x1 + 4, mid_y, x1 + gap - 18, mid_y)
+            head(x1 + gap - 2, mid_y, "right")
 
     last = left + 5 * (box_w + gap)
     drop_x = last + box_w / 2
@@ -377,19 +380,11 @@ def draw_making_board(path: Path) -> None:
     shaft(drop_x, rail_y, into_x, rail_y)
     shaft(into_x, rail_y, into_x, y2 - 20)
     head(into_x, y2 - 2, "down")
-    caption("writes the verify skill", (drop_x + into_x) / 2, rail_y - 48)
+    caption("we review, then small edits", (drop_x + into_x) / 2, rail_y - 46)
 
-    notes_x = left + 2 * (box_w + gap)
-    click_x = left + 3 * (box_w + gap)
-    arch_y = y2 - 78
-    right_leg = click_x + box_w * 0.78
-    left_leg = notes_x + box_w * 0.22
-    shaft(right_leg, y2 - 2, right_leg, arch_y)
-    shaft(right_leg, arch_y, left_leg, arch_y)
-    shaft(left_leg, arch_y, left_leg, y2 - 20)
-    head(left_leg, y2 - 2, "down")
-    caption("another note", (left_leg + right_leg) / 2, arch_y - 46)
-
+    banner = "Cloud agents do every step. You read each result on a phone and reply."
+    face = font(32, True)
+    draw.text(((width - face.getlength(banner)) / 2, height - 70), banner, font=face, fill=BURG)
     image.save(path)
 
 
@@ -463,7 +458,7 @@ def build_pptx(path: Path) -> None:
     _kicker(s, "03    Making")
     _tb(s, 0.42, 0.18, 8, 0.32, [{"text": "How it was made", "size": 22, "bold": True}])
     _pic(s, "making-flow.png", 0.28, 0.52, 6.5, center=True)
-    _notes(s, "Walk the chart from Brief in hand down to Reviewed on a phone. The only loop is a later window note, which returns to Window notes given. Accepting on the phone is the end. TLC checked 11 states. No drawing before the restatement, no proof before our edits, no window change before the skill passes. About two minutes.")
+    _notes(s, "Read the top row left to right, then the bottom row. You send the brief and ask for a restatement. Cursor extracts points, splits modules, and asks where a person must decide. Then /architect and /statechart. After your small edits, a verify-skill is written for this project. The code follows the architecture, and only then is the skill run. UI notes come after the backend is proven. Computer use clicks and sends screenshots. The line at the bottom is the whole process: cloud agents, and you reply from a phone. About two minutes.")
 
     # 5 decisions
     s = new()

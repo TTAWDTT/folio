@@ -2,51 +2,29 @@
 title: "How Folio was made"
 ---
 stateDiagram-v2
-  state "Legend" as legend {
-    lg0: Read
-    lg1: Decide
-    lg2: Draw
-    lg3: Prove
-    lg4: Shape
-    lg5: Phone
-  }
-  class lg0 blue
-  class lg1 orange
-  class lg2 purple
-  class lg3 teal
-  class lg4 tan
-  class lg5 pink
-  s0: Brief in hand
-  s1: Brief restated
-  s2: Waiting for us
-  s3: Decisions made
-  s4: Drawings ready
-  s5: Drawings accepted
-  s6: Verify skill written
-  s7: Backend proven
-  s8: Window notes given
-  s9: Window clicked through
-  s10: Reviewed on a phone
+  s0: Send the brief
+  s1: Cursor restates it
+  s2: Points and modules
+  s3: Cursor asks us to decide
+  s4: We answer
+  s5: /architect and /statechart
+  s6: Small edits
+  s7: Verify-skill for this project
+  s8: Code follows the architecture
+  s9: Skill is run, backend works
+  s10: UI and UX notes
+  s11: Frontend changed
+  s12: Computer use, screenshots
   [*] --> s0
-  s0 --> s1: Cursor restates the brief
-  s1 --> s2: Cursor splits the work and asks
-  s2 --> s3: we answer
-  s3 --> s4: Cursor draws the architecture
-  s4 --> s5: we make the small edits
-  s5 --> s6: Cursor writes the verify skill
-  s6 --> s7: the skill passes
-  s7 --> s8: we send window notes
-  s8 --> s9: Cursor changes the window and clicks it
-  s9 --> s8: we send another note
-  s9 --> s10: we accept from the phone
-  class s0 blue
-  class s1 blue
-  class s2 orange
-  class s3 orange
-  class s4 purple
-  class s5 purple
-  class s6 teal
-  class s7 teal
-  class s8 tan
-  class s9 tan
-  class s10 pink
+  s0 --> s1: you ask for a restatement
+  s1 --> s2: Cursor extracts points and modules
+  s2 --> s3: Cursor asks where we must decide
+  s3 --> s4: we answer
+  s4 --> s5: Cursor draws the architecture and the submodules
+  s5 --> s6: we review and make small edits
+  s6 --> s7: Cursor writes a verify-skill for this project
+  s7 --> s8: Cursor builds to the architecture
+  s8 --> s9: the skill is run
+  s9 --> s10: we send UI and UX notes
+  s10 --> s11: Cursor changes the frontend
+  s11 --> s12: computer use clicks and sends screenshots
