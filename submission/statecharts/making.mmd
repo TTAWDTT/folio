@@ -1,0 +1,52 @@
+---
+title: "How Folio was made"
+---
+stateDiagram-v2
+  state "Legend" as legend {
+    lg0: Read
+    lg1: Decide
+    lg2: Draw
+    lg3: Prove
+    lg4: Shape
+    lg5: Phone
+  }
+  class lg0 blue
+  class lg1 orange
+  class lg2 purple
+  class lg3 teal
+  class lg4 tan
+  class lg5 pink
+  s0: Brief in hand
+  s1: Brief restated
+  s2: Waiting for us
+  s3: Decisions made
+  s4: Drawings ready
+  s5: Drawings accepted
+  s6: Verify skill written
+  s7: Backend proven
+  s8: Window notes given
+  s9: Window clicked through
+  s10: Reviewed on a phone
+  [*] --> s0
+  s0 --> s1: Cursor restates the brief
+  s1 --> s2: Cursor splits the work and asks
+  s2 --> s3: we answer
+  s3 --> s4: Cursor draws the architecture
+  s4 --> s5: we make the small edits
+  s5 --> s6: Cursor writes the verify skill
+  s6 --> s7: the skill passes
+  s7 --> s8: we send window notes
+  s8 --> s9: Cursor changes the window and clicks it
+  s9 --> s8: we send another note
+  s9 --> s10: we accept from the phone
+  class s0 blue
+  class s1 blue
+  class s2 orange
+  class s3 orange
+  class s4 purple
+  class s5 purple
+  class s6 teal
+  class s7 teal
+  class s8 tan
+  class s9 tan
+  class s10 pink

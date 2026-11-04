@@ -308,7 +308,7 @@ def build_pptx(path: Path) -> None:
     prs.core_properties.author = "Luo Zhen, Li Canwen, Fan Yu, Meng Shengyu"
     prs.core_properties.subject = "How Folio was made, and what the demonstration shows"
     blank = prs.slide_layouts[6]
-    total = 17
+    total = 9
 
     def new():
         slide = prs.slides.add_slide(blank)
@@ -341,52 +341,38 @@ def build_pptx(path: Path) -> None:
         ])
     _notes(s, "Open here. Read the name, then the four people once. Say this is Group B, Team 4. About forty seconds. Do not open the IDE yet.")
 
-    # 2 introduction
+    # 2 what it is, and what the brief asked, on one page
     s = new()
     _chrome(s, 2, total)
     _kicker(s, "02    Project")
-    _tb(s, 0.48, 0.62, 6.3, 1.0, [{"text": "What it is", "size": 36, "bold": True}])
-    _tb(s, 0.48, 1.8, 6.2, 4.6, [
-        {"text": "Folio lives in a tool window on the right of IntelliJ.", "size": 20, "after": 12},
-        {"text": "It indexes the course files on the machine. A question retrieves a few pages and asks the model to answer from those pages.", "size": 20, "after": 12},
-        {"text": "The reply names the file and the page. The page can be opened.", "size": 20, "after": 12},
-        {"text": "Three further actions sit in the same window: practice, a JUnit preview, and commit messages.", "size": 20, "after": 12},
-        {"text": "Group C owns rewriting source and the diff viewer. Folio does not.", "size": 20, "italic": True, "color": C_MUTED},
+    _tb(s, 0.48, 0.55, 6.4, 0.7, [{"text": "What it is", "size": 32, "bold": True}])
+    _tb(s, 0.48, 1.35, 6.3, 2.3, [
+        {"text": "A tool window on the right of IntelliJ. It answers from the lectures on this machine, and it names the page.", "size": 18, "after": 8},
+        {"text": "The picture is that answer: @Test, from Lec-3.4, pages 3 and 2.", "size": 18, "italic": True},
     ])
-    _pic(s, "citations.png", 7.15, 0.85, 5.9)
-    _notes(s, "Point at the screenshot: a Chinese question, the answer @Test, and two citations into Lec-3.4. That is the whole product in one picture. One minute.")
+    rows = [
+        ("F0", "Course retrieval. Chunk, index, retrieve, cite the file and the page."),
+        ("F1", "Three actions. A drill. A JUnit preview written only when asked. Commit text from the staged diff."),
+        ("Not ours", "Group C rewrites the student’s code and drives the diff viewer."),
+    ]
+    for i, (k, line) in enumerate(rows):
+        y = 3.9 + i * 0.95
+        _tb(s, 0.48, y, 1.7, 0.7, [{"text": k, "size": 16, "bold": True, "color": C_BURG}])
+        _tb(s, 2.2, y, 4.6, 0.85, [{"text": line, "size": 16}])
+    _pic(s, "citations.png", 7.15, 0.7, 6.1)
+    _notes(s, "One page for the product and the brief. Point at the screenshot, then read F0, F1, and the Group C line. About one minute.")
 
-    # 3 brief
+    # 3 making process, checked as a statechart
     s = new()
     _chrome(s, 3, total)
-    _kicker(s, "02    Project")
-    _tb(s, 0.48, 0.62, 12, 0.7, [{"text": "What the brief required", "size": 36, "bold": True}])
-    items = [
-        ("F0", "Course retrieval", "Cut the lectures into chunks. Index them. Retrieve the best. Cite the file and the page or the slide."),
-        ("F1", "Three IDE actions", "A drill on the selection. A JUnit preview that is written only when asked. Commit messages from the staged diff."),
-        ("Not ours", "Group C", "Changing the student’s code from an instruction, and driving the built-in diff viewer."),
-    ]
-    for i, (k, title, body) in enumerate(items):
-        y = 1.6 + i * 1.7
-        _rect(s, 0.5, y, 0.08, 1.4, C_BURG)
-        _tb(s, 0.85, y, 11.5, 1.45, [
-            {"text": k.upper(), "size": 13, "bold": True, "color": C_BURG},
-            {"text": title, "size": 26, "bold": True, "before": 2},
-            {"text": body, "size": 18, "color": C_MUTED, "before": 2},
-        ])
-    _notes(s, "Forty seconds. The rest of the talk is how this list became the window on the previous slide.")
-
-    # 4 making process
-    s = new()
-    _chrome(s, 4, total)
     _kicker(s, "03    Making")
-    _tb(s, 0.48, 0.58, 12, 0.6, [{"text": "How it was made", "size": 34, "bold": True}])
-    _pic(s, "process.png", 0.4, 1.4, 5.45)
-    _notes(s, "Walk the eight boxes left to right, top then bottom. Stress two things: we were asked before a human decision, and every result came back to a phone. About ninety seconds. Do not read every word in the boxes.")
+    _tb(s, 0.42, 0.22, 8, 0.36, [{"text": "How it was made", "size": 26, "bold": True}])
+    _pic(s, "making-flow.png", 0.15, 0.62, 6.45, center=True)
+    _notes(s, "Walk the chart from Brief in hand down to Reviewed on a phone. The only loop is a later window note, which returns to Window notes given. Accepting on the phone is the end. TLC checked 11 states. No drawing before the restatement, no proof before our edits, no window change before the skill passes. About two minutes.")
 
     # 5 decisions
     s = new()
-    _chrome(s, 5, total)
+    _chrome(s, 4, total)
     _kicker(s, "03    Making")
     _tb(s, 0.48, 0.62, 12, 0.8, [{"text": "Decisions that stayed with us", "size": 34, "bold": True}])
     _tb(s, 0.48, 1.55, 12.2, 1.0, [{"text": "After the restatement, Cursor named the choices it would not make alone.", "size": 20, "italic": True}])
@@ -412,132 +398,35 @@ def build_pptx(path: Path) -> None:
         _pic(slide, image, 0.35, 1.38, 5.55, center=True)
         _notes(slide, note)
 
-    chart(6, "Ownership, from the repository", "ownership.png",
+    chart(5, "Ownership, from the repository", "ownership.png",
           "docs/images/components.svg. Who owns the library, the key, and a write.",
           "This is the architecture drawing already in the repository. Top row is the IDE. Middle row is a project’s tasks and conversation. Bottom row is the shared library, the key, and the model or Git boundary. Workers do not read Swing fields. Forty-five seconds.")
-    chart(7, "Tool window, checked with TLC", "state-window.png",
+    chart(6, "Tool window, checked with TLC", "state-window.png",
           "docs/statechart. One activity at a time. A key is required before Ask, Preview, or Draft.",
           "This is the statechart already in the repository. Setup, indexing, then Ask, Test, and Commit. Write is only from a preview that parsed as a test. Say the overlapping labels are the real chart, not a simplification. One minute.")
-    chart(8, "Retrieval, checked with TLC", "state-retrieval.png",
+    chart(7, "Retrieval, checked with TLC", "state-retrieval.png",
           "A page citation exists only after a hit. A miss ends as general knowledge. Stop does not invent a page.",
           "This submodule was drawn with /statechart. TLC found 14 states. CiteOnlyWhenHit, MissNeverCited, and StoppedHasNoCitation all hold. Point at the two finishes: nothing retrieved, or a chunk was retrieved. One minute.")
-    chart(9, "Test write, checked with TLC", "state-test.png",
+    chart(8, "Test write, checked with TLC", "state-test.png",
           "An empty cancel writes nothing. Write is reachable only from a Java preview.",
           "Second submodule from /statechart. Six states. The file is a copy of a preview that parsed. Not a test has no arrow to Test file written. Twenty seconds.")
-    chart(10, "Commit delivery, checked with TLC", "state-commit.png",
+    chart(9, "Commit delivery, checked with TLC", "state-commit.png",
           "Copy and fill require the captured staging. Nothing in the model creates a commit.",
           "Third submodule from /statechart. Nine states. NeverCommits holds because no action sets a commit. After the index changes, copy and fill are refused. Twenty seconds.")
 
-    # 8 verification
-    s = new()
-    _chrome(s, 11, total)
-    _kicker(s, "03    Making")
-    _tb(s, 0.48, 0.58, 6.2, 0.8, [{"text": "Then it was run", "size": 34, "bold": True}])
-    _tb(s, 0.48, 1.7, 6.1, 4.8, [
-        {"text": "The verify-skill drives the real Folio window, not a copy of the page in a browser.", "size": 20, "after": 14},
-        {"text": "On 3 November the sandbox held nine lecture PDFs. A Chinese question for the JUnit annotation cited Lec-3.4, pages 3 and 2.", "size": 20, "after": 14},
-        {"text": "The source title opened the indexed excerpt. The editor was not changed.", "size": 20, "after": 14},
-        {"text": "The same run produced three exercises, kept a separate draft in each mode, and stopped a later answer on request.", "size": 20, "after": 14},
-        {"text": "The picture is that excerpt.", "size": 20, "italic": True, "color": C_MUTED},
-    ])
-    _pic(s, "excerpt.png", 7.05, 0.85, 5.9)
-    _notes(s, "This is the proof slide. The backend path is the citation you can open. Do not say every action was executed in that project: it was not a Git repository, so commit fill was not run there.")
-
-    # 9 frontend
-    s = new()
-    _chrome(s, 12, total)
-    _kicker(s, "03    Making")
-    _tb(s, 0.48, 0.5, 12, 0.55, [{"text": "The window, after our notes", "size": 32, "bold": True}])
-    _pic(s, "files.png", 0.4, 1.25, 5.55)
-    _pic(s, "settings.png", 6.55, 1.55, 3.5)
-    _tb(s, 6.55, 5.3, 6.2, 1.5, [
-        {"text": "Left, the nine lectures.", "size": 16, "after": 2},
-        {"text": "Right, settings. The key field stays empty. The line under it says a key for this address is saved.", "size": 16},
-    ])
-    _notes(s, "The interface work came after the retrieval path. We asked for readable type, a thinking block that is not the answer, notices that go away, and drafts that survive a mode change. Cursor clicked the window and sent these pictures. We replied from a phone.")
-
-    # 10 demo opener
-    s = new()
-    _chrome(s, 13, total)
-    _kicker(s, "04    Demonstration")
-    _tb(s, 0.48, 0.62, 12, 0.7, [{"text": "What we will click", "size": 36, "bold": True}])
-    rows = [
-        ("1", "The nine PDFs."),
-        ("2", "One question, left long enough to stream, then a citation opened."),
-        ("3", "Three exercises. One explanation. The other two stay closed."),
-        ("4", "Stop a second question while it is still thinking."),
-        ("5", "Settings, then new chat, then cancel. The history remains."),
-    ]
-    for i, (n, line) in enumerate(rows):
-        y = 1.7 + i * 0.95
-        _tb(s, 0.55, y, 0.7, 0.6, [{"text": n, "size": 28, "bold": True, "color": C_BURG}])
-        _tb(s, 1.4, y + 0.08, 11, 0.6, [{"text": line, "size": 24}])
-    _notes(s, "Leave this up only while you switch to IntelliJ. Then do the five clicks. If the network is slow, the next three slides already hold the pictures.")
-
-    # 14 files
-    s = new()
-    _chrome(s, 14, total)
-    _kicker(s, "04    Demonstration")
-    _tb(s, 0.48, 0.5, 6.2, 0.9, [{"text": "The lectures", "size": 34, "bold": True}])
-    _tb(s, 0.48, 1.55, 5.8, 4.5, [
-        {"text": "Lec-0 through Lec-5.", "size": 22, "after": 10},
-        {"text": "Lec-3 is four files: exceptions, generics, annotations, JUnit.", "size": 22, "after": 10},
-        {"text": "Indexing did not need a key. The pages shown are the pages the index stored.", "size": 22, "after": 10},
-        {"text": "Removing a file asks first. The original PDF stays on disk.", "size": 22},
-    ])
-    _pic(s, "files.png", 6.7, 0.7, 6.15)
-    _notes(s, "Scroll the list if you are live. Otherwise this picture is the list. Twenty seconds.")
-
-    # 15 answer
-    s = new()
-    _chrome(s, 15, total)
-    _kicker(s, "04    Demonstration")
-    _tb(s, 0.42, 0.42, 12, 0.45, [{"text": "An answer, and the page it came from", "size": 30, "bold": True}])
-    _pic(s, "citations.png", 0.4, 1.1, 5.7)
-    _pic(s, "excerpt.png", 6.85, 1.1, 5.7)
-    _notes(s, "Left: the question and two citations. Right: page 3 of Lec-3.4, opened from the first title. Say the marker [1] is the page, not a decoration.")
-
-    # 16 drill
-    s = new()
-    _chrome(s, 16, total)
-    _kicker(s, "04    Demonstration")
-    _tb(s, 0.48, 0.48, 12, 0.5, [{"text": "Three exercises", "size": 32, "bold": True}])
-    _pic(s, "drill.png", 0.4, 1.15, 5.7)
-    _tb(s, 6.7, 1.4, 6.0, 4.8, [
-        {"text": "The topic was checked and unchecked exceptions.", "size": 20, "after": 12},
-        {"text": "The first explanation is open. The second and third are not.", "size": 20, "after": 12},
-        {"text": "Two course citations sit under the set.", "size": 20, "after": 12},
-        {"text": "This view appears when the three exercises parse. It does not paint tokens on the way.", "size": 20, "italic": True},
-    ])
-    _notes(s, "Be honest about streaming. Ask streams. Practice waits for valid JSON. If you want the room to see tokens, do it on the question, not on the drill.")
-
-    # 14 close
-    s = new()
-    _chrome(s, 17, total)
-    _kicker(s, "04    Demonstration")
-    _tb(s, 0.48, 0.7, 12, 0.8, [{"text": "What the picture is not", "size": 34, "bold": True}])
-    limits = [
-        ("A shared word", "is not yet a correct sentence."),
-        ("A thinking block", "is visible while an answer streams, and is gone when it finishes."),
-        ("A test preview", "has been checked for syntax and annotations, not run."),
-        ("A commit draft", "does not create a commit."),
-    ]
-    for i, (k, v) in enumerate(limits):
-        y = 1.9 + i * 0.95
-        _tb(s, 0.55, y, 4.2, 0.7, [{"text": k, "size": 22, "italic": True, "color": C_BURG}])
-        _tb(s, 4.9, y, 7.6, 0.7, [{"text": v, "size": 22}])
-    _tb(s, 0.55, 5.9, 12, 0.8, [{"text": "Folio.    罗臻    李灿文    范羽    孟圣雨", "size": 20}])
-    _notes(s, "Close on these four sentences. Then take questions. If a test or a commit is asked for, do it only on a project that has Java source and a staged change.")
-
+    # The live demonstration is not repeated here.
     prs.save(str(path))
+    return
+
 
 
 def build_slide_pdf(path: Path) -> None:
-    """Same fourteen slides, with an embedded Times-metric face."""
+    """Nine slides. Liberation Serif stands in for Times New Roman."""
     c = pdfcanvas.Canvas(str(path), pagesize=PAGE)
     c.setTitle("Folio — CST3492 Group B, Team 4")
     c.setAuthor("Luo Zhen, Li Canwen, Fan Yu, Meng Shengyu")
     pw, ph = PAGE
+    total = 9
 
     def paper():
         c.setFillColor(HexColor("#F6F1E7"))
@@ -553,7 +442,7 @@ def build_slide_pdf(path: Path) -> None:
     def num(n):
         c.setFillColor(white)
         c.setFont("Serif", 9)
-        c.drawRightString(pw - 24, 7, f"{n}   /   17")
+        c.drawRightString(pw - 24, 7, f"{n}   /   {total}")
 
     def mixed(x, y, text, size=16, face="Serif", color=HexColor("#1C1915")):
         c.setFillColor(color)
@@ -580,21 +469,7 @@ def build_slide_pdf(path: Path) -> None:
                 buf += ch
         flush(mode, buf)
 
-    def wrap(text, size, width, face="Serif"):
-        words = text.split()
-        lines, cur = [], ""
-        for word in words:
-            trial = word if not cur else cur + " " + word
-            if c.stringWidth(trial, face, size) <= width:
-                cur = trial
-            else:
-                lines.append(cur)
-                cur = word
-        if cur:
-            lines.append(cur)
-        return lines
-
-    def image(name, x, y, h, max_w=900, center=False):
+    def image(name, x, y, h, max_w=900):
         path_img = str(FIG / name)
         with Image.open(path_img) as im:
             aspect = im.width / im.height
@@ -602,33 +477,40 @@ def build_slide_pdf(path: Path) -> None:
         if w > max_w:
             w = max_w
             h = w / aspect
-        if center:
-            x = (pw - w) / 2
         c.setStrokeColor(HexColor("#1C1915"))
-        c.setLineWidth(0.8)
+        c.setLineWidth(0.6)
         c.rect(x - 1, y - 1, w + 2, h + 2, fill=0, stroke=1)
         c.drawImage(path_img, x, y, w, h, preserveAspectRatio=True, mask="auto")
-        return w
+
+    def kicker(text):
+        c.setFillColor(HexColor("#7A3028"))
+        c.setFont("Serif-B", 11)
+        c.drawString(36, 500, text)
+
+    def title(text, y=458):
+        c.setFillColor(HexColor("#1C1915"))
+        c.setFont("Serif-B", 26)
+        c.drawString(36, y, text)
 
     # 1
     paper(); num(1)
-    c.setFillColor(HexColor("#7A3028"))
-    c.setFont("Serif-B", 12)
-    c.drawString(48, 470, "CST3492      ·      GROUP B      ·      TEAM 4")
+    kicker("CST3492      ·      GROUP B      ·      TEAM 4")
     c.setFillColor(HexColor("#1C1915"))
-    c.setFont("Serif-B", 64)
-    c.drawString(46, 390, "Folio")
-    c.setFont("Serif-I", 18)
-    c.drawString(50, 340, "A course assistant inside IntelliJ.")
-    c.drawString(50, 316, "It answers from the lectures, and it shows the page.")
-    c.setStrokeColor(HexColor("#7A3028"))
-    c.setLineWidth(1.2)
-    c.line(50, 280, 160, 280)
-    members = [("2451989", "罗臻  Luo Zhen"), ("2452270", "李灿文  Li Canwen"), ("2452750", "范羽  Fan Yu"), ("2452272", "孟圣雨  Meng Shengyu")]
+    c.setFont("Serif-B", 54)
+    c.drawString(36, 400, "Folio")
+    c.setFont("Serif-I", 16)
+    c.drawString(40, 360, "A course assistant inside IntelliJ.")
+    c.drawString(40, 338, "It answers from the lectures, and it shows the page.")
+    members = [
+        ("2451989", "罗臻  Luo Zhen"),
+        ("2452270", "李灿文  Li Canwen"),
+        ("2452750", "范羽  Fan Yu"),
+        ("2452272", "孟圣雨  Meng Shengyu"),
+    ]
     for i, (sid, name) in enumerate(members):
-        x = 50 + (i % 2) * 400
-        y = 230 - (i // 2) * 58
-        mixed(x, y, name, 18, "Serif-B")
+        x = 40 + (i % 2) * 420
+        y = 250 - (i // 2) * 56
+        mixed(x, y, name, 16, "Serif-B")
         c.setFillColor(HexColor("#5E574E"))
         c.setFont("Serif", 12)
         c.drawString(x, y - 18, sid)
@@ -636,262 +518,89 @@ def build_slide_pdf(path: Path) -> None:
 
     # 2
     paper(); num(2)
-    c.setFillColor(HexColor("#7A3028"))
-    c.setFont("Serif-B", 11)
-    c.drawString(36, 500, "02     PROJECT")
+    kicker("02     PROJECT")
+    title("What it is")
     c.setFillColor(HexColor("#1C1915"))
-    c.setFont("Serif-B", 28)
-    c.drawString(36, 460, "What it is")
-    body = [
-        "Folio lives in a tool window on the right of IntelliJ.",
-        "It indexes the course files on the machine. A question retrieves a few pages and asks the model to answer from those pages.",
-        "The reply names the file and the page. The page can be opened.",
-        "Three further actions sit in the same window: practice, a JUnit preview, and commit messages.",
-        "Group C owns rewriting source and the diff viewer. Folio does not.",
-    ]
-    y = 420
     c.setFont("Serif", 13)
-    for para in body:
-        for line in wrap(para, 13, 330):
-            c.drawString(36, y, line)
-            y -= 18
-        y -= 10
-    image("citations.png", 400, 55, 400)
+    lines = [
+        "A tool window on the right of IntelliJ.",
+        "It answers from the lectures on this machine,",
+        "and it names the page.",
+        "",
+        "The picture is that answer: @Test,",
+        "from Lec-3.4, pages 3 and 2.",
+    ]
+    y = 410
+    for line in lines:
+        c.drawString(36, y, line)
+        y -= 20
+    bits = [
+        ("F0", "Course retrieval. Chunk, index, retrieve, cite the page."),
+        ("F1", "A drill. A JUnit preview written only when asked."),
+        ("", "Commit text from the staged diff."),
+        ("Not ours", "Group C rewrites code and drives the diff viewer."),
+    ]
+    y = 250
+    for k, line in bits:
+        c.setFillColor(HexColor("#7A3028"))
+        c.setFont("Serif-B", 12)
+        c.drawString(36, y, k)
+        c.setFillColor(HexColor("#1C1915"))
+        c.setFont("Serif", 12)
+        c.drawString(120, y, line)
+        y -= 28
+    image("citations.png", 500, 120, 340, max_w=430)
     c.showPage()
 
     # 3
     paper(); num(3)
-    c.setFillColor(HexColor("#7A3028"))
-    c.setFont("Serif-B", 11)
-    c.drawString(36, 500, "02     PROJECT")
-    c.setFillColor(HexColor("#1C1915"))
-    c.setFont("Serif-B", 28)
-    c.drawString(36, 460, "What the brief required")
-    blocks = [
-        ("F0", "Course retrieval", "Cut the lectures into chunks. Index them. Retrieve the best. Cite the file and the page or the slide."),
-        ("F1", "Three IDE actions", "A drill on the selection. A JUnit preview that is written only when asked. Commit messages from the staged diff."),
-        ("NOT OURS", "Group C", "Changing the student’s code from an instruction, and driving the built-in diff viewer."),
-    ]
-    y = 400
-    for k, title, body in blocks:
-        c.setFillColor(HexColor("#7A3028"))
-        c.rect(36, y - 48, 4, 70, fill=1, stroke=0)
-        c.setFont("Serif-B", 11)
-        c.drawString(56, y + 16, k)
-        c.setFillColor(HexColor("#1C1915"))
-        c.setFont("Serif-B", 18)
-        c.drawString(56, y - 8, title)
-        c.setFont("Serif", 13)
-        c.setFillColor(HexColor("#5E574E"))
-        c.drawString(56, y - 30, body[:110])
-        y -= 110
+    kicker("03     MAKING")
+    title("How it was made", 512)
+    image("making-flow.png", 300, 36, 455, max_w=420)
     c.showPage()
 
     # 4
     paper(); num(4)
-    c.setFillColor(HexColor("#7A3028"))
-    c.setFont("Serif-B", 11)
-    c.drawString(36, 500, "03     MAKING")
+    kicker("03     MAKING")
+    title("Decisions that stayed with us")
+    c.setFont("Serif-I", 13)
     c.setFillColor(HexColor("#1C1915"))
-    c.setFont("Serif-B", 26)
-    c.drawString(36, 466, "How it was made")
-    image("process.png", 28, 40, 400)
-    c.showPage()
-
-    # 5
-    paper(); num(5)
-    c.setFillColor(HexColor("#7A3028"))
-    c.setFont("Serif-B", 11)
-    c.drawString(36, 500, "03     MAKING")
-    c.setFillColor(HexColor("#1C1915"))
-    c.setFont("Serif-B", 26)
-    c.drawString(36, 462, "Decisions that stayed with us")
-    c.setFont("Serif-I", 14)
-    c.drawString(36, 430, "After the restatement, Cursor named the choices it would not make alone.")
+    c.drawString(36, 420, "After the restatement, Cursor named the choices it would not make alone.")
     decisions = [
         ("Retrieval", "A local word index, not an embedding service."),
-        ("The third action", "A course drill, not a rewrite and not another answer."),
-        ("Tests", "A preview first. The file is written only on a click."),
-        ("Commits", "Show the message. Do not commit, and do not touch the index."),
-        ("The model", "The address stays in settings. This run uses DeepSeek."),
+        ("The third action", "A course drill. Not Group C, and not another ask."),
+        ("Tests", "Show a preview. Write the file only after a click."),
+        ("Commits", "Show the message. Do not run git commit."),
+        ("The model", "The address stays in settings. This demo uses DeepSeek."),
     ]
-    y = 370
+    y = 360
     for k, v in decisions:
         c.setFillColor(HexColor("#7A3028"))
-        c.setFont("Serif-B", 15)
+        c.setFont("Serif-B", 14)
         c.drawString(36, y, k)
         c.setFillColor(HexColor("#1C1915"))
-        c.setFont("Serif", 15)
-        c.drawString(230, y, v)
-        y -= 52
+        c.setFont("Serif", 14)
+        c.drawString(220, y, v)
+        y -= 46
     c.showPage()
 
-    def chart_page(n, title, image_name, caption):
+    charts = [
+        (5, "Ownership, from the repository", "ownership.png", "Who owns the library, the key, and a write."),
+        (6, "Tool window, checked with TLC", "state-window.png", "One activity at a time. A key is required before Ask, Preview, or Draft."),
+        (7, "Retrieval, checked with TLC", "state-retrieval.png", "A page citation exists only after a hit. A miss ends as general knowledge."),
+        (8, "Test write, checked with TLC", "state-test.png", "Cancel writes nothing. Write is reachable only from a Java preview."),
+        (9, "Commit delivery, checked with TLC", "state-commit.png", "Copy and fill require the captured staging. Nothing creates a commit."),
+    ]
+    for n, heading, fig, caption in charts:
         paper(); num(n)
-        c.setFillColor(HexColor("#7A3028"))
-        c.setFont("Serif-B", 11)
-        c.drawString(36, 500, "03     MAKING")
-        c.setFillColor(HexColor("#1C1915"))
-        c.setFont("Serif-B", 20)
-        c.drawString(36, 472, title)
+        kicker("03     MAKING")
+        title(heading, 512)
         c.setFillColor(HexColor("#5E574E"))
         c.setFont("Serif-I", 11)
-        c.drawString(36, 452, caption)
-        image(image_name, 30, 32, 400, max_w=900, center=True)
+        c.drawString(36, 486, caption)
+        image(fig, 80, 36, 430, max_w=800)
         c.showPage()
 
-    chart_page(6, "Ownership, from the repository", "ownership.png",
-               "docs/images/components.svg. Who owns the library, the key, and a write.")
-    chart_page(7, "Tool window, checked with TLC", "state-window.png",
-               "docs/statechart. One activity at a time. A key is required before Ask, Preview, or Draft.")
-    chart_page(8, "Retrieval, checked with TLC", "state-retrieval.png",
-               "A page citation exists only after a hit. A miss ends as general knowledge. Stop invents no page.")
-    chart_page(9, "Test write, checked with TLC", "state-test.png",
-               "Cancel writes nothing. Write is reachable only from a Java preview.")
-    chart_page(10, "Commit delivery, checked with TLC", "state-commit.png",
-               "Copy and fill require the captured staging. The model never creates a commit.")
-
-    # 8
-    paper(); num(11)
-    c.setFillColor(HexColor("#7A3028"))
-    c.setFont("Serif-B", 11)
-    c.drawString(36, 500, "03     MAKING")
-    c.setFillColor(HexColor("#1C1915"))
-    c.setFont("Serif-B", 26)
-    c.drawString(36, 460, "Then it was run")
-    paras = [
-        "The verify-skill drives the real Folio window.",
-        "Nine lecture PDFs were indexed. A Chinese question for the JUnit annotation cited Lec-3.4, pages 3 and 2.",
-        "The source title opened the excerpt. The editor did not change.",
-        "The picture is that excerpt.",
-    ]
-    y = 410
-    c.setFont("Serif", 13)
-    for para in paras:
-        for line in wrap(para, 13, 340):
-            c.drawString(36, y, line)
-            y -= 18
-        y -= 12
-    image("excerpt.png", 400, 55, 400)
-    c.showPage()
-
-    # 9
-    paper(); num(12)
-    c.setFillColor(HexColor("#7A3028"))
-    c.setFont("Serif-B", 11)
-    c.drawString(36, 500, "03     MAKING")
-    c.setFillColor(HexColor("#1C1915"))
-    c.setFont("Serif-B", 24)
-    c.drawString(36, 466, "The window, after our notes")
-    image("files.png", 28, 48, 390)
-    image("settings.png", 470, 180, 220)
-    c.setFont("Serif", 12)
-    c.drawString(470, 150, "Left, the nine lectures.")
-    for i, line in enumerate(wrap("Right, settings. The key field stays empty.", 12, 420)):
-        c.drawString(470, 130 - i * 16, line)
-    c.showPage()
-
-    # 10
-    paper(); num(13)
-    c.setFillColor(HexColor("#7A3028"))
-    c.setFont("Serif-B", 11)
-    c.drawString(36, 500, "04     DEMONSTRATION")
-    c.setFillColor(HexColor("#1C1915"))
-    c.setFont("Serif-B", 28)
-    c.drawString(36, 458, "What we will click")
-    rows = [
-        "The nine PDFs.",
-        "One question, left long enough to stream, then a citation opened.",
-        "Three exercises. One explanation. The other two stay closed.",
-        "Stop a second question while it is still thinking.",
-        "Settings, then new chat, then cancel.",
-    ]
-    y = 390
-    for i, line in enumerate(rows, 1):
-        c.setFillColor(HexColor("#7A3028"))
-        c.setFont("Serif-B", 20)
-        c.drawString(40, y, str(i))
-        c.setFillColor(HexColor("#1C1915"))
-        c.setFont("Serif", 16)
-        c.drawString(80, y, line)
-        y -= 52
-    c.showPage()
-
-    # 14
-    paper(); num(14)
-    c.setFillColor(HexColor("#7A3028"))
-    c.setFont("Serif-B", 11)
-    c.drawString(36, 500, "04     DEMONSTRATION")
-    c.setFillColor(HexColor("#1C1915"))
-    c.setFont("Serif-B", 26)
-    c.drawString(36, 462, "The lectures")
-    c.setFont("Serif", 14)
-    y = 410
-    for para in ["Lec-0 through Lec-5.", "Lec-3 is four files.", "Indexing did not need a key.", "Removing a file asks first."]:
-        c.drawString(36, y, para)
-        y -= 36
-    image("files.png", 360, 40, 420)
-    c.showPage()
-
-    # 12
-    paper(); num(15)
-    c.setFillColor(HexColor("#7A3028"))
-    c.setFont("Serif-B", 11)
-    c.drawString(36, 500, "04     DEMONSTRATION")
-    c.setFillColor(HexColor("#1C1915"))
-    c.setFont("Serif-B", 22)
-    c.drawString(36, 468, "An answer, and the page it came from")
-    image("citations.png", 30, 40, 400)
-    image("excerpt.png", 490, 40, 400)
-    c.showPage()
-
-    # 13
-    paper(); num(16)
-    c.setFillColor(HexColor("#7A3028"))
-    c.setFont("Serif-B", 11)
-    c.drawString(36, 500, "04     DEMONSTRATION")
-    c.setFillColor(HexColor("#1C1915"))
-    c.setFont("Serif-B", 24)
-    c.drawString(36, 466, "Three exercises")
-    image("drill.png", 28, 40, 400)
-    c.setFont("Serif", 13)
-    notes = [
-        "Checked and unchecked exceptions.",
-        "The first explanation is open.",
-        "The other two stay closed.",
-        "This view appears when the",
-        "three exercises parse.",
-    ]
-    y = 400
-    for line in notes:
-        c.drawString(470, y, line)
-        y -= 28
-    c.showPage()
-
-    # 14
-    paper(); num(17)
-    c.setFillColor(HexColor("#7A3028"))
-    c.setFont("Serif-B", 11)
-    c.drawString(36, 500, "04     DEMONSTRATION")
-    c.setFillColor(HexColor("#1C1915"))
-    c.setFont("Serif-B", 26)
-    c.drawString(36, 458, "What the picture is not")
-    limits = [
-        ("A shared word", "is not yet a correct sentence."),
-        ("A thinking block", "shows while streaming, then goes."),
-        ("A test preview", "is syntax and annotations, not a run."),
-        ("A commit draft", "does not create a commit."),
-    ]
-    y = 380
-    for k, v in limits:
-        c.setFillColor(HexColor("#7A3028"))
-        c.setFont("Serif-I", 16)
-        c.drawString(36, y, k)
-        c.setFillColor(HexColor("#1C1915"))
-        c.setFont("Serif", 16)
-        c.drawString(250, y, v)
-        y -= 52
-    mixed(36, 80, "Folio.     罗臻    李灿文    范羽    孟圣雨", 16, "Serif")
     c.save()
 
 
