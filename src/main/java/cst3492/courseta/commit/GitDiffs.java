@@ -113,6 +113,59 @@ public final class GitDiffs {
                 "--full-index", "--find-renames", "--ignore-submodules=none", "--submodule=short");
     }
 
+    public record StageResult(boolean repository, int files) {
+    }
+
+    /**
+     * Stages the current tree of each Git root with {@code git add -A}.
+     * Does not create a commit. Ignored paths stay untracked. A directory that is not a
+     * repository leaves {@code repository} false and does not run add.
+     */
+    public static StageResult stage(List<Path> workTrees) throws IOException, InterruptedException {
+        if (workTrees == null || workTrees.isEmpty()) {
+            return new StageResult(false, 0);
+        }
+        LinkedHashSet<Path> unique = new LinkedHashSet<>();
+        boolean repository = false;
+        for (Path path : workTrees) {
+            if (path == null || !hasRepository(path)) {
+                continue;
+            }
+            repository = true;
+            String root = checked(path, "rev-parse", "--show-toplevel");
+            if (root.endsWith("\n")) {
+                root = root.substring(0, root.length() - 1);
+            }
+            unique.add(Path.of(root).toRealPath());
+        }
+        if (!repository) {
+            return new StageResult(false, 0);
+        }
+        int files = 0;
+        for (Path root : unique) {
+            Result added = run(root, "add", "-A");
+            if (added.exit() != 0) {
+                throw failure(added);
+            }
+            files += stagedNames(root);
+        }
+        return new StageResult(true, files);
+    }
+
+    private static int stagedNames(Path root) throws IOException, InterruptedException {
+        String names = checked(root, "diff", "--cached", "--name-only", "-z");
+        if (names.isEmpty()) {
+            return 0;
+        }
+        int count = 0;
+        for (String name : names.split("\u0000", -1)) {
+            if (!name.isEmpty()) {
+                count++;
+            }
+        }
+        return count;
+    }
+
     public static Snapshot capture(List<Path> workTrees) throws IOException, InterruptedException {
         LinkedHashSet<Path> unique = new LinkedHashSet<>();
         for (Path path : workTrees) {

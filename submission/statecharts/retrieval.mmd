@@ -1,0 +1,52 @@
+---
+title: "Course retrieval"
+---
+stateDiagram-v2
+  state "Legend" as legend {
+    lg0: Setup
+    lg1: Working
+    lg2: Ready
+    lg3: Ended
+  }
+  class lg0 tan
+  class lg1 orange
+  class lg2 teal
+  class lg3 pink
+  s0: No lectures
+  s1: Indexing
+  s2: Lectures ready
+  s3: Retrieving
+  s4: No page matches
+  s5: Pages in hand
+  s6: Thinking
+  s7: Stopped
+  s8: Answer arriving
+  s9: General knowledge
+  s10: Answer with a page
+  [*] --> s0
+  s0 --> s1: you import lectures
+  s1 --> s2: indexing finishes
+  s2 --> s3: you ask
+  s3 --> s4: no chunk covers the question
+  s3 --> s5: chunks cover the question
+  s4 --> s6: the model starts thinking
+  s5 --> s6: the model starts thinking
+  s6 --> s7: you stop
+  s6 --> s8: answer text starts
+  s7 --> s3: you ask
+  s8 --> s7: you stop
+  s8 --> s9: the reply finishes [nothing was retrieved]
+  s8 --> s10: the reply finishes [a chunk was retrieved]
+  s9 --> s3: you ask
+  s10 --> s3: you ask
+  class s0 tan
+  class s1 orange
+  class s2 teal
+  class s3 orange
+  class s4 pink
+  class s5 teal
+  class s6 orange
+  class s7 pink
+  class s8 orange
+  class s9 pink
+  class s10 teal

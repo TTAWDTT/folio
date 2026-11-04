@@ -64,6 +64,8 @@ class AskerTest {
         assertTrue(answer.citations().isEmpty());
         assertFalse(answer.text().contains("lecture-"));
         assertTrue(systemPrompt.get().contains("general knowledge"));
+        assertTrue(systemPrompt.get().contains("Do not refuse"));
+        assertTrue(userPrompt.get().contains("Answer it directly anyway"));
         assertFalse(userPrompt.get().contains("Course chunks"));
     }
 

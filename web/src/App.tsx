@@ -168,11 +168,12 @@ export function App({ bridge, drafts }: { bridge: Bridge; drafts: Drafts }) {
     <header className="utility-row" aria-label="侧栏工具">
       {auxiliary && <><IconButton name="返回对话" icon="back" onPress={back} /><span className="route-title">{titles[shell.route.kind]}</span></>}
       <div className="utility-spacer" />
+      <IconButton name="暂存" icon="stage" disabled={!view.hydrated} onPress={() => void bridge.command({ kind: 'stage' })} />
       <IconButton name="新对话" icon="plus" disabled={!view.hydrated} onPress={() => void bridge.command({ kind: 'newChat' })} />
       <IconButton name="课件" icon="files" disabled={!view.hydrated} onPress={() => void bridge.command({ kind: 'route', to: shell.route.kind === 'files' ? 'chat' : 'files' })} />
       <IconButton name="设置" icon="settings" disabled={!view.hydrated} onPress={() => shell.route.kind === 'settings' ? back() : void bridge.command({ kind: 'route', to: 'settings' })} />
     </header>
-    {(shell.notice || view.problem) && <div className={`notice${view.problem || !/^(设置已保存|导入完成|已复制|已写入|已填入|已打开)/.test(shell.notice) ? '' : ' info'}`} role="status">{view.problem || shell.notice}</div>}
+    {(shell.notice || view.problem) && <div className={`notice${view.problem || !/^(设置已保存|导入完成|已复制|已写入|已填入|已打开|已暂存|没有可暂存)/.test(shell.notice) ? '' : ' info'}`} role="status">{view.problem || shell.notice}</div>}
     <Chat shell={shell} bridge={bridge} drafts={drafts} turns={view.turns} hydrated={view.hydrated} />
     {shell.route.kind === 'settings' && <Settings key={shell.route.edit} edit={shell.route.edit} provider={shell.provider} bridge={bridge} />}
     {shell.route.kind === 'files' && <Files shell={shell} bridge={bridge} />}

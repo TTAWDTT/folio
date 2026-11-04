@@ -1,0 +1,45 @@
+---
+title: "Commit candidates"
+---
+stateDiagram-v2
+  state "Legend" as legend {
+    lg0: Setup
+    lg1: Working
+    lg2: Ready
+    lg3: Error
+  }
+  class lg0 tan
+  class lg1 orange
+  class lg2 teal
+  class lg3 pink
+  s0: No Git repository
+  s1: Nothing staged
+  s2: Drafting
+  s3: Candidates shown
+  s4: The draft failed
+  s5: Candidates, index changed
+  s6: Copied
+  s7: Filled into the commit box
+  s8: Staging changed, refused
+  [*] --> s0
+  s0 --> s1: you open a repository
+  s1 --> s2: you stage a change
+  s2 --> s3: the model returns candidates
+  s2 --> s4: the draft fails
+  s3 --> s5: you change the index
+  s3 --> s6: you copy a candidate
+  s3 --> s7: you fill the commit box
+  s4 --> s1: you start again
+  s5 --> s8: you copy after the index changed or you fill after the index changed
+  s6 --> s1: you start again
+  s7 --> s1: you start again
+  s8 --> s1: you start again
+  class s0 pink
+  class s1 tan
+  class s2 orange
+  class s3 teal
+  class s4 pink
+  class s5 teal
+  class s6 teal
+  class s7 teal
+  class s8 pink
