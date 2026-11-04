@@ -77,6 +77,42 @@ class GitSnapshotTest {
     }
 
     @Test
+    void stageAddsChangesWithoutCreatingACommit(@TempDir Path root) throws Exception {
+        repo(root);
+        Files.writeString(root.resolve("kept.txt"), "already\n");
+        git(root, "add", "kept.txt");
+        git(root, "commit", "-m", "base");
+        String head = git(root, "rev-parse", "HEAD").strip();
+        Files.writeString(root.resolve("kept.txt"), "changed\n");
+        Files.writeString(root.resolve("new.txt"), "fresh\n");
+        Files.writeString(root.resolve(".gitignore"), "*.tmp\n");
+        Files.writeString(root.resolve("skip.tmp"), "left out\n");
+        GitDiffs.StageResult staged = GitDiffs.stage(List.of(root, root));
+        assertTrue(staged.repository());
+        assertEquals(3, staged.files());
+        String names = git(root, "diff", "--cached", "--name-only");
+        assertTrue(names.contains("kept.txt"));
+        assertTrue(names.contains("new.txt"));
+        assertTrue(names.contains(".gitignore"));
+        assertFalse(names.contains("skip.tmp"));
+        assertEquals(head, git(root, "rev-parse", "HEAD").strip());
+        assertEquals("", git(root, "diff", "--name-only").strip());
+    }
+
+    @Test
+    void stageReportsAnEmptyIndexAndAMissingRepository(@TempDir Path temp) throws Exception {
+        Path repo = repo(temp.resolve("repo"));
+        GitDiffs.StageResult empty = GitDiffs.stage(List.of(repo));
+        assertTrue(empty.repository());
+        assertEquals(0, empty.files());
+        Path plain = Files.createDirectories(temp.resolve("plain"));
+        GitDiffs.StageResult missing = GitDiffs.stage(List.of(plain));
+        assertFalse(missing.repository());
+        assertEquals(0, missing.files());
+        assertFalse(GitDiffs.stage(List.of()).repository());
+    }
+
+    @Test
     void emptyRepositoryAndNonRepositoryAreDifferent(@TempDir Path temp) throws Exception {
         assertFalse(GitDiffs.hasRepository(temp));
         Path root = repo(temp.resolve("repo"));

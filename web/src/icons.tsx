@@ -19,6 +19,7 @@ const paths = {
   remove: 'M2 4h12M6 1.5h4M4 4l.5 10h7L12 4M6.5 6.5v5M9.5 6.5v5',
   file: 'M3 1.5h6l4 4v9H3Zm6 0v4h4M5.5 8h5m-5 3h5',
   download: 'M8 1v9m-3-3 3 3 3-3M2 11v3h12v-3',
+  stage: 'M3 13.5h10M8 2.5v7.5m-3.2-3.2L8 10.2l3.2-3.4',
 };
 export type IconName = keyof typeof paths;
 export const modeIcons: Record<Mode, IconName> = { ask: 'ask', drill: 'drill', tests: 'tests', commit: 'commit' };

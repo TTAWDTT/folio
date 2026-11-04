@@ -58,6 +58,7 @@ export type Command =
   | { kind: 'chooseFiles' }
   | { kind: 'cancelFileTask'; id: string }
   | { kind: 'newChat' }
+  | { kind: 'stage' }
   | { kind: 'confirm'; id: string; accept: boolean }
   | { kind: 'reading'; value: Reading };
 export type Client =

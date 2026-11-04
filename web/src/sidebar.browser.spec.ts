@@ -32,6 +32,12 @@ for (const width of [280, 360]) for (const dark of [true, false]) {
   });
 }
 
+test('stage control sends one stage command', async ({ page, host }) => {
+  await host.open();
+  await page.getByRole('button', { name: '暂存', exact: true }).click();
+  await expect.poll(() => host.commands.filter(command => command.kind === 'stage')).toEqual([{ kind: 'stage' }]);
+});
+
 test('all four drafts retain their own caret and files return keeps the editor node', async ({ page, host }) => {
   await host.open(); const input = page.getByRole('textbox', { name: '消息', exact: true });
   for (const mode of ['ask', 'drill', 'tests', 'commit'] as const) {

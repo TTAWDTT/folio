@@ -212,6 +212,28 @@ class FolioSessionTest {
             }
         });
     }
+    @Test void stageCommandStagesTheProjectAndDoesNotCommit(@TempDir Path root) throws Exception {
+        git(root, "init"); git(root, "config", "user.name", "Folio"); git(root, "config", "user.email", "folio@example.com");
+        Files.writeString(root.resolve("Hello.java"), "class Hello {}\n");
+        edt(() -> {
+            try (var f = new Fixture((a, b, c, d, e) -> "unused", List.of(root))) {
+                assertNull(f.command(new FolioCommand.Stage()).code());
+                f.drain();
+                assertTrue(f.session.shell().notice().startsWith("已暂存 1 个文件"));
+            }
+            try (var f = new Fixture((a, b, c, d, e) -> "unused", List.of())) {
+                assertNull(f.command(new FolioCommand.Stage()).code());
+                f.drain();
+                assertEquals("此项目没有 Git 仓库。", f.session.shell().notice());
+            }
+        });
+        assertTrue(gitText(root, "diff", "--cached", "--name-only").contains("Hello.java"));
+        assertTrue(gitText(root, "status", "--porcelain").contains("Hello.java"));
+        Process head = new ProcessBuilder("git", "-C", root.toString(), "rev-parse", "--verify", "HEAD").redirectErrorStream(true).start();
+        head.getInputStream().readAllBytes();
+        assertNotEquals(0, head.waitFor());
+    }
+
     @Test void commitDeliveryIsExplicitAndRechecksStagingTargetAndDocumentAtFinalEffect(@TempDir Path root) throws Exception {
         git(root,"init"); git(root,"config","user.name","Folio"); git(root,"config","user.email","folio@example.com"); stage(root,"first");
         edt(() -> {
@@ -424,5 +446,16 @@ class FolioSessionTest {
     private interface Checked { void run() throws Exception; }
     private static void edt(Checked body) throws Exception { SwingUtilities.invokeAndWait(()-> { try { body.run(); } catch (Exception error) { throw new RuntimeException(error); } }); }
     private static void stage(Path root,String value) throws Exception { Files.writeString(root.resolve("note.txt"),value+"\n"); git(root,"add","note.txt"); }
-    private static void git(Path root,String... arguments) throws Exception { var command=new ArrayList<String>(List.of("git","-C",root.toString())); command.addAll(List.of(arguments)); var process=new ProcessBuilder(command).redirectErrorStream(true).start(); String output=new String(process.getInputStream().readAllBytes()); assertEquals(0,process.waitFor(),output); }
+    private static void git(Path root,String... arguments) throws Exception { gitText(root, arguments); }
+    private static String gitText(Path root, String... arguments) throws Exception {
+        Process process = gitProcess(root, arguments);
+        String output = new String(process.getInputStream().readAllBytes());
+        assertEquals(0, process.waitFor(), output);
+        return output;
+    }
+    private static Process gitProcess(Path root, String... arguments) throws Exception {
+        var command = new ArrayList<String>(List.of("git", "-C", root.toString()));
+        command.addAll(List.of(arguments));
+        return new ProcessBuilder(command).redirectErrorStream(true).start();
+    }
 }
