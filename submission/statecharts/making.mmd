@@ -3,9 +3,9 @@ title: "How Folio was made"
 ---
 stateDiagram-v2
   s0: Send the brief
-  s1: Cursor restates it
+  s1: The agent restates it
   s2: Points and modules
-  s3: Cursor asks us to decide
+  s3: The agent asks us to decide
   s4: We answer
   s5: /architect and /statechart
   s6: Small edits
@@ -17,14 +17,14 @@ stateDiagram-v2
   s12: Computer use, screenshots
   [*] --> s0
   s0 --> s1: you ask for a restatement
-  s1 --> s2: Cursor extracts points and modules
-  s2 --> s3: Cursor asks where we must decide
+  s1 --> s2: The agent extracts points and modules
+  s2 --> s3: The agent asks where we must decide
   s3 --> s4: we answer
-  s4 --> s5: Cursor draws the architecture and the submodules
+  s4 --> s5: The agent draws the architecture and the submodules
   s5 --> s6: we review and make small edits
-  s6 --> s7: Cursor writes a verify-skill for this project
-  s7 --> s8: Cursor builds to the architecture
+  s6 --> s7: The agent writes a verify-skill for this project
+  s7 --> s8: The agent builds to the architecture
   s8 --> s9: the skill is run
   s9 --> s10: we send UI and UX notes
-  s10 --> s11: Cursor changes the frontend
+  s10 --> s11: The agent changes the frontend
   s11 --> s12: computer use clicks and sends screenshots

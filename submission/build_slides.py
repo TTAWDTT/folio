@@ -103,7 +103,7 @@ def draw_process(path: Path) -> None:
     im = Image.new("RGB", (2400, 640), PAPER)
     d = ImageDraw.Draw(im)
     steps = [
-        ("01", "Restate", "The brief is given to Cursor and asked back in its own words."),
+        ("01", "Restate", "The brief is given to the agent and asked back in its own words."),
         ("02", "Divide", "Points become modules. Decisions that are ours are asked."),
         ("03", "Draw", "Architect the system. Statecharts show the parts we must see."),
         ("04", "Revise", "We read the drawings and make the small changes."),
@@ -320,9 +320,9 @@ def draw_making_board(path: Path) -> None:
     }
     top = [
         ("Send", "Send the brief", "“restate it…”"),
-        ("Restate", "Cursor", "restates it"),
+        ("Restate", "The agent", "restates it"),
         ("Divide", "Points and", "modules"),
-        ("Ask", "Cursor asks", "us to decide"),
+        ("Ask", "The agent asks", "us to decide"),
         ("Answer", "We", "answer"),
         ("Draw", "/architect", "/statechart"),
     ]
@@ -331,7 +331,7 @@ def draw_making_board(path: Path) -> None:
         ("Skill", "Verify-skill", "for this project"),
         ("Build", "Code follows", "the architecture"),
         ("Prove", "Skill is run", "backend works"),
-        ("Notes", "Our UI notes", "Cursor changes it"),
+        ("Notes", "Our UI notes", "The agent changes it"),
         ("Click", "Computer use", "screenshots"),
     ]
     box_w, box_h, gap = 380, 400, 44
@@ -458,14 +458,14 @@ def build_pptx(path: Path) -> None:
     _kicker(s, "03    Making")
     _tb(s, 0.42, 0.18, 8, 0.32, [{"text": "How it was made", "size": 22, "bold": True}])
     _pic(s, "making-flow.png", 0.28, 0.52, 6.5, center=True)
-    _notes(s, "Read the top row left to right, then the bottom row. You send the brief and ask for a restatement. Cursor extracts points, splits modules, and asks where a person must decide. Then /architect and /statechart. After your small edits, a verify-skill is written for this project. The code follows the architecture, and only then is the skill run. UI notes come after the backend is proven. Computer use clicks and sends screenshots. The line at the bottom is the whole process: cloud agents, and you reply from a phone. About two minutes.")
+    _notes(s, "Read the top row left to right, then the bottom row. You send the brief and ask for a restatement. The agent extracts points, splits modules, and asks where a person must decide. Then /architect and /statechart. After your small edits, a verify-skill is written for this project. The code follows the architecture, and only then is the skill run. UI notes come after the backend is proven. The agent changes the window, then computer use clicks and sends screenshots. The line at the bottom is the whole process: cloud agents, and you reply from a phone. About two minutes.")
 
     # 5 decisions
     s = new()
     _chrome(s, 4, total)
     _kicker(s, "03    Making")
     _tb(s, 0.48, 0.62, 12, 0.8, [{"text": "Decisions that stayed with us", "size": 34, "bold": True}])
-    _tb(s, 0.48, 1.55, 12.2, 1.0, [{"text": "After the restatement, Cursor named the choices it would not make alone.", "size": 20, "italic": True}])
+    _tb(s, 0.48, 1.55, 12.2, 1.0, [{"text": "After the restatement, the agent named the choices it would not make alone.", "size": 20, "italic": True}])
     decisions = [
         ("Retrieval", "A local word index, not an embedding service. The citation has to survive a dead network."),
         ("The third action", "A course drill. Rewriting code would repeat Group C. Answering again would repeat F0."),
@@ -655,7 +655,7 @@ def build_slide_pdf(path: Path) -> None:
     title("Decisions that stayed with us")
     c.setFont("Serif-I", 13)
     c.setFillColor(HexColor("#1C1915"))
-    c.drawString(36, 420, "After the restatement, Cursor named the choices it would not make alone.")
+    c.drawString(36, 420, "After the restatement, the agent named the choices it would not make alone.")
     decisions = [
         ("Retrieval", "A local word index, not an embedding service."),
         ("The third action", "A course drill. Not Group C, and not another ask."),
