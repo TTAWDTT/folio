@@ -380,7 +380,7 @@ def build_pptx(path: Path) -> None:
         ("Retrieval", "A local word index, not an embedding service. The citation has to survive a dead network."),
         ("The third action", "A course drill. Rewriting code would repeat Group C. Answering again would repeat F0."),
         ("Tests", "Show a preview. Write the file only after an explicit click."),
-        ("Commits", "Show the message. Do not run git commit, and do not touch the index."),
+        ("Commits", "Show the message. Do not run git commit."),
         ("The model", "The address stays in settings. This demonstration uses DeepSeek."),
     ]
     for i, (k, v) in enumerate(decisions):
