@@ -185,7 +185,7 @@ public final class FolioSession implements Disposable {
         if (!sticky && !notice.isEmpty() && SwingUtilities.isEventDispatchThread()) {
             String snapshot = notice;
             noticeTimer = new javax.swing.Timer(5000, event -> {
-                if (notice.equals(snapshot)) { notice = ""; publishShell(); }
+                if (alive() && notice.equals(snapshot)) { notice = ""; publishShell(); }
             });
             noticeTimer.setRepeats(false);
             noticeTimer.start();
@@ -621,7 +621,9 @@ public final class FolioSession implements Disposable {
     private static String redact(String text, ProviderConnection connection) { return connection.key().isBlank() ? text : text.replace(connection.key(), "[redacted]"); }
     private static String safe(Throwable error) { return new ProviderConnection("", "", "").failure(error); }
     @Override public void dispose() {
-        requireEdt(); if (disposed) return; disposed = true; if (noticeTimer != null) noticeTimer.stop(); leaseEpoch++; output = change -> {}; tasks.close(); turns.clear(); drafts.clear(); sources.clear(); confirm = null;
+        requireEdt(); if (disposed) return;
+        if (noticeTimer != null) { noticeTimer.stop(); noticeTimer = null; }
+        disposed = true; leaseEpoch++; output = change -> {}; tasks.close(); turns.clear(); drafts.clear(); sources.clear(); confirm = null;
         try { librarySubscription.close(); } catch (Exception ignored) {}
         try { providerSubscription.close(); } catch (Exception ignored) {}
         FolioPanels.unregister(project, this);
