@@ -244,6 +244,7 @@ public final class FolioSession implements Disposable {
                 }
                 case FolioCommand.CancelFileTask cancel -> { if (!Objects.equals(fileTaskId, cancel.id())) yield stale(); if (fileHandle != null) fileHandle.cancel(); yield Result.ok(); }
                 case FolioCommand.NewChat ignored -> { if (turns.isEmpty()) clearChat(); else confirm("开始新对话将清除当前记录，未发送草稿会保留。", lease, this::clearChat); yield Result.ok(); }
+                case FolioCommand.Stage ignored -> { stageChanges(); yield Result.ok(); }
                 case FolioCommand.Confirm response -> {
                     if (confirm == null || !confirm.view().id().equals(response.id()) || !current(confirm.lease())) yield stale();
                     PendingConfirm pending = confirm; confirm = null; if (response.accept()) pending.action().run(); yield Result.ok();
@@ -540,6 +541,18 @@ public final class FolioSession implements Disposable {
             default -> throw new Stale();
         }
     }
+    private void stageChanges() {
+        List<Path> roots = repositories.get();
+        tasks.submit(FolioTasks.Channel.SOURCE, () -> GitDiffs.stage(roots), outcome -> {
+            if (!alive()) return;
+            if (outcome instanceof FolioTasks.Outcome.Success<GitDiffs.StageResult> success) {
+                GitDiffs.StageResult result = success.value();
+                if (!result.repository()) status("此项目没有 Git 仓库。");
+                else if (result.files() == 0) info("没有可暂存的改动。");
+                else info("已暂存 " + result.files() + " 个文件。");
+            } else if (outcome instanceof FolioTasks.Outcome.Failure<GitDiffs.StageResult> failure) status(safe(failure.cause()));
+        });
+    }
     private void confirm(String text, Lease lease, Runnable action) { confirm = new PendingConfirm(new Confirm(UUID.randomUUID().toString(), text), lease, action); }
     private void importFiles(List<Path> files) {
         startFileTask("正在索引课件", () -> {
@@ -608,7 +621,7 @@ public final class FolioSession implements Disposable {
     private static String redact(String text, ProviderConnection connection) { return connection.key().isBlank() ? text : text.replace(connection.key(), "[redacted]"); }
     private static String safe(Throwable error) { return new ProviderConnection("", "", "").failure(error); }
     @Override public void dispose() {
-        requireEdt(); if (disposed) return; disposed = true; leaseEpoch++; output = change -> {}; tasks.close(); turns.clear(); drafts.clear(); sources.clear(); confirm = null;
+        requireEdt(); if (disposed) return; disposed = true; if (noticeTimer != null) noticeTimer.stop(); leaseEpoch++; output = change -> {}; tasks.close(); turns.clear(); drafts.clear(); sources.clear(); confirm = null;
         try { librarySubscription.close(); } catch (Exception ignored) {}
         try { providerSubscription.close(); } catch (Exception ignored) {}
         FolioPanels.unregister(project, this);

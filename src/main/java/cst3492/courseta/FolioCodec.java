@@ -100,6 +100,7 @@ final class FolioCodec {
             case "chooseFiles" -> { fields(value, "kind"); yield new FolioCommand.ChooseFiles(); }
             case "cancelFileTask" -> { fields(value, "kind", "id"); yield new FolioCommand.CancelFileTask(string(value, "id", 128)); }
             case "newChat" -> { fields(value, "kind"); yield new FolioCommand.NewChat(); }
+            case "stage" -> { fields(value, "kind"); yield new FolioCommand.Stage(); }
             case "confirm" -> { fields(value, "kind", "id", "accept"); yield new FolioCommand.Confirm(string(value, "id", 128), bool(value, "accept")); }
             case "reading" -> { fields(value, "kind", "value"); yield new FolioCommand.Read(reading(object(value, "value"))); }
             default -> throw invalid();

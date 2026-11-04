@@ -25,6 +25,7 @@ sealed interface FolioCommand {
     record ChooseFiles() implements FolioCommand {}
     record CancelFileTask(String id) implements FolioCommand {}
     record NewChat() implements FolioCommand {}
+    record Stage() implements FolioCommand {}
     record Confirm(String id, boolean accept) implements FolioCommand {}
     record Read(Reading value) implements FolioCommand {}
 }

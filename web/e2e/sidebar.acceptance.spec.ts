@@ -6,7 +6,7 @@ for (const width of [280, 360]) {
       await page.setViewportSize({ width, height: 760 });
       host.shell.theme.dark = dark;
       await host.open();
-      const controls = ['新对话', '课件', '设置'].map(name => page.getByRole('button', { name, exact: true }));
+      const controls = ['暂存', '新对话', '课件', '设置'].map(name => page.getByRole('button', { name, exact: true }));
       const boxes = await Promise.all(controls.map(control => control.boundingBox()));
       expect(boxes.every(box => box !== null)).toBe(true);
       const centers = boxes.map(box => box!.y + box!.height / 2);
