@@ -15,6 +15,7 @@ from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE
 from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
+from pptx.oxml import parse_xml
 from pptx.oxml.ns import qn
 from pptx.util import Emu, Inches, Pt
 from reportlab.pdfbase import pdfmetrics
@@ -255,6 +256,37 @@ def _tb(slide, l, t, w, h, lines, align=PP_ALIGN.LEFT):
     return box
 
 
+def _cell_border(cell, color="1C1915", width_pt=0.75):
+    width = str(int(width_pt * 12700))
+    tc_pr = cell._tc.get_or_add_tcPr()
+    for edge in ("lnL", "lnR", "lnT", "lnB"):
+        existing = tc_pr.find(qn(f"a:{edge}"))
+        if existing is not None:
+            tc_pr.remove(existing)
+        tc_pr.append(parse_xml(
+            f'<a:{edge} xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" '
+            f'w="{width}" cap="flat" cmpd="sng" algn="ctr">'
+            f'<a:solidFill><a:srgbClr val="{color}"/></a:solidFill>'
+            f'<a:prstDash val="solid"/>'
+            f'</a:{edge}>'
+        ))
+
+
+def _cell(cell, text, size, bold=False, color=C_INK, fill=C_CARD, anchor=MSO_ANCHOR.TOP):
+    cell.text = ""
+    cell.fill.solid()
+    cell.fill.fore_color.rgb = fill
+    cell.vertical_anchor = anchor
+    cell.margin_left = Inches(0.12)
+    cell.margin_right = Inches(0.12)
+    cell.margin_top = Inches(0.08)
+    cell.margin_bottom = Inches(0.06)
+    frame = cell.text_frame
+    frame.word_wrap = True
+    _run(frame.paragraphs[0], text, size, bold, color)
+    _cell_border(cell)
+
+
 def _rect(slide, l, t, w, h, fill):
     shape = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(l), Inches(t), Inches(w), Inches(h))
     shape.fill.solid()
@@ -263,8 +295,20 @@ def _rect(slide, l, t, w, h, fill):
     return shape
 
 
-def _pic(slide, name, l, t, h, center=False):
-    path = str(FIG / name)
+def _slide8_crops() -> tuple[Path, Path]:
+    """Drop the empty lower half of the two screenshots so they can sit side by side."""
+    out = Path("/tmp/folio-slide8")
+    out.mkdir(parents=True, exist_ok=True)
+    answer, page = out / "answer.png", out / "page.png"
+    with Image.open(FIG / "citations.png") as im:
+        im.crop((0, 0, im.width, 600)).save(answer)
+    with Image.open(FIG / "excerpt.png") as im:
+        im.crop((0, 0, im.width, 650)).save(page)
+    return answer, page
+
+
+def _pic(slide, name, l, t, h, center=False, path=None):
+    path = str(path or (FIG / name))
     with Image.open(path) as im:
         aspect = im.width / im.height
     width_in = h * aspect
@@ -435,22 +479,16 @@ def build_pptx(path: Path) -> None:
     s = new()
     _chrome(s, 2, total)
     _kicker(s, "02    Project")
-    _tb(s, 0.48, 0.55, 6.4, 0.7, [{"text": "What it is", "size": 32, "bold": True}])
-    _tb(s, 0.48, 1.35, 6.3, 2.3, [
-        {"text": "A tool window on the right of IntelliJ. It answers from the lectures on this machine, and it names the page.", "size": 18, "after": 8},
-        {"text": "The picture is that answer: @Test, from Lec-3.4, pages 3 and 2.", "size": 18, "italic": True},
+    _tb(s, 0.42, 0.62, 6.6, 0.42, [{"text": "What it is", "size": 28, "bold": True}])
+    _tb(s, 0.42, 1.12, 6.55, 5.85, [
+        {"text": "It is a tool window on the right of IntelliJ. You import the lectures once. They stay on this machine. You type a question, or you select some code and ask about that code.", "size": 15, "after": 8},
+        {"text": "The answer is written from the pages that match. It names the file and the page. In the picture, the question asks which annotation a JUnit 5 test method uses. The answer is @Test, from Lec-3.4, pages 3 and 2. The titles under the answer open those pages.", "size": 15, "after": 8},
+        {"text": "The brief calls this F0. Read the course files, find the pages that bear on the question, and cite them. The page has to be a real page in the file. If the lectures do not cover the question, you still get an ordinary answer, and no page is invented.", "size": 15, "after": 8},
+        {"text": "F1 is three further actions. Practice gives three exercises, and you open one explanation. Tests show a JUnit file first, and write it into the project only when you click. Commit text is a message written from the files you have staged. You copy it. Folio does not commit.", "size": 15, "after": 8},
+        {"text": "Group C rewrites the student’s code and drives the diff viewer. This project does not.", "size": 15},
     ])
-    rows = [
-        ("F0", "Course retrieval. Chunk, index, retrieve, cite the file and the page."),
-        ("F1", "Three actions. A drill. A JUnit preview written only when asked. Commit text from the staged diff."),
-        ("Not ours", "Group C rewrites the student’s code and drives the diff viewer."),
-    ]
-    for i, (k, line) in enumerate(rows):
-        y = 3.9 + i * 0.95
-        _tb(s, 0.48, y, 1.7, 0.7, [{"text": k, "size": 16, "bold": True, "color": C_BURG}])
-        _tb(s, 2.2, y, 4.6, 0.85, [{"text": line, "size": 16}])
-    _pic(s, "citations.png", 7.15, 0.7, 6.1)
-    _notes(s, "One page for the product and the brief. Point at the screenshot, then read F0, F1, and the Group C line. About one minute.")
+    _pic(s, "citations.png", 7.15, 0.55, 6.35)
+    _notes(s, "Read the paragraphs, and point at the screenshot when you reach the JUnit answer. F0 is the cited answer. F1 is practice, a test file, and a commit message. Close on the Group C line. About ninety seconds.")
 
     # 3 making process, checked as a statechart
     s = new()
@@ -460,24 +498,33 @@ def build_pptx(path: Path) -> None:
     _pic(s, "making-flow.png", 0.28, 0.52, 6.5, center=True)
     _notes(s, "Read the top row left to right, then the bottom row. You send the brief and ask for a restatement. The agent extracts points, splits modules, and asks where a person must decide. Then /architect and /statechart. After your small edits, a verify-skill is written for this project. The code follows the architecture, and only then is the skill run. UI notes come after the backend is proven. The agent changes the window, then computer use clicks and sends screenshots. The line at the bottom is the whole process: cloud agents, and you reply from a phone. About two minutes.")
 
-    # 5 decisions
+    # 4 main decisions, as a table
     s = new()
     _chrome(s, 4, total)
     _kicker(s, "03    Making")
-    _tb(s, 0.48, 0.62, 12, 0.8, [{"text": "Decisions that stayed with us", "size": 34, "bold": True}])
-    _tb(s, 0.48, 1.55, 12.2, 1.0, [{"text": "After the restatement, the agent named the choices it would not make alone.", "size": 20, "italic": True}])
-    decisions = [
-        ("Retrieval", "A local word index, not an embedding service. The citation has to survive a dead network."),
-        ("The third action", "A course drill. Rewriting code would repeat Group C. Answering again would repeat F0."),
-        ("Tests", "Show a preview. Write the file only after an explicit click."),
-        ("Commits", "Show the message. Do not run git commit."),
-        ("The model", "The address stays in settings. This demonstration uses DeepSeek."),
+    _tb(s, 0.48, 0.62, 12, 0.42, [{"text": "Main decisions", "size": 28, "bold": True}])
+    _tb(s, 0.48, 1.12, 12.2, 0.36, [{"text": "These are the main ones. Smaller choices were settled as the work went on.", "size": 15, "italic": True}])
+    rows = [
+        ("Retrieval", "We index the lectures on this machine, by the words in them. We do not send the files out to be turned into vectors. The page is still there when the network is down, because the index never left the machine."),
+        ("The third action", "Besides answering, the brief asks for three actions. This one is practice: three exercises from a topic or from selected code, and an explanation you can open. The editor is not changed."),
+        ("Tests", "The model may draft a JUnit test. It may not save the file by itself. You see the Java first. The file appears only after you click Write, and you can undo it."),
+        ("Commit messages", "The model may draft the message from the files you have staged. It may not run git commit. You copy the message, or you put it into the commit box yourself."),
+        ("The model", "The API address and the model name live in settings, so the window is not tied to one vendor. This demonstration uses DeepSeek. The key is stored in the operating system keyring, not in the project."),
     ]
-    for i, (k, v) in enumerate(decisions):
-        y = 2.45 + i * 0.85
-        _tb(s, 0.5, y, 2.8, 0.7, [{"text": k, "size": 20, "bold": True, "color": C_BURG}])
-        _tb(s, 3.4, y, 9.3, 0.75, [{"text": v, "size": 20}])
-    _notes(s, "These are the answers we gave. One minute. If asked why not vectors: a Chinese question still has to hit an English slide by its words, and the page has to appear before the network returns.")
+    heights = [0.42, 1.05, 0.95, 0.9, 0.9, 0.95]
+    table_shape = s.shapes.add_table(6, 2, Inches(0.48), Inches(1.58), Inches(12.35), Inches(sum(heights)))
+    table = table_shape.table
+    table.columns[0].width = Inches(2.35)
+    table.columns[1].width = Inches(10.0)
+    for i, h in enumerate(heights):
+        table.rows[i].height = Inches(h)
+    label_fill = RGBColor(0xE7, 0xD9, 0xD2)
+    _cell(table.cell(0, 0), "Main decision", 14, True, C_WHITE, C_BURG, MSO_ANCHOR.MIDDLE)
+    _cell(table.cell(0, 1), "What we settled", 14, True, C_WHITE, C_BURG, MSO_ANCHOR.MIDDLE)
+    for i, (name, text) in enumerate(rows, start=1):
+        _cell(table.cell(i, 0), name, 15, True, C_BURG, label_fill, MSO_ANCHOR.MIDDLE)
+        _cell(table.cell(i, 1), text, 14, False, C_INK, C_CARD)
+    _notes(s, "Read the line under the title, then the five rows. These are the main decisions. Smaller ones were settled along the way. About ninety seconds.")
 
     # slides 5–9 are written below
     s = new()
@@ -526,35 +573,41 @@ def build_pptx(path: Path) -> None:
     s = new()
     _chrome(s, 8, total)
     _kicker(s, "05    How it works")
-    _tb(s, 0.42, 0.46, 12, 0.45, [{"text": "A Chinese question, English lectures", "size": 28, "bold": True}])
-    _tb(s, 0.42, 1.05, 6.5, 5.8, [
-        {"text": "The question was: 根据课件，JUnit 5 的测试方法通常用哪个注解？", "size": 16, "after": 10},
-        {"text": "The lectures are in English. The Chinese parts of that question do not occur on any page.", "size": 16, "after": 10},
-        {"text": "A piece normally has to cover at least half of the question. If those Chinese parts also had to be covered, the search would return nothing, because the pages do not contain them.", "size": 16, "after": 10},
-        {"text": "Folio sets the Chinese aside only when both of these are true. None of that Chinese appears anywhere in the library. And a Latin word in the question, here JUnit, does appear in the lectures. The search is then judged on JUnit.", "size": 16, "after": 10},
-        {"text": "The reply cites Lec-3.4, pages 3 and 2. The pictures are that reply, and the page opened from the title.", "size": 16, "after": 10},
-        {"text": "A question with no Latin word from the lectures does not take this path. One Latin word inside a long unrelated question is still not enough.", "size": 16},
+    _tb(s, 0.42, 0.58, 12.4, 0.42, [{"text": "The question, the answer, and the page", "size": 28, "bold": True}])
+    _tb(s, 0.42, 1.08, 12.4, 0.36, [{"text": "根据课件，JUnit 5 的测试方法通常用哪个注解？", "size": 16}])
+    _tb(s, 0.42, 1.5, 12.4, 1.15, [
+        {"text": "Folio keeps Lec-3.4, pages 3 and 2. Those pages introduce @Test. The answer marks them [1] and [2]. Choosing a title opens that page. The numbers were retrieved. Folio does not invent a file or a page.", "size": 16},
     ])
-    _pic(s, "citations.png", 7.15, 0.55, 3.15)
-    _pic(s, "excerpt.png", 7.15, 3.85, 3.05)
-    _notes(s, "Read the rule, then the two pictures. Do not say that every Chinese question hits an English slide. About ninety seconds.")
+    answer_png, page_png = _slide8_crops()
+    left_h, gap = 3.8, 0.28
+    with Image.open(answer_png) as im:
+        left_w = left_h * im.width / im.height
+    with Image.open(page_png) as im:
+        right_w = left_h * im.width / im.height
+    x0 = (W_IN - left_w - right_w - gap) / 2
+    right_x = x0 + left_w + gap
+    _pic(s, "", x0, 3.18, left_h, path=answer_png)
+    _pic(s, "", right_x, 3.18, left_h, path=page_png)
+    _tb(s, x0, 2.8, left_w, 0.32, [{"text": "The answer", "size": 15, "bold": True, "color": C_BURG}])
+    _tb(s, right_x, 2.8, right_w, 0.32, [{"text": "The page opened from the title", "size": 15, "bold": True, "color": C_BURG}])
+    _notes(s, "Read the question and the sentence under it. Then the left picture, the answer, and the right picture, the page that opened. About one minute.")
 
     s = new()
     _chrome(s, 9, total)
     _kicker(s, "05    How it works")
-    _tb(s, 0.42, 0.42, 12, 0.45, [{"text": "Two ways the project can change", "size": 28, "bold": True}])
-    _tb(s, 0.4, 0.95, 6.3, 2.7, [
-        {"text": "Tests", "size": 20, "bold": True, "color": C_BURG, "after": 4},
-        {"text": "You describe what should be tested. Folio shows a Java preview. It checks syntax, and whether the text looks like a JUnit test. It does not compile it and it does not run it. The file is written only when you click Write, and that write can be undone. Cancel, or a preview that is not a test, writes nothing.", "size": 15},
+    _tb(s, 0.42, 0.38, 12.4, 0.42, [{"text": "A test file, and a commit message", "size": 28, "bold": True}])
+    _tb(s, 0.42, 0.88, 12.4, 0.48, [{"text": "Asking and practice only put words on the screen. These two can add something to the project, and only after you click.", "size": 15, "italic": True}])
+    _tb(s, 0.4, 1.42, 6.3, 2.4, [
+        {"text": "Writing a test file", "size": 18, "bold": True, "color": C_BURG, "after": 3},
+        {"text": "You say what you want tested. Folio shows the Java it would write. It checks that the text is legal Java and that it looks like a JUnit test. It does not compile the test, and it does not run it. Nothing is saved until you click Write. Then the file is in the project, and you can undo it. If you cancel, or the preview is not a test, no file is created.", "size": 14},
     ])
-    _pic(s, "state-test.png", 0.55, 3.7, 3.15)
-    _tb(s, 6.85, 0.95, 6.1, 2.7, [
-        {"text": "Commit text", "size": 20, "bold": True, "color": C_BURG, "after": 4},
-        {"text": "Staging is a button you press. Folio reads that staged diff and shows three candidate messages. You copy one, or you fill it into the commit box. If the staged files have changed since they were captured, copy and fill are refused. Drafting a message never runs git commit.", "size": 15},
+    _pic(s, "state-test.png", 0.5, 3.95, 2.95)
+    _tb(s, 6.85, 1.42, 6.1, 2.4, [
+        {"text": "Drafting a commit message", "size": 18, "bold": True, "color": C_BURG, "after": 3},
+        {"text": "You press Stage yourself. That stages the changes. Folio reads what is staged and shows three possible messages. You copy one, or you put it into IntelliJ’s commit box. If you stage something else afterwards, copy and fill stop working, because the message was written for the old changes. Folio never runs git commit. You commit yourself.", "size": 14},
     ])
-    _pic(s, "state-commit.png", 7.15, 3.7, 3.15)
-    _tb(s, 0.45, 6.95, 12, 0.28, [{"text": "Asking and practice never write a file and never produce a commit.", "size": 15, "italic": True}])
-    _notes(s, "Left, tests, then its chart: write is only reachable from a Java preview. Right, commit text, then its chart: no arrow creates a commit. Then the bottom line. About two minutes. Then open the IDE.")
+    _pic(s, "state-commit.png", 7.05, 3.95, 2.95)
+    _notes(s, "The line under the title says what this page is. Left: a test file appears only after Write. Right: a commit message is copied or filled in, and Folio never commits. Then the two charts. About two minutes. Then open the IDE.")
 
     # The live demonstration is not repeated here.
     prs.save(str(path))
@@ -661,37 +714,36 @@ def build_slide_pdf(path: Path) -> None:
     # 2
     paper(); num(2)
     kicker("02     PROJECT")
-    title("What it is")
+    title("What it is", 468)
     c.setFillColor(HexColor("#1C1915"))
-    c.setFont("Serif", 13)
+    c.setFont("Serif", 11)
     lines = [
-        "A tool window on the right of IntelliJ.",
-        "It answers from the lectures on this machine,",
-        "and it names the page.",
-        "",
-        "The picture is that answer: @Test,",
-        "from Lec-3.4, pages 3 and 2.",
+        "It is a tool window on the right of IntelliJ.",
+        "You import the lectures once. They stay here.",
+        "You type a question, or you select code",
+        "and ask about that code.",
+        "The answer is written from the pages that match.",
+        "It names the file and the page.",
+        "In the picture, the question asks which",
+        "annotation a JUnit 5 test method uses.",
+        "The answer is @Test, from Lec-3.4,",
+        "pages 3 and 2. The titles open those pages.",
+        "F0 is that cited answer. The page has to be",
+        "a real page. If the lectures do not cover it,",
+        "you still get an answer, and no page is invented.",
+        "F1 is three further actions. Practice gives",
+        "three exercises. Tests show a JUnit file first,",
+        "and write it only when you click. Commit text",
+        "is a message from the staged files. You copy it.",
+        "Folio does not commit.",
+        "Group C rewrites the student’s code and drives",
+        "the diff viewer. This project does not.",
     ]
-    y = 410
+    y = 440
     for line in lines:
         c.drawString(36, y, line)
-        y -= 20
-    bits = [
-        ("F0", "Course retrieval. Chunk, index, retrieve, cite the page."),
-        ("F1", "A drill. A JUnit preview written only when asked."),
-        ("", "Commit text from the staged diff."),
-        ("Not ours", "Group C rewrites code and drives the diff viewer."),
-    ]
-    y = 250
-    for k, line in bits:
-        c.setFillColor(HexColor("#7A3028"))
-        c.setFont("Serif-B", 12)
-        c.drawString(36, y, k)
-        c.setFillColor(HexColor("#1C1915"))
-        c.setFont("Serif", 12)
-        c.drawString(120, y, line)
-        y -= 28
-    image("citations.png", 500, 120, 340, max_w=430)
+        y -= 16
+    image("citations.png", 500, 70, 380, max_w=430)
     c.showPage()
 
     # 3
@@ -701,29 +753,76 @@ def build_slide_pdf(path: Path) -> None:
     image("making-flow.png", 28, 48, 430, max_w=900)
     c.showPage()
 
-    # 4
+    # 4 main decisions
     paper(); num(4)
     kicker("03     MAKING")
-    title("Decisions that stayed with us")
-    c.setFont("Serif-I", 13)
+    title("Main decisions", 468)
+    c.setFont("Serif-I", 12)
     c.setFillColor(HexColor("#1C1915"))
-    c.drawString(36, 420, "After the restatement, the agent named the choices it would not make alone.")
-    decisions = [
-        ("Retrieval", "A local word index, not an embedding service."),
-        ("The third action", "A course drill. Not Group C, and not another ask."),
-        ("Tests", "Show a preview. Write the file only after a click."),
-        ("Commits", "Show the message. Do not run git commit."),
-        ("The model", "The address stays in settings. This demo uses DeepSeek."),
+    c.drawString(36, 440, "These are the main ones. Smaller choices were settled as the work went on.")
+    rows = [
+        ("Retrieval", [
+            "We index the lectures on this machine, by the words in them.",
+            "We do not send the files out to be turned into vectors.",
+            "The page is still there when the network is down,",
+            "because the index never left the machine.",
+        ]),
+        ("The third action", [
+            "Besides answering, the brief asks for three actions.",
+            "This one is practice: three exercises from a topic",
+            "or from selected code, and an explanation you can open.",
+            "The editor is not changed.",
+        ]),
+        ("Tests", [
+            "The model may draft a JUnit test. It may not save the file.",
+            "You see the Java first. The file appears only after Write,",
+            "and you can undo it.",
+        ]),
+        ("Commit messages", [
+            "The model may draft the message from the staged files.",
+            "It may not run git commit. You copy the message,",
+            "or you put it into the commit box yourself.",
+        ]),
+        ("The model", [
+            "The address and the model name live in settings.",
+            "This demonstration uses DeepSeek. The key is in the",
+            "operating system keyring, not in the project.",
+        ]),
     ]
-    y = 360
-    for k, v in decisions:
+    label_w, table_w = 168, 888
+    x0, top = 36, 418
+    line_h, pad = 15, 10
+    heights = [26] + [pad * 2 + line_h * len(lines) for _, lines in rows]
+    c.setStrokeColor(HexColor("#1C1915"))
+    c.setLineWidth(0.8)
+    y_top = top
+    for i, height in enumerate(heights):
+        y = y_top - height
+        if i == 0:
+            c.setFillColor(HexColor("#7A3028"))
+        elif i % 2 == 0:
+            c.setFillColor(HexColor("#EFE6DC"))
+        else:
+            c.setFillColor(HexColor("#FFFCF7"))
+        c.rect(x0, y, table_w, height, fill=1, stroke=1)
+        c.line(x0 + label_w, y, x0 + label_w, y + height)
+        y_top = y
+    c.setFillColor(white)
+    c.setFont("Serif-B", 12)
+    c.drawString(x0 + 10, top - 18, "Main decision")
+    c.drawString(x0 + label_w + 10, top - 18, "What we settled")
+    y_top = top - heights[0]
+    for (name, lines), height in zip(rows, heights[1:]):
         c.setFillColor(HexColor("#7A3028"))
-        c.setFont("Serif-B", 14)
-        c.drawString(36, y, k)
+        c.setFont("Serif-B", 12)
+        c.drawString(x0 + 10, y_top - pad - 12, name)
         c.setFillColor(HexColor("#1C1915"))
-        c.setFont("Serif", 14)
-        c.drawString(220, y, v)
-        y -= 46
+        c.setFont("Serif", 11)
+        text_y = y_top - pad - 11
+        for line in lines:
+            c.drawString(x0 + label_w + 10, text_y, line)
+            text_y -= line_h
+        y_top -= height
     c.showPage()
 
     # 5 library and ask
@@ -814,83 +913,83 @@ def build_slide_pdf(path: Path) -> None:
     image("state-retrieval.png", 430, 40, 450, max_w=520)
     c.showPage()
 
-    # 8 chinese
+    # 8 question, answer, page
     paper(); num(8)
     kicker("05     HOW IT WORKS")
-    title("A Chinese question, English lectures", 512)
+    title("The question, the answer, and the page", 468)
     c.setFillColor(HexColor("#1C1915"))
-    c.setFont("Serif", 12)
-    c.drawString(36, 470, "The question was:")
     c.setFont("CJK", 13)
-    c.drawString(36, 448, "根据课件，JUnit 5 的测试方法通常用哪个注解？")
-    c.setFont("Serif", 12)
-    lines = [
-        "The lectures are in English.",
-        "The Chinese parts do not occur on any page.",
-        "A piece must cover at least half the question.",
-        "If the Chinese also had to be covered,",
-        "the search would return nothing.",
-        "Folio sets that Chinese aside only when both",
-        "of these are true: none of it is in the library,",
-        "and a Latin word, here JUnit, is in the lectures.",
-        "The search is then judged on JUnit.",
-        "The reply cites Lec-3.4, pages 3 and 2.",
-        "No Latin word from the lectures: this path",
-        "is not used. One Latin word inside a long",
-        "unrelated question is still not enough.",
-    ]
-    y = 420
-    for line in lines:
-        c.drawString(36, y, line)
-        y -= 18
-    image("citations.png", 500, 250, 220, max_w=420)
-    image("excerpt.png", 500, 30, 200, max_w=420)
+    c.drawString(36, 438, "根据课件，JUnit 5 的测试方法通常用哪个注解？")
+    c.setFont("Serif", 13)
+    c.drawString(36, 412, "Folio keeps Lec-3.4, pages 3 and 2. Those pages introduce @Test.")
+    c.drawString(36, 394, "The answer marks them [1] and [2]. Choosing a title opens that page.")
+    c.drawString(36, 376, "The numbers were retrieved. Folio does not invent a file or a page.")
+    answer_png, page_png = _slide8_crops()
+    img_h = 286
+    with Image.open(answer_png) as im:
+        answer_w = img_h * im.width / im.height
+    with Image.open(page_png) as im:
+        page_w = img_h * im.width / im.height
+    gap = 18
+    x_left = (pw - answer_w - page_w - gap) / 2
+    x_right = x_left + answer_w + gap
+    c.setFillColor(HexColor("#7A3028"))
+    c.setFont("Serif-B", 12)
+    c.drawString(x_left, 348, "The answer")
+    c.drawString(x_right, 348, "The page opened from the title")
+    c.setStrokeColor(HexColor("#1C1915"))
+    c.setLineWidth(0.6)
+    c.rect(x_left - 1, 47, answer_w + 2, img_h + 2, fill=0, stroke=1)
+    c.drawImage(str(answer_png), x_left, 48, answer_w, img_h, preserveAspectRatio=True, mask="auto")
+    c.rect(x_right - 1, 47, page_w + 2, img_h + 2, fill=0, stroke=1)
+    c.drawImage(str(page_png), x_right, 48, page_w, img_h, preserveAspectRatio=True, mask="auto")
     c.showPage()
 
     # 9 two writes
     paper(); num(9)
     kicker("05     HOW IT WORKS")
-    title("Two ways the project can change", 512)
-    c.setFillColor(HexColor("#7A3028"))
-    c.setFont("Serif-B", 16)
-    c.drawString(36, 470, "Tests")
-    c.drawString(500, 470, "Commit text")
+    title("A test file, and a commit message", 512)
     c.setFillColor(HexColor("#1C1915"))
-    c.setFont("Serif", 12)
+    c.setFont("Serif-I", 12)
+    c.drawString(36, 478, "Asking and practice only put words on the screen. These two can add something to the project, and only after you click.")
+    c.setFillColor(HexColor("#7A3028"))
+    c.setFont("Serif-B", 14)
+    c.drawString(36, 452, "Writing a test file")
+    c.drawString(500, 452, "Drafting a commit message")
+    c.setFillColor(HexColor("#1C1915"))
+    c.setFont("Serif", 11)
     left = [
-        "You describe what should be tested.",
-        "Folio shows a Java preview.",
-        "It checks syntax and JUnit shape.",
-        "It does not compile and it does not run.",
-        "The file appears only when you click Write.",
-        "You can undo that write.",
+        "You say what you want tested.",
+        "Folio shows the Java it would write.",
+        "It checks that the text is legal Java",
+        "and that it looks like a JUnit test.",
+        "It does not compile the test, and it does not run it.",
+        "Nothing is saved until you click Write.",
+        "Then the file is in the project, and you can undo it.",
         "Cancel, or a preview that is not a test,",
-        "writes nothing.",
-        "The chart: write is reachable only",
-        "from a preview that parsed as Java.",
+        "and no file is created.",
     ]
     right = [
-        "Staging is a button you press.",
-        "Folio reads that staged diff.",
-        "It shows three candidate messages.",
-        "You copy one, or fill the commit box.",
-        "If the staged files have changed,",
-        "copy and fill are refused.",
-        "Drafting never runs git commit.",
-        "The chart has no step that commits.",
+        "You press Stage yourself. That stages the changes.",
+        "Folio reads what is staged.",
+        "It shows three possible messages.",
+        "You copy one, or you put it into the commit box.",
+        "If you stage something else afterwards,",
+        "copy and fill stop working.",
+        "The message was written for the old changes.",
+        "Folio never runs git commit.",
+        "You commit yourself.",
     ]
-    y = 442
+    y = 432
     for line in left:
         c.drawString(36, y, line)
-        y -= 16
-    y = 442
+        y -= 15
+    y = 432
     for line in right:
         c.drawString(500, y, line)
-        y -= 16
-    image("state-test.png", 36, 36, 200, max_w=420)
-    image("state-commit.png", 500, 36, 200, max_w=420)
-    c.setFont("Serif-I", 12)
-    c.drawString(36, 250, "Asking and practice never write a file and never produce a commit.")
+        y -= 15
+    image("state-test.png", 36, 32, 250, max_w=440)
+    image("state-commit.png", 500, 32, 250, max_w=440)
     c.showPage()
 
     c.save()
