@@ -299,8 +299,103 @@ def _notes(slide, text):
     slide.notes_slide.notes_text_frame.text = text
 
 
+def draw_making_board(path: Path) -> None:
+    """Landscape telling of the checked making chart, filling a 16:9 slide."""
+    width, height = 2600, 1440
+    image = Image.new("RGB", (width, height), PAPER)
+    draw = ImageDraw.Draw(image)
+    fills = {
+        "Read": (0xD7, 0xE4, 0xF2),
+        "Decide": (0xF3, 0xE0, 0xD2),
+        "Draw": (0xE4, 0xDC, 0xF2),
+        "Prove": (0xD5, 0xE8, 0xE4),
+        "Shape": (0xEF, 0xE4, 0xD4),
+        "Phone": (0xF6, 0xDC, 0xE8),
+    }
+    top = [
+        ("Read", "Brief", "in hand"),
+        ("Read", "Brief", "restated"),
+        ("Decide", "Waiting", "for us"),
+        ("Decide", "Decisions", "made"),
+        ("Draw", "Drawings", "ready"),
+        ("Draw", "Drawings", "accepted"),
+    ]
+    bottom = [
+        ("Prove", "Verify skill", "written"),
+        ("Prove", "Backend", "proven"),
+        ("Shape", "Window notes", "given"),
+        ("Shape", "Window clicked", "through"),
+        ("Phone", "Reviewed", "on a phone"),
+    ]
+    box_w, box_h, gap = 380, 430, 44
+    top_w = len(top) * box_w + (len(top) - 1) * gap
+    left = (width - top_w) // 2
+    y1, y2 = 36, 860
+
+    def rounded(x, y, phase, a, b):
+        draw.rounded_rectangle((x, y, x + box_w, y + box_h), radius=28, fill=fills[phase], outline=LINE, width=4)
+        draw.text((x + 28, y + 36), phase.upper(), font=font(26, True), fill=BURG)
+        draw.text((x + 28, y + 150), a, font=font(48, True), fill=INK)
+        draw.text((x + 28, y + 220), b, font=font(48, True), fill=INK)
+
+    def shaft(x1, y1, x2, y2):
+        draw.line((x1, y1, x2, y2), fill=BURG, width=6)
+
+    def head(x, y, toward):
+        size = 16
+        if toward == "right":
+            draw.polygon([(x, y), (x - size, y - 11), (x - size, y + 11)], fill=BURG)
+        elif toward == "down":
+            draw.polygon([(x, y), (x - 11, y - size), (x + 11, y - size)], fill=BURG)
+
+    def caption(text, x, y):
+        face = font(28, True)
+        w = face.getlength(text)
+        draw.text((x - w / 2, y), text, font=face, fill=BURG)
+
+    for i, (phase, a, b) in enumerate(top):
+        rounded(left + i * (box_w + gap), y1, phase, a, b)
+    for i, (phase, a, b) in enumerate(bottom):
+        rounded(left + i * (box_w + gap), y2, phase, a, b)
+
+    for i in range(len(top) - 1):
+        x1 = left + i * (box_w + gap) + box_w
+        mid_y = y1 + box_h / 2
+        shaft(x1 + 4, mid_y, x1 + gap - 18, mid_y)
+        head(x1 + gap - 2, mid_y, "right")
+    for i in range(len(bottom) - 1):
+        x1 = left + i * (box_w + gap) + box_w
+        mid_y = y2 + box_h / 2
+        shaft(x1 + 4, mid_y, x1 + gap - 18, mid_y)
+        head(x1 + gap - 2, mid_y, "right")
+
+    last = left + 5 * (box_w + gap)
+    drop_x = last + box_w / 2
+    rail_y = (y1 + box_h + y2) // 2
+    into_x = left + box_w / 2
+    shaft(drop_x, y1 + box_h + 4, drop_x, rail_y)
+    shaft(drop_x, rail_y, into_x, rail_y)
+    shaft(into_x, rail_y, into_x, y2 - 20)
+    head(into_x, y2 - 2, "down")
+    caption("writes the verify skill", (drop_x + into_x) / 2, rail_y - 48)
+
+    notes_x = left + 2 * (box_w + gap)
+    click_x = left + 3 * (box_w + gap)
+    arch_y = y2 - 78
+    right_leg = click_x + box_w * 0.78
+    left_leg = notes_x + box_w * 0.22
+    shaft(right_leg, y2 - 2, right_leg, arch_y)
+    shaft(right_leg, arch_y, left_leg, arch_y)
+    shaft(left_leg, arch_y, left_leg, y2 - 20)
+    head(left_leg, y2 - 2, "down")
+    caption("another note", (left_leg + right_leg) / 2, arch_y - 46)
+
+    image.save(path)
+
+
 def build_pptx(path: Path) -> None:
     prepare_figures()
+    draw_making_board(FIG / "making-flow.png")
     prs = Presentation()
     prs.slide_width = Inches(W_IN)
     prs.slide_height = Inches(H_IN)
@@ -366,8 +461,8 @@ def build_pptx(path: Path) -> None:
     s = new()
     _chrome(s, 3, total)
     _kicker(s, "03    Making")
-    _tb(s, 0.42, 0.22, 8, 0.36, [{"text": "How it was made", "size": 26, "bold": True}])
-    _pic(s, "making-flow.png", 0.15, 0.62, 6.45, center=True)
+    _tb(s, 0.42, 0.18, 8, 0.32, [{"text": "How it was made", "size": 22, "bold": True}])
+    _pic(s, "making-flow.png", 0.28, 0.52, 6.5, center=True)
     _notes(s, "Walk the chart from Brief in hand down to Reviewed on a phone. The only loop is a later window note, which returns to Window notes given. Accepting on the phone is the end. TLC checked 11 states. No drawing before the restatement, no proof before our edits, no window change before the skill passes. About two minutes.")
 
     # 5 decisions
@@ -556,7 +651,7 @@ def build_slide_pdf(path: Path) -> None:
     paper(); num(3)
     kicker("03     MAKING")
     title("How it was made", 512)
-    image("making-flow.png", 300, 36, 455, max_w=420)
+    image("making-flow.png", 28, 48, 430, max_w=900)
     c.showPage()
 
     # 4
