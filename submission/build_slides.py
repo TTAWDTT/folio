@@ -398,7 +398,7 @@ def build_pptx(path: Path) -> None:
     prs.core_properties.author = "Luo Zhen, Li Canwen, Fan Yu, Meng Shengyu"
     prs.core_properties.subject = "How Folio was made, and what the demonstration shows"
     blank = prs.slide_layouts[6]
-    total = 7
+    total = 9
 
     def new():
         slide = prs.slides.add_slide(blank)
@@ -479,77 +479,82 @@ def build_pptx(path: Path) -> None:
         _tb(s, 3.4, y, 9.3, 0.75, [{"text": v, "size": 20}])
     _notes(s, "These are the answers we gave. One minute. If asked why not vectors: a Chinese question still has to hit an English slide by its words, and the page has to appear before the network returns.")
 
+    # slides 5–9 are written below
     s = new()
     _chrome(s, 5, total)
     _kicker(s, "04    The window")
-    _tb(s, 0.48, 0.52, 12, 0.5, [{"text": "What the window does", "size": 32, "bold": True}])
-    features = [
-        ("Import", "PDF, PPTX, TXT, Markdown, and DOCX. Indexing needs no key. The library is shared. Remove asks first. The original file stays."),
-        ("Ask", "The answer streams. Thinking stays apart. Stop keeps the text already shown."),
-        ("Cite", "[1] names the file and the page. The title opens that page. A miss is a direct answer, with no invented page. No key still retrieves, and makes no model call."),
-        ("Drill", "Three exercises appear together once they parse. Tokens are not painted on the way. The editor is not changed."),
-        ("Tests", "A preview first. It is not run. Write file is the only write, and it can be undone."),
-        ("Commit", "Stage is its own click. Then candidates. Copy or fill. The agent does not run git commit."),
-        ("Settings", "Address and model live here. The key goes to the OS keyring. The field is empty once it is saved."),
-        ("Drafts", "Ask, drill, test, and commit each keep their unsent text. A new chat clears the transcript. Drafts stay."),
-    ]
-    for i, (name, line) in enumerate(features):
-        col, row = i % 2, i // 2
-        x = 0.45 + col * 6.4
-        y = 1.25 + row * 1.4
-        _tb(s, x, y, 6.1, 1.25, [
-            {"text": name, "size": 18, "bold": True, "color": C_BURG},
-            {"text": line, "size": 15, "before": 2},
-        ])
-    _notes(s, "Read down the left column, then the right. This page is the inventory. Do not open the IDE. About ninety seconds.")
+    _tb(s, 0.42, 0.48, 7.2, 0.55, [{"text": "The library, and a question", "size": 28, "bold": True}])
+    _tb(s, 0.42, 1.15, 6.6, 5.6, [
+        {"text": "You bring the lectures in from the course-files button. Folio accepts PDF, PPTX, TXT, Markdown, and DOCX. It reads them on this machine. Indexing does not need an API key.", "size": 16, "after": 10},
+        {"text": "The library is shared by every project in this IDE. Removing a file asks first, because the other projects use it too. The original file stays on disk.", "size": 16, "after": 10},
+        {"text": "You ask in the box at the bottom, or you select code and ask about that selection. The answer arrives as it is written. Thinking, when there is any, stays in its own block. If you stop, the words already on screen remain.", "size": 16, "after": 10},
+        {"text": "When a lecture page was used, the answer marks it [1]. The line under the answer names the file and the page. The title opens that page.", "size": 16, "after": 10},
+        {"text": "If the lectures do not cover the question, you still get an ordinary answer. Folio does not invent a page. With no saved key, the search still runs, and no request is sent to the model.", "size": 16},
+    ])
+    _pic(s, "files.png", 7.2, 0.55, 3.05)
+    _pic(s, "citations.png", 7.2, 3.75, 3.15)
+    _notes(s, "Left, read the paragraphs. Right, the lecture list, then the JUnit answer with its two page citations. About two minutes.")
 
     s = new()
     _chrome(s, 6, total)
     _kicker(s, "04    The window")
-    _tb(s, 0.48, 0.48, 12, 0.5, [{"text": "From a file to a page", "size": 32, "bold": True}])
-    steps = [
-        ("1  File", "PDF, PPTX, or text. Page, slide, and section numbers stay the ones in the file."),
-        ("2  Chunk", "Each of those is split at about 700 characters, with 100 characters of overlap."),
-        ("3  Index", "A local word index on this machine. No embedding service."),
-        ("4  Retrieve", "The question and any selection. At most four chunks. A chunk must cover at least half the question’s terms."),
-        ("5  Answer", "The model writes from those chunks and marks one as [1]."),
-        ("6  Page", "[1] is the chunk that was used. The title opens that page."),
-    ]
-    for i, (name, line) in enumerate(steps):
-        y = 1.15 + i * 0.9
-        _tb(s, 0.45, y, 1.7, 0.75, [{"text": name, "size": 16, "bold": True, "color": C_BURG}])
-        _tb(s, 2.2, y, 4.5, 0.8, [{"text": line, "size": 15}])
-    _rect(s, 6.95, 1.2, 5.85, 5.3, C_CARD)
-    _tb(s, 7.15, 1.4, 5.5, 4.9, [
-        {"text": "A Chinese question", "size": 20, "bold": True, "after": 8},
-        {"text": "「根据课件，JUnit 5 的测试方法通常用哪个注解？」", "size": 16, "after": 10},
-        {"text": "The lectures are in English. The Chinese fragments are not on those pages. If those fragments also had to be covered, the question would match nothing.", "size": 15, "after": 8},
-        {"text": "When none of the Chinese is in the library, and a Latin word such as JUnit is, the search uses the Latin word alone.", "size": 15, "after": 8},
-        {"text": "That question hits Lec-3.4, pages 3 and 2.", "size": 15, "bold": True, "after": 10},
-        {"text": "A Chinese question with no Latin word from the lectures does not take this path. One Latin word inside a long unrelated question is still not enough.", "size": 15},
+    _tb(s, 0.42, 0.48, 7.4, 0.5, [{"text": "Practice, settings, and drafts", "size": 28, "bold": True}])
+    _tb(s, 0.42, 1.15, 6.7, 5.6, [
+        {"text": "Practice gives three exercises. You name a topic, or you select code. The three questions appear together only after the reply can be read as three exercises. Until then you see a status line, not a stream of tokens. You open one explanation at a time. Practice does not change the editor.", "size": 16, "after": 12},
+        {"text": "Settings holds the API address and the model name. The key is stored in the operating system keyring. After it is saved, the key field is empty, and the line under it says a key for this address is saved. Indexing never needs that key. Asking the model does.", "size": 16, "after": 12},
+        {"text": "Ask, practice, tests, and commit text each keep their own unsent draft. Changing mode does not throw a draft away. A new chat clears the transcript. The drafts stay.", "size": 16},
     ])
-    _notes(s, "Walk the six steps, then the card on the right. Say the Chinese rule in one breath: Chinese that the library does not contain is set aside only when a Latin word from the lectures is present. About two minutes.")
+    _pic(s, "drill.png", 7.25, 0.55, 3.35)
+    _pic(s, "settings.png", 7.25, 4.15, 2.55)
+    _notes(s, "Three paragraphs, then the two pictures: three exercises with one explanation open, and settings with an empty key field. About ninety seconds.")
 
     s = new()
     _chrome(s, 7, total)
-    _kicker(s, "04    The window")
-    _tb(s, 0.48, 0.5, 12, 0.55, [{"text": "Two ways the project can change", "size": 32, "bold": True}])
-    _tb(s, 0.5, 1.3, 6, 0.4, [{"text": "Tests", "size": 24, "bold": True, "color": C_BURG}])
-    _tb(s, 0.5, 1.9, 6, 3.6, [
-        {"text": "You describe the scenario.", "size": 18, "after": 8},
-        {"text": "A Java preview comes back. It is checked for syntax and for looking like a test. It is not run.", "size": 18, "after": 8},
-        {"text": "You click Write. The file appears, and it can be undone.", "size": 18, "after": 8},
-        {"text": "Cancel, or a preview that is not a test, writes nothing.", "size": 18},
+    _kicker(s, "05    How it works")
+    _tb(s, 0.42, 0.46, 7.2, 0.5, [{"text": "How a file becomes a page", "size": 28, "bold": True}])
+    _tb(s, 0.42, 1.1, 6.8, 5.7, [
+        {"text": "Folio does not invent page numbers. A PDF keeps the page numbers in the file, including blank pages. A slide deck keeps slide order. A text file is a section, not a made-up page.", "size": 16, "after": 10},
+        {"text": "Each page, slide, or section is cut into pieces of about 700 characters. The next piece starts 100 characters earlier, so a sentence on the cut is still inside one piece.", "size": 16, "after": 10},
+        {"text": "Those pieces are indexed on this machine by their words. There is no embedding model and no web search.", "size": 16, "after": 10},
+        {"text": "A question, plus any code you selected, is matched against that index. Folio keeps at most four pieces. A piece has to cover at least half of the question’s terms. One shared word in a longer question is not enough.", "size": 16, "after": 10},
+        {"text": "The model writes from those pieces. If it uses one, it writes [1]. Folio makes [1] mean that piece’s file and page, and the title opens it. Stopping does not invent a page that was not retrieved.", "size": 16, "after": 10},
+        {"text": "The drawing is the same rule. A miss cannot become a page.", "size": 16, "italic": True},
     ])
-    _tb(s, 6.9, 1.3, 6, 0.4, [{"text": "Commit text", "size": 24, "bold": True, "color": C_BURG}])
-    _tb(s, 6.9, 1.9, 5.9, 3.6, [
-        {"text": "Stage is a separate click.", "size": 18, "after": 8},
-        {"text": "Folio captures that staged diff.", "size": 18, "after": 8},
-        {"text": "Three candidates. Copy one, or fill the commit box.", "size": 18, "after": 8},
-        {"text": "If the staging area has changed, copy and fill are refused. Nothing here runs git commit.", "size": 18},
+    _pic(s, "state-retrieval.png", 7.35, 0.7, 6.15)
+    _notes(s, "Read the paragraphs, then point at the statechart. Say a miss ends as an ordinary answer, and stop does not invent a page. About two minutes.")
+
+    s = new()
+    _chrome(s, 8, total)
+    _kicker(s, "05    How it works")
+    _tb(s, 0.42, 0.46, 12, 0.45, [{"text": "A Chinese question, English lectures", "size": 28, "bold": True}])
+    _tb(s, 0.42, 1.05, 6.5, 5.8, [
+        {"text": "The question was: 根据课件，JUnit 5 的测试方法通常用哪个注解？", "size": 16, "after": 10},
+        {"text": "The lectures are in English. The Chinese parts of that question do not occur on any page.", "size": 16, "after": 10},
+        {"text": "A piece normally has to cover at least half of the question. If those Chinese parts also had to be covered, the search would return nothing, because the pages do not contain them.", "size": 16, "after": 10},
+        {"text": "Folio sets the Chinese aside only when both of these are true. None of that Chinese appears anywhere in the library. And a Latin word in the question, here JUnit, does appear in the lectures. The search is then judged on JUnit.", "size": 16, "after": 10},
+        {"text": "The reply cites Lec-3.4, pages 3 and 2. The pictures are that reply, and the page opened from the title.", "size": 16, "after": 10},
+        {"text": "A question with no Latin word from the lectures does not take this path. One Latin word inside a long unrelated question is still not enough.", "size": 16},
     ])
-    _tb(s, 0.5, 6.15, 12, 0.7, [{"text": "Ask and drill have no path to a file or a commit.", "size": 20, "italic": True}])
-    _notes(s, "Left column, then right column, then the bottom line. About ninety seconds. Then open the IDE.")
+    _pic(s, "citations.png", 7.15, 0.55, 3.15)
+    _pic(s, "excerpt.png", 7.15, 3.85, 3.05)
+    _notes(s, "Read the rule, then the two pictures. Do not say that every Chinese question hits an English slide. About ninety seconds.")
+
+    s = new()
+    _chrome(s, 9, total)
+    _kicker(s, "05    How it works")
+    _tb(s, 0.42, 0.42, 12, 0.45, [{"text": "Two ways the project can change", "size": 28, "bold": True}])
+    _tb(s, 0.4, 0.95, 6.3, 2.7, [
+        {"text": "Tests", "size": 20, "bold": True, "color": C_BURG, "after": 4},
+        {"text": "You describe what should be tested. Folio shows a Java preview. It checks syntax, and whether the text looks like a JUnit test. It does not compile it and it does not run it. The file is written only when you click Write, and that write can be undone. Cancel, or a preview that is not a test, writes nothing.", "size": 15},
+    ])
+    _pic(s, "state-test.png", 0.55, 3.7, 3.15)
+    _tb(s, 6.85, 0.95, 6.1, 2.7, [
+        {"text": "Commit text", "size": 20, "bold": True, "color": C_BURG, "after": 4},
+        {"text": "Staging is a button you press. Folio reads that staged diff and shows three candidate messages. You copy one, or you fill it into the commit box. If the staged files have changed since they were captured, copy and fill are refused. Drafting a message never runs git commit.", "size": 15},
+    ])
+    _pic(s, "state-commit.png", 7.15, 3.7, 3.15)
+    _tb(s, 0.45, 6.95, 12, 0.28, [{"text": "Asking and practice never write a file and never produce a commit.", "size": 15, "italic": True}])
+    _notes(s, "Left, tests, then its chart: write is only reachable from a Java preview. Right, commit text, then its chart: no arrow creates a commit. Then the bottom line. About two minutes. Then open the IDE.")
 
     # The live demonstration is not repeated here.
     prs.save(str(path))
@@ -558,12 +563,12 @@ def build_pptx(path: Path) -> None:
 
 
 def build_slide_pdf(path: Path) -> None:
-    """Seven slides. Liberation Serif stands in for Times New Roman."""
+    """Nine slides. Liberation Serif stands in for Times New Roman."""
     c = pdfcanvas.Canvas(str(path), pagesize=PAGE)
     c.setTitle("Folio — CST3492 Group B, Team 4")
     c.setAuthor("Luo Zhen, Li Canwen, Fan Yu, Meng Shengyu")
     pw, ph = PAGE
-    total = 7
+    total = 9
 
     def paper():
         c.setFillColor(HexColor("#F6F1E7"))
@@ -721,118 +726,171 @@ def build_slide_pdf(path: Path) -> None:
         y -= 46
     c.showPage()
 
-    # 5 features
+    # 5 library and ask
     paper(); num(5)
     kicker("04     THE WINDOW")
-    title("What the window does", 520)
-    features = [
-        (36, "Import", "PDF, PPTX, TXT, Markdown, DOCX. No key to index."),
-        (36, "Ask", "The answer streams. Thinking stays apart."),
-        (36, "Cite", "[1] is the file and the page. A miss invents no page."),
-        (36, "Drill", "Three exercises after they parse. The editor stays."),
-        (500, "Tests", "Preview first. Write file is the only write."),
-        (500, "Commit", "Stage, then candidates. No git commit."),
-        (500, "Settings", "The key is in the OS keyring. The field stays empty."),
-        (500, "Drafts", "Each mode keeps its text. A new chat keeps drafts."),
-    ]
-    y_left, y_right = 430, 430
-    for x, name, line in features:
-        y = y_left if x == 36 else y_right
-        c.setFillColor(HexColor("#7A3028"))
-        c.setFont("Serif-B", 14)
-        c.drawString(x, y, name)
-        c.setFillColor(HexColor("#1C1915"))
-        c.setFont("Serif", 13)
-        c.drawString(x + 110, y, line)
-        if x == 36:
-            y_left -= 70
-        else:
-            y_right -= 70
-    c.showPage()
-
-    # 6 mechanism and Chinese
-    paper(); num(6)
-    kicker("04     THE WINDOW")
-    title("From a file to a page", 512)
-    steps = [
-        "1  File. Page and slide numbers stay as they are.",
-        "2  Chunk. About 700 characters, overlap 100.",
-        "3  Index. Local words. No embedding service.",
-        "4  Retrieve. At most four chunks. Half the terms.",
-        "5  Answer. The model marks a chunk as [1].",
-        "6  Page. [1] opens that file and page.",
+    title("The library, and a question", 512)
+    c.setFillColor(HexColor("#1C1915"))
+    c.setFont("Serif", 12)
+    left = [
+        "You bring the lectures in from the course-files button.",
+        "Folio accepts PDF, PPTX, TXT, Markdown, and DOCX.",
+        "It reads them on this machine. Indexing needs no key.",
+        "The library is shared by every project in this IDE.",
+        "Removing a file asks first. The original stays on disk.",
+        "You ask in the box, or about selected code.",
+        "The answer arrives as it is written.",
+        "Thinking stays in its own block.",
+        "If you stop, the words already shown remain.",
+        "A used page is marked [1]. The title opens it.",
+        "A miss is still an ordinary answer. No invented page.",
+        "With no key, search runs and no model call is made.",
     ]
     y = 450
-    for line in steps:
-        c.setFillColor(HexColor("#1C1915"))
-        c.setFont("Serif", 14)
+    for line in left:
         c.drawString(36, y, line)
-        y -= 36
-    c.setStrokeColor(HexColor("#1C1915"))
-    c.setLineWidth(1)
-    c.roundRect(500, 70, 430, 400, 8, fill=0, stroke=1)
-    c.setFillColor(HexColor("#7A3028"))
-    c.setFont("Serif-B", 14)
-    c.drawString(518, 440, "A Chinese question")
+        y -= 22
+    image("files.png", 520, 280, 200, max_w=400)
+    image("citations.png", 520, 40, 220, max_w=400)
+    c.showPage()
+
+    # 6 practice settings drafts
+    paper(); num(6)
+    kicker("04     THE WINDOW")
+    title("Practice, settings, and drafts", 512)
     c.setFillColor(HexColor("#1C1915"))
-    c.setFont("CJK", 12)
-    c.drawString(518, 410, "根据课件，JUnit 5 的测试方法")
-    c.drawString(518, 392, "通常用哪个注解？")
+    c.setFont("Serif", 12)
+    lines = [
+        "Practice gives three exercises, from a topic or from selected code.",
+        "They appear together only after the reply parses as three exercises.",
+        "Until then you see a status line, not a stream of tokens.",
+        "You open one explanation at a time. The editor is not changed.",
+        "Settings holds the address and the model.",
+        "The key is in the operating system keyring.",
+        "After it is saved, the field is empty.",
+        "The line under it says a key for this address is saved.",
+        "Indexing never needs that key. Asking the model does.",
+        "Ask, practice, tests, and commit text each keep a draft.",
+        "Changing mode does not throw a draft away.",
+        "A new chat clears the transcript. The drafts stay.",
+    ]
+    y = 450
+    for line in lines:
+        c.drawString(36, y, line)
+        y -= 20
+    image("drill.png", 560, 250, 220, max_w=360)
+    image("settings.png", 560, 40, 180, max_w=360)
+    c.showPage()
+
+    # 7 mechanism
+    paper(); num(7)
+    kicker("05     HOW IT WORKS")
+    title("How a file becomes a page", 512)
+    c.setFillColor(HexColor("#1C1915"))
+    c.setFont("Serif", 12)
+    lines = [
+        "Folio does not invent page numbers.",
+        "A PDF keeps its own pages, including blanks.",
+        "A slide deck keeps slide order.",
+        "A text file is a section, not a made-up page.",
+        "Each of those is cut at about 700 characters.",
+        "The next piece starts 100 characters earlier,",
+        "so a sentence on the cut is not lost.",
+        "The pieces are indexed here, by their words.",
+        "There is no embedding model and no web search.",
+        "A question, plus any selected code, is matched.",
+        "Folio keeps at most four pieces.",
+        "A piece must cover at least half the terms.",
+        "One shared word in a longer question misses.",
+        "The model writes [1] for a piece it uses.",
+        "[1] becomes that file and page. The title opens it.",
+        "Stopping does not invent a page.",
+        "The drawing is the same rule.",
+    ]
+    y = 460
+    for line in lines:
+        c.drawString(36, y, line)
+        y -= 18
+    image("state-retrieval.png", 430, 40, 450, max_w=520)
+    c.showPage()
+
+    # 8 chinese
+    paper(); num(8)
+    kicker("05     HOW IT WORKS")
+    title("A Chinese question, English lectures", 512)
+    c.setFillColor(HexColor("#1C1915"))
+    c.setFont("Serif", 12)
+    c.drawString(36, 470, "The question was:")
+    c.setFont("CJK", 13)
+    c.drawString(36, 448, "根据课件，JUnit 5 的测试方法通常用哪个注解？")
     c.setFont("Serif", 12)
     lines = [
         "The lectures are in English.",
-        "Those Chinese fragments are not",
-        "on the pages. If they also had to",
-        "be covered, nothing would match.",
-        "When none of the Chinese is in the",
-        "library, and JUnit is, the search",
-        "uses JUnit alone.",
-        "It hits Lec-3.4, pages 3 and 2.",
-        "No Latin word: this path is not used.",
-        "One Latin word in a long unrelated",
-        "question is still not enough.",
+        "The Chinese parts do not occur on any page.",
+        "A piece must cover at least half the question.",
+        "If the Chinese also had to be covered,",
+        "the search would return nothing.",
+        "Folio sets that Chinese aside only when both",
+        "of these are true: none of it is in the library,",
+        "and a Latin word, here JUnit, is in the lectures.",
+        "The search is then judged on JUnit.",
+        "The reply cites Lec-3.4, pages 3 and 2.",
+        "No Latin word from the lectures: this path",
+        "is not used. One Latin word inside a long",
+        "unrelated question is still not enough.",
     ]
-    y = 360
+    y = 420
     for line in lines:
-        c.drawString(518, y, line)
-        y -= 22
+        c.drawString(36, y, line)
+        y -= 18
+    image("citations.png", 500, 250, 220, max_w=420)
+    image("excerpt.png", 500, 30, 200, max_w=420)
     c.showPage()
 
-    # 7 two writes
-    paper(); num(7)
-    kicker("04     THE WINDOW")
-    title("Two ways the project can change", 520)
+    # 9 two writes
+    paper(); num(9)
+    kicker("05     HOW IT WORKS")
+    title("Two ways the project can change", 512)
     c.setFillColor(HexColor("#7A3028"))
-    c.setFont("Serif-B", 18)
-    c.drawString(36, 440, "Tests")
-    c.drawString(500, 440, "Commit text")
+    c.setFont("Serif-B", 16)
+    c.drawString(36, 470, "Tests")
+    c.drawString(500, 470, "Commit text")
     c.setFillColor(HexColor("#1C1915"))
-    c.setFont("Serif", 14)
+    c.setFont("Serif", 12)
     left = [
-        "You describe the scenario.",
-        "A Java preview. Syntax and shape.",
-        "It is not run.",
-        "You click Write. The file appears.",
-        "Cancel writes nothing.",
+        "You describe what should be tested.",
+        "Folio shows a Java preview.",
+        "It checks syntax and JUnit shape.",
+        "It does not compile and it does not run.",
+        "The file appears only when you click Write.",
+        "You can undo that write.",
+        "Cancel, or a preview that is not a test,",
+        "writes nothing.",
+        "The chart: write is reachable only",
+        "from a preview that parsed as Java.",
     ]
     right = [
-        "Stage is a separate click.",
-        "Folio captures that staged diff.",
-        "Three candidates.",
-        "Copy one, or fill the commit box.",
-        "A changed staging area is refused.",
-        "Nothing here runs git commit.",
+        "Staging is a button you press.",
+        "Folio reads that staged diff.",
+        "It shows three candidate messages.",
+        "You copy one, or fill the commit box.",
+        "If the staged files have changed,",
+        "copy and fill are refused.",
+        "Drafting never runs git commit.",
+        "The chart has no step that commits.",
     ]
-    y = 390
+    y = 442
     for line in left:
         c.drawString(36, y, line)
-        y -= 32
-    y = 390
+        y -= 16
+    y = 442
     for line in right:
         c.drawString(500, y, line)
-        y -= 32
-    c.setFont("Serif-I", 14)
-    c.drawString(36, 80, "Ask and drill have no path to a file or a commit.")
+        y -= 16
+    image("state-test.png", 36, 36, 200, max_w=420)
+    image("state-commit.png", 500, 36, 200, max_w=420)
+    c.setFont("Serif-I", 12)
+    c.drawString(36, 250, "Asking and practice never write a file and never produce a commit.")
     c.showPage()
 
     c.save()
