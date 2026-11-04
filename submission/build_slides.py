@@ -15,6 +15,7 @@ from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE
 from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
+from pptx.oxml import parse_xml
 from pptx.oxml.ns import qn
 from pptx.util import Emu, Inches, Pt
 from reportlab.pdfbase import pdfmetrics
@@ -255,6 +256,37 @@ def _tb(slide, l, t, w, h, lines, align=PP_ALIGN.LEFT):
     return box
 
 
+def _cell_border(cell, color="1C1915", width_pt=0.75):
+    width = str(int(width_pt * 12700))
+    tc_pr = cell._tc.get_or_add_tcPr()
+    for edge in ("lnL", "lnR", "lnT", "lnB"):
+        existing = tc_pr.find(qn(f"a:{edge}"))
+        if existing is not None:
+            tc_pr.remove(existing)
+        tc_pr.append(parse_xml(
+            f'<a:{edge} xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" '
+            f'w="{width}" cap="flat" cmpd="sng" algn="ctr">'
+            f'<a:solidFill><a:srgbClr val="{color}"/></a:solidFill>'
+            f'<a:prstDash val="solid"/>'
+            f'</a:{edge}>'
+        ))
+
+
+def _cell(cell, text, size, bold=False, color=C_INK, fill=C_CARD, anchor=MSO_ANCHOR.TOP):
+    cell.text = ""
+    cell.fill.solid()
+    cell.fill.fore_color.rgb = fill
+    cell.vertical_anchor = anchor
+    cell.margin_left = Inches(0.12)
+    cell.margin_right = Inches(0.12)
+    cell.margin_top = Inches(0.08)
+    cell.margin_bottom = Inches(0.06)
+    frame = cell.text_frame
+    frame.word_wrap = True
+    _run(frame.paragraphs[0], text, size, bold, color)
+    _cell_border(cell)
+
+
 def _rect(slide, l, t, w, h, fill):
     shape = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(l), Inches(t), Inches(w), Inches(h))
     shape.fill.solid()
@@ -263,8 +295,20 @@ def _rect(slide, l, t, w, h, fill):
     return shape
 
 
-def _pic(slide, name, l, t, h, center=False):
-    path = str(FIG / name)
+def _slide8_crops() -> tuple[Path, Path]:
+    """Drop the empty lower half of the two screenshots so they can sit side by side."""
+    out = Path("/tmp/folio-slide8")
+    out.mkdir(parents=True, exist_ok=True)
+    answer, page = out / "answer.png", out / "page.png"
+    with Image.open(FIG / "citations.png") as im:
+        im.crop((0, 0, im.width, 600)).save(answer)
+    with Image.open(FIG / "excerpt.png") as im:
+        im.crop((0, 0, im.width, 650)).save(page)
+    return answer, page
+
+
+def _pic(slide, name, l, t, h, center=False, path=None):
+    path = str(path or (FIG / name))
     with Image.open(path) as im:
         aspect = im.width / im.height
     width_in = h * aspect
@@ -454,23 +498,33 @@ def build_pptx(path: Path) -> None:
     _pic(s, "making-flow.png", 0.28, 0.52, 6.5, center=True)
     _notes(s, "Read the top row left to right, then the bottom row. You send the brief and ask for a restatement. The agent extracts points, splits modules, and asks where a person must decide. Then /architect and /statechart. After your small edits, a verify-skill is written for this project. The code follows the architecture, and only then is the skill run. UI notes come after the backend is proven. The agent changes the window, then computer use clicks and sends screenshots. The line at the bottom is the whole process: cloud agents, and you reply from a phone. About two minutes.")
 
-    # 5 decisions
+    # 4 main decisions, as a table
     s = new()
     _chrome(s, 4, total)
     _kicker(s, "03    Making")
-    _tb(s, 0.48, 0.62, 12, 0.42, [{"text": "Decisions that stayed with us", "size": 28, "bold": True}])
-    _tb(s, 0.48, 1.12, 12.2, 0.36, [{"text": "After the restatement, the agent listed choices it would not make alone. These are the answers we gave.", "size": 15, "italic": True}])
-    decisions = [
-        (1.56, 0.95, "Retrieval", "We index the lectures on this machine, by the words in them. We do not send the files out to be turned into vectors. The page is still there when the network is down, because the index never left the machine."),
-        (2.56, 1.15, "The third action", "The brief asks for three actions besides answering. Answering again would only repeat that. Rewriting the student’s code is what Group C does. We use this action for practice: three exercises from a topic or from selected code, and an explanation you can open. The editor is not changed."),
-        (3.76, 0.85, "Tests", "The model may draft a JUnit test. It may not save the file by itself. You see the Java first. The file appears only after you click Write, and you can undo it."),
-        (4.66, 0.85, "Commit messages", "The model may draft the message from the files you have staged. It may not run git commit. You copy the message, or you put it into the commit box yourself."),
-        (5.56, 1.0, "The model", "The API address and the model name live in settings, so the window is not tied to one vendor. This demonstration uses DeepSeek. The key is stored in the operating system keyring, not in the project."),
+    _tb(s, 0.48, 0.62, 12, 0.42, [{"text": "Main decisions", "size": 28, "bold": True}])
+    _tb(s, 0.48, 1.12, 12.2, 0.36, [{"text": "These are the main ones. Smaller choices were settled as the work went on.", "size": 15, "italic": True}])
+    rows = [
+        ("Retrieval", "We index the lectures on this machine, by the words in them. We do not send the files out to be turned into vectors. The page is still there when the network is down, because the index never left the machine."),
+        ("The third action", "Besides answering, the brief asks for three actions. This one is practice: three exercises from a topic or from selected code, and an explanation you can open. The editor is not changed."),
+        ("Tests", "The model may draft a JUnit test. It may not save the file by itself. You see the Java first. The file appears only after you click Write, and you can undo it."),
+        ("Commit messages", "The model may draft the message from the files you have staged. It may not run git commit. You copy the message, or you put it into the commit box yourself."),
+        ("The model", "The API address and the model name live in settings, so the window is not tied to one vendor. This demonstration uses DeepSeek. The key is stored in the operating system keyring, not in the project."),
     ]
-    for y, h, k, v in decisions:
-        _tb(s, 0.48, y, 2.5, 0.36, [{"text": k, "size": 16, "bold": True, "color": C_BURG}])
-        _tb(s, 3.05, y, 9.7, h, [{"text": v, "size": 15}])
-    _notes(s, "Five answers we gave. Retrieval stays on the machine. The third action is practice, not a code rewrite. A test file and a commit message both wait for a click. The model address is a setting, and this demo uses DeepSeek. About ninety seconds.")
+    heights = [0.42, 1.05, 0.95, 0.9, 0.9, 0.95]
+    table_shape = s.shapes.add_table(6, 2, Inches(0.48), Inches(1.58), Inches(12.35), Inches(sum(heights)))
+    table = table_shape.table
+    table.columns[0].width = Inches(2.35)
+    table.columns[1].width = Inches(10.0)
+    for i, h in enumerate(heights):
+        table.rows[i].height = Inches(h)
+    label_fill = RGBColor(0xE7, 0xD9, 0xD2)
+    _cell(table.cell(0, 0), "Main decision", 14, True, C_WHITE, C_BURG, MSO_ANCHOR.MIDDLE)
+    _cell(table.cell(0, 1), "What we settled", 14, True, C_WHITE, C_BURG, MSO_ANCHOR.MIDDLE)
+    for i, (name, text) in enumerate(rows, start=1):
+        _cell(table.cell(i, 0), name, 15, True, C_BURG, label_fill, MSO_ANCHOR.MIDDLE)
+        _cell(table.cell(i, 1), text, 14, False, C_INK, C_CARD)
+    _notes(s, "Read the line under the title, then the five rows. These are the main decisions. Smaller ones were settled along the way. About ninety seconds.")
 
     # slides 5–9 are written below
     s = new()
@@ -519,17 +573,24 @@ def build_pptx(path: Path) -> None:
     s = new()
     _chrome(s, 8, total)
     _kicker(s, "05    How it works")
-    _tb(s, 0.42, 0.46, 12, 0.45, [{"text": "The question, the answer, and the page", "size": 28, "bold": True}])
-    _tb(s, 0.42, 1.05, 6.5, 5.8, [
-        {"text": "The question was: 根据课件，JUnit 5 的测试方法通常用哪个注解？", "size": 16, "after": 10},
-        {"text": "Folio searches the lectures on this machine and keeps the pages that bear on the question. Here those pages are Lec-3.4, pages 3 and 2. They are the pages that introduce @Test.", "size": 16, "after": 10},
-        {"text": "The answer says the annotation is @Test. It marks the two pages as [1] and [2]. The line under the answer is the file name and the page number.", "size": 16, "after": 10},
-        {"text": "Choosing a title opens that page. The lower picture is the page that opened.", "size": 16, "after": 10},
-        {"text": "The numbers are pages that were actually retrieved. Folio does not invent a file or a page.", "size": 16},
+    _tb(s, 0.42, 0.58, 12.4, 0.42, [{"text": "The question, the answer, and the page", "size": 28, "bold": True}])
+    _tb(s, 0.42, 1.08, 12.4, 0.36, [{"text": "根据课件，JUnit 5 的测试方法通常用哪个注解？", "size": 16}])
+    _tb(s, 0.42, 1.5, 12.4, 1.15, [
+        {"text": "Folio keeps Lec-3.4, pages 3 and 2. Those pages introduce @Test. The answer marks them [1] and [2]. Choosing a title opens that page. The numbers were retrieved. Folio does not invent a file or a page.", "size": 16},
     ])
-    _pic(s, "citations.png", 7.15, 0.55, 3.15)
-    _pic(s, "excerpt.png", 7.15, 3.85, 3.05)
-    _notes(s, "Read the question, then what was found, then the two pictures: the answer, and the page opened from the title. About one minute.")
+    answer_png, page_png = _slide8_crops()
+    left_h, gap = 3.8, 0.28
+    with Image.open(answer_png) as im:
+        left_w = left_h * im.width / im.height
+    with Image.open(page_png) as im:
+        right_w = left_h * im.width / im.height
+    x0 = (W_IN - left_w - right_w - gap) / 2
+    right_x = x0 + left_w + gap
+    _pic(s, "", x0, 3.18, left_h, path=answer_png)
+    _pic(s, "", right_x, 3.18, left_h, path=page_png)
+    _tb(s, x0, 2.8, left_w, 0.32, [{"text": "The answer", "size": 15, "bold": True, "color": C_BURG}])
+    _tb(s, right_x, 2.8, right_w, 0.32, [{"text": "The page opened from the title", "size": 15, "bold": True, "color": C_BURG}])
+    _notes(s, "Read the question and the sentence under it. Then the left picture, the answer, and the right picture, the page that opened. About one minute.")
 
     s = new()
     _chrome(s, 9, total)
@@ -692,14 +753,14 @@ def build_slide_pdf(path: Path) -> None:
     image("making-flow.png", 28, 48, 430, max_w=900)
     c.showPage()
 
-    # 4
+    # 4 main decisions
     paper(); num(4)
     kicker("03     MAKING")
-    title("Decisions that stayed with us", 468)
+    title("Main decisions", 468)
     c.setFont("Serif-I", 12)
     c.setFillColor(HexColor("#1C1915"))
-    c.drawString(36, 438, "After the restatement, the agent listed choices it would not make alone. These are the answers we gave.")
-    blocks = [
+    c.drawString(36, 440, "These are the main ones. Smaller choices were settled as the work went on.")
+    rows = [
         ("Retrieval", [
             "We index the lectures on this machine, by the words in them.",
             "We do not send the files out to be turned into vectors.",
@@ -707,11 +768,10 @@ def build_slide_pdf(path: Path) -> None:
             "because the index never left the machine.",
         ]),
         ("The third action", [
-            "The brief asks for three actions besides answering.",
-            "Answering again would only repeat that.",
-            "Rewriting the student’s code is what Group C does.",
-            "We use this action for practice: three exercises,",
-            "and an explanation you can open. The editor is not changed.",
+            "Besides answering, the brief asks for three actions.",
+            "This one is practice: three exercises from a topic",
+            "or from selected code, and an explanation you can open.",
+            "The editor is not changed.",
         ]),
         ("Tests", [
             "The model may draft a JUnit test. It may not save the file.",
@@ -729,17 +789,40 @@ def build_slide_pdf(path: Path) -> None:
             "operating system keyring, not in the project.",
         ]),
     ]
-    y = 408
-    for k, lines in blocks:
+    label_w, table_w = 168, 888
+    x0, top = 36, 418
+    line_h, pad = 15, 10
+    heights = [26] + [pad * 2 + line_h * len(lines) for _, lines in rows]
+    c.setStrokeColor(HexColor("#1C1915"))
+    c.setLineWidth(0.8)
+    y_top = top
+    for i, height in enumerate(heights):
+        y = y_top - height
+        if i == 0:
+            c.setFillColor(HexColor("#7A3028"))
+        elif i % 2 == 0:
+            c.setFillColor(HexColor("#EFE6DC"))
+        else:
+            c.setFillColor(HexColor("#FFFCF7"))
+        c.rect(x0, y, table_w, height, fill=1, stroke=1)
+        c.line(x0 + label_w, y, x0 + label_w, y + height)
+        y_top = y
+    c.setFillColor(white)
+    c.setFont("Serif-B", 12)
+    c.drawString(x0 + 10, top - 18, "Main decision")
+    c.drawString(x0 + label_w + 10, top - 18, "What we settled")
+    y_top = top - heights[0]
+    for (name, lines), height in zip(rows, heights[1:]):
         c.setFillColor(HexColor("#7A3028"))
-        c.setFont("Serif-B", 13)
-        c.drawString(36, y, k)
+        c.setFont("Serif-B", 12)
+        c.drawString(x0 + 10, y_top - pad - 12, name)
         c.setFillColor(HexColor("#1C1915"))
-        c.setFont("Serif", 12)
+        c.setFont("Serif", 11)
+        text_y = y_top - pad - 11
         for line in lines:
-            c.drawString(200, y, line)
-            y -= 16
-        y -= 10
+            c.drawString(x0 + label_w + 10, text_y, line)
+            text_y -= line_h
+        y_top -= height
     c.showPage()
 
     # 5 library and ask
@@ -830,36 +913,36 @@ def build_slide_pdf(path: Path) -> None:
     image("state-retrieval.png", 430, 40, 450, max_w=520)
     c.showPage()
 
-    # 8 chinese
+    # 8 question, answer, page
     paper(); num(8)
     kicker("05     HOW IT WORKS")
-    title("The question, the answer, and the page", 512)
+    title("The question, the answer, and the page", 468)
     c.setFillColor(HexColor("#1C1915"))
-    c.setFont("Serif", 12)
-    c.drawString(36, 470, "The question was:")
     c.setFont("CJK", 13)
-    c.drawString(36, 446, "根据课件，JUnit 5 的测试方法通常用哪个注解？")
-    c.setFont("Serif", 12)
-    lines = [
-        "Folio searches the lectures on this machine",
-        "and keeps the pages that bear on the question.",
-        "Here those pages are Lec-3.4, pages 3 and 2.",
-        "They are the pages that introduce @Test.",
-        "The answer says the annotation is @Test.",
-        "It marks the two pages as [1] and [2].",
-        "The line under the answer is the file name",
-        "and the page number.",
-        "Choosing a title opens that page.",
-        "The lower picture is the page that opened.",
-        "The numbers are pages that were retrieved.",
-        "Folio does not invent a file or a page.",
-    ]
-    y = 416
-    for line in lines:
-        c.drawString(36, y, line)
-        y -= 18
-    image("citations.png", 500, 250, 220, max_w=420)
-    image("excerpt.png", 500, 30, 200, max_w=420)
+    c.drawString(36, 438, "根据课件，JUnit 5 的测试方法通常用哪个注解？")
+    c.setFont("Serif", 13)
+    c.drawString(36, 412, "Folio keeps Lec-3.4, pages 3 and 2. Those pages introduce @Test.")
+    c.drawString(36, 394, "The answer marks them [1] and [2]. Choosing a title opens that page.")
+    c.drawString(36, 376, "The numbers were retrieved. Folio does not invent a file or a page.")
+    answer_png, page_png = _slide8_crops()
+    img_h = 286
+    with Image.open(answer_png) as im:
+        answer_w = img_h * im.width / im.height
+    with Image.open(page_png) as im:
+        page_w = img_h * im.width / im.height
+    gap = 18
+    x_left = (pw - answer_w - page_w - gap) / 2
+    x_right = x_left + answer_w + gap
+    c.setFillColor(HexColor("#7A3028"))
+    c.setFont("Serif-B", 12)
+    c.drawString(x_left, 348, "The answer")
+    c.drawString(x_right, 348, "The page opened from the title")
+    c.setStrokeColor(HexColor("#1C1915"))
+    c.setLineWidth(0.6)
+    c.rect(x_left - 1, 47, answer_w + 2, img_h + 2, fill=0, stroke=1)
+    c.drawImage(str(answer_png), x_left, 48, answer_w, img_h, preserveAspectRatio=True, mask="auto")
+    c.rect(x_right - 1, 47, page_w + 2, img_h + 2, fill=0, stroke=1)
+    c.drawImage(str(page_png), x_right, 48, page_w, img_h, preserveAspectRatio=True, mask="auto")
     c.showPage()
 
     # 9 two writes
