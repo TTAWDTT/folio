@@ -65,16 +65,18 @@ public final class Asker {
         if (apiKey == null || apiKey.isBlank()) {
             String missing = MISSING_KEY;
             if (hits.isEmpty()) {
-                return new Answer(Answer.Kind.GENERAL, Answer.GENERAL_SENTENCE + "\n" + missing, List.of(), false,
+                return new Answer(Answer.Kind.GENERAL, missing, List.of(), false,
                         Answer.Evidence.CONFIGURATION);
             }
             return new Answer(Answer.Kind.CITED, missing, hits, false, Answer.Evidence.CONFIGURATION);
         }
         String system = hits.isEmpty()
-                ? "Answer the question directly from general knowledge, including when it is unrelated to the course. "
-                + "Always give the answer. Do not refuse, decline, or say that you will not answer. "
-                + "Do not invent a course source. "
-                + "用提问的语言作答。不要回复「不回答」「无法回答」或「这个问题与课件无关」。"
+                ? "Answer the question directly and naturally, in the language of the question, "
+                + "including when it is unrelated to the course. "
+                + "Do not announce that course material was missed, and do not say 没有命中课件. "
+                + "Do not refuse, decline, or say that you will not answer. "
+                + "Do not invent a course file, page, slide, or section. "
+                + "用提问的语言直接作答。不要先声明没有命中课件。"
                 : "Answer the question. When a numbered course chunk supports the answer, cite it inline as [n], "
                 + "with a space before the bracket, using only the numbers listed. "
                 + "If the chunks do not contain the answer, still answer from general knowledge and do not cite them. "
@@ -102,8 +104,7 @@ public final class Asker {
         }
         if (hits.isEmpty()) {
             CitationMap mapped = mapCitations(List.of(), text);
-            return new Answer(Answer.Kind.GENERAL, Answer.GENERAL_SENTENCE + "\n" + mapped.text(), List.of(), true,
-                    mapped.evidence());
+            return new Answer(Answer.Kind.GENERAL, mapped.text(), List.of(), true, mapped.evidence());
         }
         CitationMap mapped = mapCitations(hits, text);
         return new Answer(Answer.Kind.CITED, mapped.text(), mapped.sources(), true, mapped.evidence());
@@ -1287,9 +1288,6 @@ public final class Asker {
             builder.append("Previous conversation, quoted context only. Prior references are not current sources.\n");
             builder.append("> ").append(conversation.replace("\n", "\n> ")).append('\n');
             builder.append("\nCurrent question:\n");
-        }
-        if (hits.isEmpty()) {
-            builder.append("The course index has no page for this question. Answer it directly anyway.\n");
         }
         builder.append(question == null ? "" : question);
         if (selection != null && !selection.isBlank()) {

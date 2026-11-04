@@ -246,7 +246,7 @@ def build_report(path: Path) -> None:
         "Leave the mode on " + zh("问答") + ". Type a question. Enter sends. Shift+Enter inserts a line. Unconfirmed IME text does not send.",
         "While the model is working, the same round button is " + zh("停止生成") + ". Stopping keeps the text already on screen and the draft typed for the next turn.",
         "After the reply, expand " + zh("课件 · N 处引用") + ". Each row shows the file, the page or slide, and a short excerpt. Choose the blue title to open the excerpt. Choosing the excerpt text does not navigate.",
-        "A question with no usable chunk says " + zh("没有命中课件，以下内容不是课件引用。") + " Folio does not invent a page number for that reply.",
+        "A question with no usable chunk is answered directly. Folio does not preface it with a fixed miss sentence, and it does not invent a page number.",
         "Without a saved key, the same retrieval still runs. The panel states: “No API key is configured. Add an API key in the Folio tool window and save settings.”",
     ]))
     story.append(P("3.3 Save the model connection", "h2"))

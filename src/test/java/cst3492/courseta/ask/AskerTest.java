@@ -43,7 +43,8 @@ class AskerTest {
         };
         Answer answer = Asker.ask(new CourseIndex(), chat, "https://api.deepseek.com", "key", "deepseek-flash", "zzzz", null);
         assertEquals(Answer.Kind.GENERAL, answer.kind());
-        assertTrue(answer.text().startsWith(Answer.GENERAL_SENTENCE));
+        assertEquals("from the model", answer.text());
+        assertFalse(answer.text().contains(Answer.GENERAL_SENTENCE));
         assertTrue(answer.citations().isEmpty());
         assertEquals(1, calls.get());
     }
@@ -60,12 +61,14 @@ class AskerTest {
         Answer answer = Asker.ask(course(), chat, "https://api.deepseek.com", "key", "deepseek-flash",
                 "What is the capital of France?", null);
         assertEquals(Answer.Kind.GENERAL, answer.kind());
-        assertTrue(answer.text().startsWith(Answer.GENERAL_SENTENCE));
+        assertEquals("Paris is the capital of France.", answer.text());
+        assertFalse(answer.text().contains(Answer.GENERAL_SENTENCE));
         assertTrue(answer.citations().isEmpty());
         assertFalse(answer.text().contains("lecture-"));
-        assertTrue(systemPrompt.get().contains("general knowledge"));
+        assertTrue(systemPrompt.get().contains("directly and naturally"));
         assertTrue(systemPrompt.get().contains("Do not refuse"));
-        assertTrue(userPrompt.get().contains("Answer it directly anyway"));
+        assertTrue(systemPrompt.get().contains("没有命中课件"));
+        assertFalse(userPrompt.get().contains("没有命中课件"));
         assertFalse(userPrompt.get().contains("Course chunks"));
     }
 
@@ -82,7 +85,8 @@ class AskerTest {
         Answer weather = Asker.ask(index, chat, "https://api.deepseek.com", "key", "deepseek-flash",
                 "今天天气怎么样，我们可以去哪里玩？", null);
         assertEquals(Answer.Kind.GENERAL, weather.kind());
-        assertTrue(weather.text().startsWith(Answer.GENERAL_SENTENCE));
+        assertEquals("一般说明", weather.text());
+        assertFalse(weather.text().contains(Answer.GENERAL_SENTENCE));
         assertTrue(weather.citations().isEmpty());
 
         Answer mapped = Asker.ask(index, chat, "https://api.deepseek.com", "key", "deepseek-flash",
@@ -202,11 +206,12 @@ class AskerTest {
         Answer answer = Asker.ask(new CourseIndex(), chat, "https://api.deepseek.com", "key", "deepseek-flash",
                 "What is the capital of France?", null);
         assertEquals(Answer.Kind.GENERAL, answer.kind());
-        assertTrue(answer.text().startsWith(Answer.GENERAL_SENTENCE));
+        assertTrue(answer.text().contains("Paris is the capital"));
+        assertFalse(answer.text().contains(Answer.GENERAL_SENTENCE));
         assertTrue(answer.citations().isEmpty());
         assertFalse(answer.text().contains("[1]"));
         assertFalse(answer.text().contains("lecture-"));
-        assertTrue(systemPrompt.get().contains("general knowledge"));
+        assertTrue(systemPrompt.get().contains("directly and naturally"));
         assertTrue(Answer.UNGROUNDED.contains("没有落在课件上"));
         assertTrue(Answer.UNGROUNDED.contains(Answer.GENERAL_SENTENCE));
     }
